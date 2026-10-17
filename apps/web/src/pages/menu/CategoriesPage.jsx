@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Search, Edit2, CheckCircle2, XCircle, Layers } from 'lucide-react';
+import { Plus, Search, Edit2, CheckCircle2, XCircle, Layers, Trash2 } from 'lucide-react';
 import { categoryRepository } from '../../services/repositories/categoryRepository';
 import { useAuth } from '../../hooks/useAuth';
 import { PageHeader } from '../../components/common/PageHeader';
@@ -11,8 +11,9 @@ import { DataTable } from '../../components/common/DataTable';
 import { PERMISSIONS } from '../../constants/permissions';
 
 export const CategoriesPage = () => {
-  const { user, hasPermission } = useAuth();
+  const { user, role, hasPermission } = useAuth();
   const canEdit = hasPermission(PERMISSIONS.MENU_EDIT);
+  const isAdminOrOwner = user?.role === 'owner' || user?.role === 'admin' || role === 'owner' || role === 'admin';
 
   const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -86,6 +87,19 @@ export const CategoriesPage = () => {
     }
   };
 
+  const handleDeleteCategory = async (cat) => {
+    if (!window.confirm(`Are you sure you want to permanently delete category "${cat.name}"? This action cannot be undone.`)) {
+      return;
+    }
+    try {
+      const actor = { id: user?.id || 'admin', name: user?.name || 'Admin' };
+      await categoryRepository.deleteCategory(cat.id, actor);
+      await loadCategories();
+    } catch (err) {
+      alert(err.message || 'Failed to delete category.');
+    }
+  };
+
   const filteredCategories = categories.filter(
     (c) =>
       c.name.toLowerCase().includes(search.toLowerCase()) ||
@@ -145,6 +159,17 @@ export const CategoriesPage = () => {
             >
               {row.isActive ? 'Deactivate' : 'Activate'}
             </Button>
+            {isAdminOrOwner && (
+              <Button
+                variant="danger"
+                size="sm"
+                icon={Trash2}
+                onClick={() => handleDeleteCategory(row)}
+                title="Permanently Delete Category"
+              >
+                Delete
+              </Button>
+            )}
           </div>
         );
       }

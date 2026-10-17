@@ -348,6 +348,49 @@ export class IdentityService {
     return safeUpdated;
   }
 
+  async deleteUser(userId, actor) {
+    if (String(actor.id) === String(userId)) {
+      throw new ValidationAppError('You cannot delete your own account.');
+    }
+
+    const beforeDoc = await this.userRepo.findById(userId);
+    if (!beforeDoc) {
+      throw new NotFoundAppError(`User '${userId}' not found.`);
+    }
+
+    // Safety check: Prevent deleting the last active Owner or Admin
+    const roles = await this.roleRepo.findByIds(beforeDoc.roleIds || []);
+    const isOwnerOrAdmin = roles.some((r) => ['OWNER', 'ADMIN'].includes(String(r.code).toUpperCase()));
+    if (isOwnerOrAdmin) {
+      const allUsers = await this.userRepo.findMany({ isActive: true });
+      const otherAdmins = [];
+      for (const u of allUsers) {
+        if (String(u._id) === String(userId)) continue;
+        const uRoles = await this.roleRepo.findByIds(u.roleIds || []);
+        if (uRoles.some((r) => ['OWNER', 'ADMIN'].includes(String(r.code).toUpperCase()))) {
+          otherAdmins.push(u);
+        }
+      }
+      if (otherAdmins.length === 0) {
+        throw new ValidationAppError('Cannot delete the last remaining active Admin or Owner account.');
+      }
+    }
+
+    await this.userRepo.deleteById(userId);
+
+    await auditService.logAction({
+      branchId: (beforeDoc.branchIds || [])[0] || null,
+      action: 'USER_DELETED',
+      entityType: 'user',
+      entityId: userId,
+      actorUserId: actor.id,
+      actorName: actor.displayName,
+      before: UserRepository.sanitizeUser(beforeDoc),
+    });
+
+    return { success: true, id: userId, username: beforeDoc.username };
+  }
+
   // --- Roles CRUD ---
 
   async listRoles() {

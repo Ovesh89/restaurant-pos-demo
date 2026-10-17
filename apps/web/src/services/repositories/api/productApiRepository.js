@@ -190,6 +190,14 @@ class ProductApiRepository {
     });
     return res?.historyEntry || res;
   }
+
+  async deleteProduct(id) {
+    return apiClient.delete(`/menu/products/${id}`);
+  }
+
+  async deletePriceHistory(historyId, productId) {
+    return apiClient.delete(`/menu/products/${productId}/price-history/${historyId}`);
+  }
 }
 
 export const productApiRepository = new ProductApiRepository();

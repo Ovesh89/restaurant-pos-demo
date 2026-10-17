@@ -108,6 +108,35 @@ class CategoryLocalRepository {
 
     return categories[index];
   }
+
+  async deleteCategory(id, actor = { id: 'admin', name: 'Admin' }) {
+    const categories = await this.getCategories(true);
+    const index = categories.findIndex((c) => c.id === id);
+    if (index === -1) {
+      throw new Error('Category not found.');
+    }
+    const catName = categories[index].name;
+
+    const products = storageAdapter.getItem(STORAGE_KEYS.PRODUCTS) || [];
+    const productCount = products.filter((p) => p.categoryId === id).length;
+    if (productCount > 0) {
+      throw new Error(`Cannot delete category "${catName}" because ${productCount} product(s) are assigned to it.`);
+    }
+
+    categories.splice(index, 1);
+    storageAdapter.setItem(STORAGE_KEYS.CATEGORIES, categories);
+
+    await auditRepository.logEvent({
+      actorId: actor.id,
+      actorName: actor.name,
+      action: 'CATEGORY_DELETED',
+      entityType: 'Category',
+      entityId: id,
+      details: `Deleted category "${catName}".`
+    });
+
+    return { success: true, id };
+  }
 }
 
 export const categoryLocalRepository = new CategoryLocalRepository();

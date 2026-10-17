@@ -232,6 +232,12 @@ export class BaseMongoRepository {
     return res.deletedCount > 0;
   }
 
+  async deleteMany(query = {}) {
+    const col = await this.collection();
+    const res = await col.deleteMany(query);
+    return res.deletedCount;
+  }
+
   async count(query = {}) {
     const col = await this.collection();
     return col.countDocuments(query);

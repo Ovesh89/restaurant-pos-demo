@@ -65,6 +65,10 @@ class CategoryApiRepository {
     });
     return this.normalizeCategory(updated);
   }
+
+  async deleteCategory(id) {
+    return apiClient.delete(`/menu/categories/${id}`);
+  }
 }
 
 export const categoryApiRepository = new CategoryApiRepository();

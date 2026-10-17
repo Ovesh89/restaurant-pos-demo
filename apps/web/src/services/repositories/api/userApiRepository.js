@@ -100,6 +100,10 @@ class UserApiRepository {
     const updated = await apiClient.post(endpoint);
     return this.normalizeUser(updated);
   }
+
+  async deleteUser(id) {
+    return apiClient.delete(`/users/${id}`);
+  }
 }
 
 export const userApiRepository = new UserApiRepository();

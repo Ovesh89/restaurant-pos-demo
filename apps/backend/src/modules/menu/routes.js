@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { authenticate } from '../../middleware/auth.js';
 import { asyncHandler, ValidationAppError } from '../../middleware/errorHandler.js';
-import { requirePermissions } from '../../middleware/permissions.js';
+import { requirePermissions, requireRole } from '../../middleware/permissions.js';
 import { createdResponse, successResponse } from '../../utils/response.js';
 import { menuService } from './service.js';
 
@@ -71,6 +71,20 @@ router.patch(
       req.user
     );
     return successResponse(res, updated, 'Category updated successfully.');
+  })
+);
+
+// DELETE /api/v1/menu/categories/:categoryId
+router.delete(
+  '/menu/categories/:categoryId',
+  authenticate,
+  requireRole(['owner', 'admin']),
+  asyncHandler(async (req, res) => {
+    const result = await menuService.deleteCategory(
+      req.params.categoryId,
+      req.user
+    );
+    return successResponse(res, result, 'Category deleted successfully.');
   })
 );
 
@@ -229,6 +243,34 @@ router.get(
       req.user
     );
     return successResponse(res, history);
+  })
+);
+
+// DELETE /api/v1/menu/products/:productId
+router.delete(
+  '/menu/products/:productId',
+  authenticate,
+  requireRole(['owner', 'admin']),
+  asyncHandler(async (req, res) => {
+    const result = await menuService.deleteProduct(
+      req.params.productId,
+      req.user
+    );
+    return successResponse(res, result, 'Product deleted successfully.');
+  })
+);
+
+// DELETE /api/v1/menu/products/:productId/price-history/:historyId
+router.delete(
+  '/menu/products/:productId/price-history/:historyId',
+  authenticate,
+  requireRole(['owner', 'admin']),
+  asyncHandler(async (req, res) => {
+    const result = await menuService.deletePriceHistory(
+      req.params.historyId,
+      req.user
+    );
+    return successResponse(res, result, 'Price history record deleted successfully.');
   })
 );
 

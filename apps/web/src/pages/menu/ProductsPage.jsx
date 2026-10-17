@@ -9,7 +9,8 @@ import {
   XCircle,
   UtensilsCrossed,
   Tag,
-  DollarSign
+  DollarSign,
+  Trash2
 } from 'lucide-react';
 import { productRepository } from '../../services/repositories/productRepository';
 import { categoryRepository } from '../../services/repositories/categoryRepository';
@@ -25,8 +26,9 @@ import { APP_CONFIG } from '../../config/appConfig';
 import { PERMISSIONS } from '../../constants/permissions';
 
 export const ProductsPage = () => {
-  const { user, hasPermission } = useAuth();
+  const { user, role, hasPermission } = useAuth();
   const canEdit = hasPermission(PERMISSIONS.MENU_EDIT);
+  const isAdminOrOwner = user?.role === 'owner' || user?.role === 'admin' || role === 'owner' || role === 'admin';
 
   const [products, setProducts] = useState([]);
   const [categories, setCategories] = useState([]);
@@ -239,6 +241,33 @@ export const ProductsPage = () => {
     }
   };
 
+  const handleDeleteProduct = async (p) => {
+    if (!window.confirm(`Are you sure you want to permanently delete the dish "${p.name}"? This action cannot be undone.`)) {
+      return;
+    }
+    try {
+      const actor = { id: user?.id || 'admin', name: user?.name || 'Admin' };
+      await productRepository.deleteProduct(p.id, actor);
+      await loadData();
+    } catch (err) {
+      alert(err.message || 'Failed to delete product.');
+    }
+  };
+
+  const handleDeletePriceRecord = async (rec) => {
+    if (!window.confirm(`Are you sure you want to delete this price history revision (₹${rec.oldPrice} → ₹${rec.newPrice})?`)) {
+      return;
+    }
+    try {
+      const actor = { id: user?.id || 'admin', name: user?.name || 'Admin' };
+      const prodId = rec.productId || historyProduct?.id;
+      await productRepository.deletePriceHistory(rec.id, prodId);
+      await handleOpenHistory(historyProduct);
+    } catch (err) {
+      alert(err.message || 'Failed to delete price history record.');
+    }
+  };
+
   const getCategoryName = (catId) => {
     const cat = categories.find((c) => c.id === catId);
     return cat ? cat.name : 'Unknown';
@@ -352,6 +381,17 @@ export const ProductsPage = () => {
             >
               <History className="w-4 h-4" />
             </button>
+            {isAdminOrOwner && (
+              <Button
+                variant="danger"
+                size="sm"
+                icon={Trash2}
+                title="Permanently Delete Dish"
+                onClick={() => handleDeleteProduct(row)}
+              >
+                Delete
+              </Button>
+            )}
           </div>
         );
       }
@@ -613,9 +653,20 @@ export const ProductsPage = () => {
                 <div key={rec.id} className="py-3 text-xs flex flex-col gap-1">
                   <div className="flex items-center justify-between">
                     <span className="font-bold text-slate-800 text-sm">{rec.productName}</span>
-                    <span className="text-[10px] text-slate-400 font-mono">
-                      {new Date(rec.changedAt).toLocaleString()}
-                    </span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-[10px] text-slate-400 font-mono">
+                        {new Date(rec.changedAt).toLocaleString()}
+                      </span>
+                      {isAdminOrOwner && (
+                        <button
+                          onClick={() => handleDeletePriceRecord(rec)}
+                          title="Delete Price Revision Record"
+                          className="p-1 text-slate-400 hover:text-red-600 rounded transition-colors"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                    </div>
                   </div>
                   <div className="flex items-center gap-2 mt-0.5">
                     <span className="line-through text-slate-400 font-semibold">₹{rec.oldPrice}</span>

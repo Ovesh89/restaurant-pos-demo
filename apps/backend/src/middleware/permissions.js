@@ -63,3 +63,25 @@ export function ensureBranchAccess(user, branchId) {
   }
   return true;
 }
+
+/**
+ * Require user to possess at least one of the specified roles (case-insensitive).
+ */
+export function requireRole(allowedRoles = []) {
+  const normalized = allowedRoles.map((r) => String(r).toUpperCase());
+  return function checkRole(req, _res, next) {
+    if (!req.user) {
+      return next(new AuthenticationAppError());
+    }
+    const userRoles = (req.user.roleCodes || []).map((r) => String(r).toUpperCase());
+    const hasRole = userRoles.some((r) => normalized.includes(r));
+    if (!hasRole) {
+      return next(
+        new PermissionDeniedAppError(
+          `Action restricted to roles: ${allowedRoles.join(', ')}`
+        )
+      );
+    }
+    return next();
+  };
+}

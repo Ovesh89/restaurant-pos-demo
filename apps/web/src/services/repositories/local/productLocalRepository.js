@@ -239,6 +239,53 @@ class ProductLocalRepository {
     }
     return history;
   }
+
+  async deleteProduct(id, actor = { id: 'admin', name: 'Admin' }) {
+    const products = await this.getProducts();
+    const index = products.findIndex((p) => p.id === id);
+    if (index === -1) {
+      throw new Error('Product not found.');
+    }
+    const prodName = products[index].name;
+    products.splice(index, 1);
+    storageAdapter.setItem(STORAGE_KEYS.PRODUCTS, products);
+
+    const history = storageAdapter.getItem(STORAGE_KEYS.PRICE_HISTORY) || [];
+    const remainingHistory = history.filter((h) => h.productId !== id);
+    storageAdapter.setItem(STORAGE_KEYS.PRICE_HISTORY, remainingHistory);
+
+    await auditRepository.logEvent({
+      actorId: actor.id,
+      actorName: actor.name,
+      action: 'PRODUCT_DELETED',
+      entityType: 'Product',
+      entityId: id,
+      details: `Deleted product "${prodName}".`
+    });
+
+    return { success: true, id };
+  }
+
+  async deletePriceHistory(historyId, actor = { id: 'admin', name: 'Admin' }) {
+    const history = storageAdapter.getItem(STORAGE_KEYS.PRICE_HISTORY) || [];
+    const index = history.findIndex((h) => h.id === historyId);
+    if (index === -1) {
+      throw new Error('Price history record not found.');
+    }
+    history.splice(index, 1);
+    storageAdapter.setItem(STORAGE_KEYS.PRICE_HISTORY, history);
+
+    await auditRepository.logEvent({
+      actorId: actor.id,
+      actorName: actor.name,
+      action: 'PRODUCT_PRICE_HISTORY_DELETED',
+      entityType: 'PriceHistory',
+      entityId: historyId,
+      details: `Deleted price history record.`
+    });
+
+    return { success: true, id: historyId };
+  }
 }
 
 export const productLocalRepository = new ProductLocalRepository();

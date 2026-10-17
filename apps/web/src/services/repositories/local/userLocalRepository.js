@@ -180,6 +180,40 @@ class UserLocalRepository {
 
     return targetUser;
   }
+
+  async deleteUser(id, actor = { id: 'admin', name: 'Admin' }) {
+    if (String(actor.id) === String(id)) {
+      throw new Error('You cannot delete your own account.');
+    }
+    const users = await this.getUsers();
+    const index = users.findIndex((u) => u.id === id);
+    if (index === -1) {
+      throw new Error('User not found.');
+    }
+    const target = users[index];
+    if (target.role === SYSTEM_ROLES.OWNER || target.role === SYSTEM_ROLES.ADMIN) {
+      const otherAdmins = users.filter(
+        (u) => u.id !== id && u.isActive && (u.role === SYSTEM_ROLES.OWNER || u.role === SYSTEM_ROLES.ADMIN)
+      );
+      if (otherAdmins.length === 0) {
+        throw new Error('Cannot delete the last remaining active Admin or Owner account.');
+      }
+    }
+
+    users.splice(index, 1);
+    storageAdapter.setItem(STORAGE_KEYS.USERS, users);
+
+    await auditRepository.logEvent({
+      actorId: actor.id,
+      actorName: actor.name,
+      action: 'USER_DELETED',
+      entityType: 'User',
+      entityId: id,
+      details: `Deleted staff member account "${target.name}".`
+    });
+
+    return { success: true, id };
+  }
 }
 
 export const userLocalRepository = new UserLocalRepository();

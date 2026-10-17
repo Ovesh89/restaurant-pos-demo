@@ -98,6 +98,35 @@ export class MenuService {
     return updated;
   }
 
+  async deleteCategory(categoryId, actor) {
+    const beforeDoc = await this.categoryRepo.findById(categoryId);
+    if (!beforeDoc) {
+      throw new NotFoundAppError(`Category '${categoryId}' not found.`);
+    }
+    ensureBranchAccess(actor, beforeDoc.branchId);
+
+    const productCount = await this.productRepo.count({ categoryId });
+    if (productCount > 0) {
+      throw new ValidationAppError(
+        `Cannot delete category '${beforeDoc.name}' because ${productCount} dish(es) are assigned to it. Please reassign or delete those dishes first.`
+      );
+    }
+
+    await this.categoryRepo.deleteById(categoryId);
+
+    await auditService.logAction({
+      branchId: beforeDoc.branchId,
+      action: 'CATEGORY_DELETED',
+      entityType: 'category',
+      entityId: categoryId,
+      actorUserId: actor.id,
+      actorName: actor.displayName,
+      before: beforeDoc,
+    });
+
+    return { success: true, id: categoryId, name: beforeDoc.name };
+  }
+
   // --- Products ---
 
   async listProducts({
@@ -356,6 +385,53 @@ export class MenuService {
     }
     ensureBranchAccess(user, prod.branchId);
     return this.priceHistoryRepo.findByProduct(productId);
+  }
+
+  async deleteProduct(productId, actor) {
+    const beforeDoc = await this.productRepo.findById(productId);
+    if (!beforeDoc) {
+      throw new NotFoundAppError(`Product '${productId}' not found.`);
+    }
+    const branchId = beforeDoc.branchId;
+    ensureBranchAccess(actor, branchId);
+
+    await this.productRepo.deleteById(productId);
+    await this.priceHistoryRepo.deleteMany({ productId });
+
+    await auditService.logAction({
+      branchId,
+      action: 'PRODUCT_DELETED',
+      entityType: 'product',
+      entityId: productId,
+      actorUserId: actor.id,
+      actorName: actor.displayName,
+      before: beforeDoc,
+    });
+
+    return { success: true, id: productId, name: beforeDoc.name };
+  }
+
+  async deletePriceHistory(historyId, actor) {
+    const record = await this.priceHistoryRepo.findById(historyId);
+    if (!record) {
+      throw new NotFoundAppError(`Price history record '${historyId}' not found.`);
+    }
+    const branchId = record.branchId;
+    ensureBranchAccess(actor, branchId);
+
+    await this.priceHistoryRepo.deleteById(historyId);
+
+    await auditService.logAction({
+      branchId,
+      action: 'PRODUCT_PRICE_HISTORY_DELETED',
+      entityType: 'price_history',
+      entityId: historyId,
+      actorUserId: actor.id,
+      actorName: actor.displayName,
+      before: record,
+    });
+
+    return { success: true, id: historyId };
   }
 }
 

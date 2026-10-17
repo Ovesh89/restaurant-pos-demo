@@ -5,7 +5,7 @@ import {
   PermissionDeniedAppError,
   ValidationAppError,
 } from '../../middleware/errorHandler.js';
-import { requirePermissions } from '../../middleware/permissions.js';
+import { requirePermissions, requireRole } from '../../middleware/permissions.js';
 import { createdResponse, successResponse } from '../../utils/response.js';
 import { identityService } from './service.js';
 
@@ -157,6 +157,20 @@ router.post(
       req.user
     );
     return successResponse(res, updated, 'User deactivated.');
+  })
+);
+
+// DELETE /api/v1/users/:userId
+router.delete(
+  '/users/:userId',
+  authenticate,
+  requireRole(['owner', 'admin']),
+  asyncHandler(async (req, res) => {
+    const result = await identityService.deleteUser(
+      req.params.userId,
+      req.user
+    );
+    return successResponse(res, result, 'User account deleted successfully.');
   })
 );
 

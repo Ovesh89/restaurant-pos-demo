@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Search, Edit2, Shield, User, Phone, CheckCircle, XCircle, KeyRound, AlertCircle } from 'lucide-react';
+import { Plus, Search, Edit2, Shield, User, Phone, CheckCircle, XCircle, KeyRound, AlertCircle, Trash2 } from 'lucide-react';
 import { userRepository } from '../../services/repositories/userRepository';
 import { useAuth } from '../../hooks/useAuth';
 import { PageHeader } from '../../components/common/PageHeader';
@@ -12,7 +12,8 @@ import { DataTable } from '../../components/common/DataTable';
 import { SYSTEM_ROLES } from '../../constants/roles';
 
 export const UsersPage = () => {
-  const { user: currentUser } = useAuth();
+  const { user: currentUser, role: currentRole } = useAuth();
+  const isAdminOrOwner = currentUser?.role === 'owner' || currentUser?.role === 'admin' || currentRole === 'owner' || currentRole === 'admin';
 
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -173,6 +174,23 @@ export const UsersPage = () => {
     }
   };
 
+  const handleDeleteUser = async (target) => {
+    if (target.id === currentUser?.id) {
+      alert('You cannot delete your own account.');
+      return;
+    }
+    if (!window.confirm(`Are you sure you want to permanently delete staff account "${target.name}" (@${target.username})? This action cannot be undone.`)) {
+      return;
+    }
+    try {
+      const actor = { id: currentUser?.id || 'admin', name: currentUser?.name || 'Admin' };
+      await userRepository.deleteUser(target.id, actor);
+      await loadUsers();
+    } catch (err) {
+      alert(err.message || 'Failed to delete user.');
+    }
+  };
+
   const roleColors = {
     owner: 'danger',
     admin: 'primary',
@@ -254,6 +272,17 @@ export const UsersPage = () => {
           >
             {row.isActive ? 'Disable' : 'Enable'}
           </Button>
+          {isAdminOrOwner && row.id !== currentUser?.id && (
+            <Button
+              variant="danger"
+              size="sm"
+              icon={Trash2}
+              onClick={() => handleDeleteUser(row)}
+              title="Permanently Delete Staff Member"
+            >
+              Delete
+            </Button>
+          )}
         </div>
       )
     }
