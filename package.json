@@ -1,0 +1,23 @@
+{
+  "name": "restaurant-pos-mern",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Restaurant POS & KOT Management System — MERN Stack Monorepo",
+  "scripts": {
+    "dev:backend": "npm --prefix apps/backend run dev",
+    "start:backend": "npm --prefix apps/backend start",
+    "test:backend": "npm --prefix apps/backend test",
+    "dev:web": "npm --prefix apps/web run dev",
+    "build:web": "npm --prefix apps/web run build",
+    "db:indexes": "node scripts/init-indexes.js",
+    "db:seed": "node scripts/seed-demo-data.js",
+    "db:setup": "node scripts/init-indexes.js && node scripts/seed-demo-data.js",
+    "db:backup": "node scripts/backup-mongodb.js",
+    "db:restore": "node scripts/restore-mongodb.js",
+    "sync:demo": "node scripts/sync-to-demo.js"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}

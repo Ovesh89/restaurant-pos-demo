@@ -1,0 +1,46 @@
+# Dependencies
+node_modules/
+apps/*/node_modules/
+
+# Build output
+dist/
+build/
+apps/*/dist/
+apps/*/build/
+
+# Environment variables & secrets
+.env
+.env.local
+.env.*.local
+apps/*/.env
+apps/*/.env.local
+apps/*/.env.*.local
+
+# Logs & runtime data
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pids
+*.pid
+*.seed
+*.pid.lock
+
+# Test coverage & temporary artifacts
+coverage/
+apps/*/coverage/
+.nyc_output/
+tmp/
+temp/
+
+# Database backups (local snapshots)
+backups/
+
+# IDE & OS files
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db

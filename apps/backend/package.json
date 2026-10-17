@@ -1,0 +1,32 @@
+{
+  "name": "restaurant-pos-backend",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Express.js + MongoDB REST API Backend for Restaurant POS & KOT System",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js",
+    "test": "node --test --test-concurrency=1 tests/*.test.js",
+    "db:indexes": "node src/scripts/initIndexes.js",
+    "db:seed": "node src/scripts/seedDemoData.js",
+    "db:backup": "node src/scripts/backupMongo.js",
+    "db:restore": "node src/scripts/restoreMongo.js"
+  },
+  "dependencies": {
+    "cors": "2.8.5",
+    "decimal.js": "10.4.3",
+    "dotenv": "16.4.7",
+    "express": "4.21.2",
+    "jsonwebtoken": "9.0.2",
+    "mongodb": "6.12.0",
+    "swagger-ui-express": "5.0.1"
+  },
+  "devDependencies": {
+    "supertest": "7.0.0"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}
