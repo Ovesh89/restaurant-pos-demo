@@ -100,3 +100,12 @@ restaurant-pos-demo/
 │   └── restore-mongodb.js              # Database restore utility
 └── package.json                        # Monorepo root scripts
 ```
+
+
+---
+
+## Automated Synchronization
+
+This demo repository is automatically synchronized from the primary migration repository (`restaurant-pos-backend-mern`):
+- All shared application logic, bug fixes, and features (e.g. server-side pagination, component updates) are automatically synced.
+- The 100% Pure-Veg menu, demo branding ("Green Garden Pure Veg"), Port 8002 configuration, and isolated database (`restaurant_pos_demo`) are protected and preserved during synchronization.
