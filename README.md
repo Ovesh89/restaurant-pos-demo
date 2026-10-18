@@ -70,6 +70,32 @@ All roles and permissions are pre-configured with demo access credentials:
 
 ---
 
+## Docker & Production Deployment
+
+The application is containerized with **Docker Compose**, running a multi-stage Nginx web server and a hardened Node.js 20 backend with isolated internal networking:
+
+```bash
+# 1. Create and configure production environment
+cp .env.example .env
+nano .env
+
+# 2. Deploy or update with single automation command
+bash scripts/deploy.sh
+
+# 3. Check health and live status
+bash scripts/health-check.sh
+
+# 4. Roll back safely if needed
+bash scripts/rollback.sh
+```
+
+For complete setup guides and continuous deployment details, refer to:
+- [Docker Deployment Architecture & Guide](file:///docs/DOCKER_DEPLOYMENT.md)
+- [Ubuntu Server Setup Runbook](file:///docs/UBUNTU_SERVER_SETUP.md)
+- [GitHub Actions Automated CI/CD Setup](file:///docs/AUTO_DEPLOYMENT.md)
+
+---
+
 ## Repository Structure
 
 ```text

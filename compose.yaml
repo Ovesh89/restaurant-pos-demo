@@ -1,0 +1,62 @@
+# ==============================================================================
+# Restaurant POS MERN — Docker Compose Production Stack
+# Architecture:
+#   [Internet] -> Host:80 -> Web Container (Nginx) -> Static SPA
+#                                                  -> /api/* -> Backend:8001 (Private)
+#                                                                 -> MongoDB Atlas
+# ==============================================================================
+
+services:
+  backend:
+    build:
+      context: ./apps/backend
+      dockerfile: Dockerfile
+    image: restaurant-pos-backend:latest
+    container_name: restaurant-pos-backend
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      - NODE_ENV=production
+      - PORT=8001
+    # Backend port 8001 is INTERNAL ONLY to pos-network (never published to host)
+    expose:
+      - "8001"
+    networks:
+      - pos-network
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://127.0.0.1:8001/api/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+  web:
+    build:
+      context: ./apps/web
+      dockerfile: Dockerfile
+      args:
+        - VITE_API_BASE_URL=/api/v1
+        - VITE_DATA_PROVIDER=api
+        - VITE_DEFAULT_BRANCH_ID=branch-main
+    image: restaurant-pos-web:latest
+    container_name: restaurant-pos-web
+    restart: unless-stopped
+    # Only the web entry point is exposed on the host
+    ports:
+      - "${HTTP_PORT:-80}:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - pos-network
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://127.0.0.1/api/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+networks:
+  pos-network:
+    driver: bridge

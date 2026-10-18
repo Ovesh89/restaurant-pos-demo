@@ -15,6 +15,12 @@ apps/*/build/
 apps/*/.env
 apps/*/.env.local
 apps/*/.env.*.local
+*.pem
+*.key
+*.cert
+*.crt
+*.pfx
+id_rsa*
 
 # Logs & runtime data
 logs/
