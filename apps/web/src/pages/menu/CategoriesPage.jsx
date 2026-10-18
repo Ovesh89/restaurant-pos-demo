@@ -22,7 +22,7 @@ export const CategoriesPage = () => {
   // Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingCategory, setEditingCategory] = useState(null);
-  const [formData, setFormData] = useState({ name: '', code: '', sortOrder: 1 });
+  const [formData, setFormData] = useState({ name: '', code: '', sortOrder: 1, kotRequired: true });
   const [formError, setFormError] = useState('');
   const [formLoading, setFormLoading] = useState(false);
 
@@ -44,14 +44,19 @@ export const CategoriesPage = () => {
 
   const handleOpenAdd = () => {
     setEditingCategory(null);
-    setFormData({ name: '', code: '', sortOrder: categories.length + 1 });
+    setFormData({ name: '', code: '', sortOrder: categories.length + 1, kotRequired: true });
     setFormError('');
     setIsModalOpen(true);
   };
 
   const handleOpenEdit = (cat) => {
     setEditingCategory(cat);
-    setFormData({ name: cat.name, code: cat.code || '', sortOrder: cat.sortOrder || 1 });
+    setFormData({
+      name: cat.name,
+      code: cat.code || '',
+      sortOrder: cat.sortOrder || 1,
+      kotRequired: cat.kotRequired !== false,
+    });
     setFormError('');
     setIsModalOpen(true);
   };
@@ -125,6 +130,15 @@ export const CategoriesPage = () => {
             {row.code && <span className="ml-2 text-xs font-mono text-slate-400">({row.code})</span>}
           </div>
         </div>
+      )
+    },
+    {
+      header: 'KOT Policy',
+      accessor: 'kotRequired',
+      render: (row) => (
+        <Badge variant={row.kotRequired !== false ? 'info' : 'warning'} size="sm">
+          {row.kotRequired !== false ? 'KOT Required' : 'No KOT'}
+        </Badge>
       )
     },
     {
@@ -250,6 +264,21 @@ export const CategoriesPage = () => {
               onChange={(e) => setFormData({ ...formData, sortOrder: e.target.value })}
               required
             />
+          </div>
+
+          <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-1">
+            <label className="flex items-center gap-2 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={formData.kotRequired}
+                onChange={(e) => setFormData({ ...formData, kotRequired: e.target.checked })}
+                className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500"
+              />
+              <span className="font-semibold text-xs text-slate-800">Kitchen KOT Required</span>
+            </label>
+            <p className="text-[11px] text-slate-500 ml-6">
+              When enabled, items ordered in this category automatically generate KOT tickets to the kitchen. Uncheck for instant items (drinks, ice creams, pre-made items) where kitchen preparation is not required.
+            </p>
           </div>
 
           <div className="flex flex-col-reverse sm:flex-row justify-end gap-2 pt-4 border-t border-slate-100">

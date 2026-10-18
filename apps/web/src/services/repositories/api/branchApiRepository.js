@@ -68,6 +68,12 @@ class BranchApiRepository {
     });
     return this.normalizeArea(updated);
   }
+
+  async deleteArea(id) {
+    const res = await apiClient.delete(`/areas/${id}`);
+    return res;
+  }
 }
+
 
 export const branchApiRepository = new BranchApiRepository();

@@ -51,6 +51,7 @@ export class MenuService {
       description: data.description || '',
       sortOrder: Number(data.sortOrder ?? 0),
       isActive: data.isActive !== undefined ? Boolean(data.isActive) : true,
+      kotRequired: data.kotRequired !== undefined ? Boolean(data.kotRequired) : true,
     };
 
     const created = await this.categoryRepo.insertOne(doc, 'cat');
@@ -81,6 +82,8 @@ export class MenuService {
     if (data.description !== undefined) updateFields.description = data.description;
     if (data.sortOrder !== undefined) updateFields.sortOrder = Number(data.sortOrder);
     if (data.isActive !== undefined) updateFields.isActive = Boolean(data.isActive);
+    if (data.kotRequired !== undefined) updateFields.kotRequired = Boolean(data.kotRequired);
+
 
     const updated = await this.categoryRepo.updateById(categoryId, updateFields);
 

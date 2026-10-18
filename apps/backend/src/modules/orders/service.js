@@ -1,6 +1,6 @@
 import crypto from 'node:crypto';
 import { utcNowIso } from '../../repositories/BaseMongoRepository.js';
-import { getNextSequence } from '../../utils/sequence.js';
+import { getNextSequence, getNextDailyOrderSequence } from '../../utils/sequence.js';
 import { toDecimal, roundMoney, formatMoney } from '../../utils/decimal.js';
 import {
   NotFoundAppError,
@@ -11,10 +11,12 @@ import { branchRepository, tableRepository } from '../restaurant/repositories.js
 import { productRepository, categoryRepository } from '../menu/repositories.js';
 import { customerRepository } from '../customers/repository.js';
 import { billRepository } from '../billing/repositories.js';
+import { billingService } from '../billing/service.js';
 import { kotService } from '../kot/service.js';
 import { notificationService } from '../notifications/service.js';
 import { auditService } from '../audit/service.js';
 import { orderRepository, orderEventRepository } from './repositories.js';
+
 
 export function calculateOrderFinancials(items = []) {
   let subtotalDec = toDecimal(0);
@@ -111,6 +113,14 @@ class OrderService {
         lineTotalDec = roundMoney(lineSubtotalDec.plus(lineTaxDec));
       }
 
+      let isKotRequired = true;
+      if (prod.categoryId) {
+        const cat = await categoryRepository.findById(prod.categoryId);
+        if (cat && cat.kotRequired === false) {
+          isKotRequired = false;
+        }
+      }
+
       capturedItems.push({
         _id: itemId,
         id: itemId,
@@ -118,6 +128,8 @@ class OrderService {
         productName: prod.name,
         code: prod.code || '',
         station: prod.kitchenStation || 'MAIN',
+        categoryId: prod.categoryId || null,
+        kotRequired: isKotRequired,
         quantity: qty,
         unitPrice,
         taxConfig,
@@ -131,10 +143,12 @@ class OrderService {
       });
     }
     return capturedItems;
+
   }
 
   async createOrder({ data, captainId, captainName }) {
     const branchId = data.branchId || 'branch-main';
+    const orderType = String(data.orderType || 'DINE_IN').toUpperCase();
     const inputTableId = data.tableId;
     const customerId = data.customerId || null;
     const rawItems = data.items || [];
@@ -142,30 +156,53 @@ class OrderService {
     const held = Boolean(data.held);
     const notes = String(data.notes || '').trim();
 
-    if (!branchId || !inputTableId) {
-      throw new ValidationAppError('branchId and tableId are required.');
-    }
-
     const branch = await branchRepository.findById(branchId);
     if (!branch || branch.isActive === false) {
       throw new NotFoundAppError('Branch not found or inactive.');
     }
 
-    const table = await tableRepository.findById(inputTableId);
-    if (!table || table.isActive === false) {
-      throw new NotFoundAppError('Table not found or inactive.');
-    }
+    const isTableOrder = orderType === 'DINE_IN';
+    let table = null;
+    let tableId = null;
+    let tableNumber = '';
 
-    const tableId = table._id;
-    if (table.branchId !== branchId) {
-      throw new ValidationAppError('Table does not belong to the specified branch.');
-    }
+    if (isTableOrder) {
+      if (!inputTableId) {
+        throw new ValidationAppError('tableId is required for Dine-in orders.');
+      }
 
-    const activeOrder = await orderRepository.findActiveByTable(branchId, tableId);
-    if (activeOrder) {
-      throw new StateConflictError(
-        `Table ${table.tableNumber} already has active order ${activeOrder.orderNumber}.`
-      );
+      table = await tableRepository.findById(inputTableId);
+      if (!table || table.isActive === false) {
+        throw new NotFoundAppError('Table not found or inactive.');
+      }
+
+      if (table.branchId !== branchId) {
+        throw new ValidationAppError('Table does not belong to the specified branch.');
+      }
+
+      tableId = table._id;
+      tableNumber = table.tableNumber || '';
+
+      const activeOrder = await orderRepository.findActiveByTable(branchId, tableId);
+      if (activeOrder) {
+        throw new StateConflictError(
+          `Table ${table.tableNumber} already has active order ${activeOrder.orderNumber}.`
+        );
+      }
+    } else {
+      // Non-table orders (Take away, Zomato, Swiggy, Online)
+      tableId = null;
+      if (data.tableNumber) {
+        tableNumber = String(data.tableNumber).trim();
+      } else if (orderType === 'TAKEAWAY') {
+        tableNumber = 'Take Away';
+      } else if (orderType === 'ZOMATO') {
+        tableNumber = 'Zomato';
+      } else if (orderType === 'SWIGGY') {
+        tableNumber = 'Swiggy';
+      } else {
+        tableNumber = 'Online';
+      }
     }
 
     if (!Array.isArray(rawItems) || rawItems.length === 0) {
@@ -175,7 +212,7 @@ class OrderService {
     const now = utcNowIso();
     const capturedItems = await this._captureOrderItems(rawItems, now);
     const financials = calculateOrderFinancials(capturedItems);
-    const orderNumber = await getNextSequence('ord', 'ORD', branch.code || 'MAIN');
+    const orderNumber = await getNextDailyOrderSequence(branch.code || 'MAIN');
 
     let status = 'DRAFT';
     if (held) {
@@ -188,13 +225,17 @@ class OrderService {
       _id: crypto.randomUUID(),
       orderNumber,
       branchId,
+      orderType,
       tableId,
-      tableNumber: table.tableNumber || '',
+      tableNumber,
       captainId,
       captainName: captainName || 'Staff',
       customerId,
+      customerName: data.customerName || '',
+      customerPhone: data.customerPhone || '',
+      onlineOrderRef: data.onlineOrderRef || '',
       status,
-      source: 'CAPTAIN',
+      source: isTableOrder ? 'CAPTAIN' : orderType,
       held,
       notes,
       items: capturedItems,
@@ -214,11 +255,14 @@ class OrderService {
 
     const serializedOrder = await orderRepository.insertOne(orderDoc);
 
-    // Update Table status to OCCUPIED
-    await tableRepository.updateById(tableId, {
-      status: 'OCCUPIED',
-      activeOrderId: serializedOrder.id,
-    });
+    // Update Table status to OCCUPIED only if Dine-in
+    if (tableId) {
+      await tableRepository.updateById(tableId, {
+        status: 'OCCUPIED',
+        activeOrderId: serializedOrder.id,
+      });
+    }
+
 
     // Record ORDER_CREATED event
     await orderEventRepository.recordEvent({
@@ -228,7 +272,7 @@ class OrderService {
       fromStatus: null,
       toStatus: status,
       actorId: captainId,
-      metadata: { orderNumber, tableNumber: table.tableNumber },
+      metadata: { orderNumber, tableNumber: tableNumber || null },
     });
 
     if (status === 'WAITING_CONFIRMATION') {
@@ -244,7 +288,7 @@ class OrderService {
       await notificationService.notify({
         branchId,
         eventType: 'ORDER_SUBMITTED',
-        title: `New Order: Table ${table.tableNumber}`,
+        title: isTableOrder ? `New Order: Table ${tableNumber}` : `New Order: ${tableNumber}`,
         message: `Order ${orderNumber} submitted by ${captainName} awaiting confirmation.`,
         recipientRole: 'RECEPTION',
         metadata: { orderId: serializedOrder.id, orderNumber },
@@ -441,7 +485,7 @@ class OrderService {
       fromStatus: currentStatus,
       toStatus: 'KOT_SENT',
       actorId,
-      metadata: { kotId: kot.id, kotNumber: kot.kotNumber },
+      metadata: kot ? { kotId: kot.id, kotNumber: kot.kotNumber } : { notes: 'No KOT required' },
     });
 
     await auditService.logAction({
@@ -451,14 +495,15 @@ class OrderService {
       action: 'ORDER_CONFIRMED',
       entityType: 'ORDER',
       entityId: orderId,
-      metadata: { orderNumber: updatedOrder.orderNumber, kotNumber: kot.kotNumber },
+      metadata: { orderNumber: updatedOrder.orderNumber, kotNumber: kot?.kotNumber || null },
     });
 
     return {
-      order: { ...updatedOrder, kots: [kot] },
-      kot,
+      order: { ...updatedOrder, kots: kot ? [kot] : [] },
+      kot: kot || null,
     };
   }
+
 
   async rejectOrder({ orderId, reason, actorId, actorName }) {
     if (!reason || !String(reason).trim()) {
@@ -532,9 +577,18 @@ class OrderService {
     }
 
     const currentStatus = order.status;
-    if (['COMPLETED', 'CANCELLED', 'REJECTED', 'BILL_PENDING', 'BILLING'].includes(currentStatus)) {
+    if (['COMPLETED', 'CANCELLED', 'REJECTED'].includes(currentStatus)) {
       throw new StateConflictError(
         `Cannot modify items on order in status '${currentStatus}'.`
+      );
+    }
+
+    const canonicalOrderId = order._id;
+
+    const existingBill = await billRepository.findOne({ orderId: canonicalOrderId });
+    if (existingBill && existingBill.status === 'COMPLETED') {
+      throw new StateConflictError(
+        'Cannot modify items: the bill for this order has already been settled.'
       );
     }
 
@@ -544,26 +598,33 @@ class OrderService {
 
     const now = utcNowIso();
     const capturedNewItems = await this._captureOrderItems(itemsToAdd, now);
-    const deltaKotItems = capturedNewItems.map((it) => ({
-      productId: it.productId,
-      productName: it.productName,
-      quantity: it.quantity,
-      note: it.note || '',
-      station: it.station || 'MAIN',
-      changeType: 'ADD',
-    }));
+
+    // Only dishes that require KOT are sent to kitchen tickets
+    const deltaKotItems = capturedNewItems
+      .filter((it) => it.kotRequired !== false)
+      .map((it) => ({
+        productId: it.productId,
+        productName: it.productName,
+        quantity: it.quantity,
+        note: it.note || '',
+        station: it.station || 'MAIN',
+        changeType: 'ADD',
+      }));
 
     const newOrderItems = [...(order.items || []), ...capturedNewItems];
     const financials = calculateOrderFinancials(newOrderItems);
 
-    let updatedOrder = await orderRepository.updateById(orderId, {
+    let updatedOrder = await orderRepository.updateById(canonicalOrderId, {
       items: newOrderItems,
       financials,
       updatedAt: now,
     });
 
     let modKot = null;
-    if (['CONFIRMED', 'KOT_SENT', 'PREPARING', 'READY', 'SERVED'].includes(currentStatus)) {
+    if (
+      deltaKotItems.length > 0 &&
+      ['CONFIRMED', 'KOT_SENT', 'PREPARING', 'READY', 'SERVED'].includes(currentStatus)
+    ) {
       modKot = await kotService.createModificationKot({
         order: updatedOrder,
         deltaItems: deltaKotItems,
@@ -572,13 +633,16 @@ class OrderService {
         actorName,
       });
 
-      updatedOrder = await orderRepository.updateById(orderId, {
+      updatedOrder = await orderRepository.updateById(canonicalOrderId, {
         kotRevision: modKot.revision,
       });
     }
 
+    // Automatically synchronize any open pending bill with the new items
+    await billingService.syncUnsettledBill(canonicalOrderId);
+
     await orderEventRepository.recordEvent({
-      orderId,
+      orderId: canonicalOrderId,
       branchId: order.branchId,
       eventType: 'ORDER_ITEMS_MODIFIED',
       fromStatus: currentStatus,
@@ -596,12 +660,12 @@ class OrderService {
       actorName,
       action: 'ORDER_ITEMS_MODIFIED',
       entityType: 'ORDER',
-      entityId: orderId,
+      entityId: canonicalOrderId,
       reason: reason || 'Items added/modified',
       metadata: { itemsAdded: itemsToAdd.length },
     });
 
-    const kots = await kotService.findByOrder(orderId);
+    const kots = await kotService.findByOrder(canonicalOrderId);
     return {
       order: { ...updatedOrder, kots },
       modificationKot: modKot,
@@ -609,6 +673,7 @@ class OrderService {
   }
 
   async cancelOrder({ orderId, reason, actorId, actorName }) {
+
     if (!reason || !String(reason).trim()) {
       throw new ValidationAppError('A non-empty reason is required to cancel an order.');
     }
@@ -632,7 +697,8 @@ class OrderService {
     }));
     const financials = calculateOrderFinancials(cancelledItems);
 
-    const updated = await orderRepository.updateStatus(orderId, 'CANCELLED', {
+    const canonicalOrderId = order._id;
+    const updated = await orderRepository.updateStatus(canonicalOrderId, 'CANCELLED', {
       cancellationReason: trimmedReason,
       cancelledAt: now,
       items: cancelledItems,
@@ -660,7 +726,7 @@ class OrderService {
     }
 
     await orderEventRepository.recordEvent({
-      orderId,
+      orderId: canonicalOrderId,
       branchId: order.branchId,
       eventType: 'ORDER_CANCELLED',
       fromStatus: currentStatus,
@@ -675,13 +741,13 @@ class OrderService {
       actorName,
       action: 'ORDER_CANCELLED',
       entityType: 'ORDER',
-      entityId: orderId,
+      entityId: canonicalOrderId,
       reason: trimmedReason,
     });
 
     return {
       ...updated,
-      kots: await kotService.findByOrder(orderId),
+      kots: await kotService.findByOrder(canonicalOrderId),
     };
   }
 
@@ -698,10 +764,19 @@ class OrderService {
       throw new NotFoundAppError('Order not found.');
     }
 
+    const canonicalOrderId = order._id;
+
     const currentStatus = order.status;
     if (['COMPLETED', 'CANCELLED', 'REJECTED'].includes(currentStatus)) {
       throw new StateConflictError(
         `Cannot cancel items on order in status '${currentStatus}'.`
+      );
+    }
+
+    const existingBill = await billRepository.findOne({ orderId: canonicalOrderId });
+    if (existingBill && existingBill.status === 'COMPLETED') {
+      throw new StateConflictError(
+        'Cannot remove or cancel item: the bill for this order has already been settled.'
       );
     }
 
@@ -714,6 +789,10 @@ class OrderService {
     }
 
     const targetItem = items[targetIdx];
+    if (targetItem.status === 'CANCELLED') {
+      throw new ValidationAppError('Item is already cancelled or removed.');
+    }
+
     const now = utcNowIso();
     items[targetIdx] = {
       ...targetItem,
@@ -723,14 +802,17 @@ class OrderService {
     };
 
     const financials = calculateOrderFinancials(items);
-    const updatedOrder = await orderRepository.updateById(orderId, {
+    const updatedOrder = await orderRepository.updateById(canonicalOrderId, {
       items,
       financials,
       updatedAt: now,
     });
 
     let cancellationKot = null;
-    if (['CONFIRMED', 'KOT_SENT', 'PREPARING', 'READY', 'SERVED'].includes(currentStatus)) {
+    if (
+      ['CONFIRMED', 'KOT_SENT', 'PREPARING', 'READY', 'SERVED'].includes(currentStatus) &&
+      targetItem.kotRequired !== false
+    ) {
       cancellationKot = await kotService.createCancellationKot({
         order,
         cancelledItems: [targetItem],
@@ -740,8 +822,11 @@ class OrderService {
       });
     }
 
+    // Automatically recalculate and synchronize any open bill with the subtracted amount
+    await billingService.syncUnsettledBill(canonicalOrderId);
+
     await orderEventRepository.recordEvent({
-      orderId,
+      orderId: canonicalOrderId,
       branchId: order.branchId,
       eventType: 'ORDER_ITEM_CANCELLED',
       fromStatus: currentStatus,
@@ -757,17 +842,18 @@ class OrderService {
       actorName,
       action: 'ORDER_ITEM_CANCELLED',
       entityType: 'ORDER',
-      entityId: orderId,
+      entityId: canonicalOrderId,
       reason: String(reason).trim(),
       metadata: { itemId: targetItem._id || targetItem.id, productName: targetItem.productName },
     });
 
-    const kots = await kotService.findByOrder(orderId);
+    const kots = await kotService.findByOrder(canonicalOrderId);
     return {
       order: { ...updatedOrder, kots },
       cancellationKot,
     };
   }
+
 
   async getOrder(orderId) {
     const order = await orderRepository.findById(orderId);

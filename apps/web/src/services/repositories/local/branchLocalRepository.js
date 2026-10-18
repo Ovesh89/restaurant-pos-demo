@@ -92,6 +92,35 @@ class BranchLocalRepository {
 
     return areas[index];
   }
+
+  async deleteArea(id, actor = { id: 'admin', name: 'Admin' }) {
+    let areas = storageAdapter.getItem(STORAGE_KEYS.AREAS) || [];
+    const area = areas.find((a) => a.id === id);
+    if (!area) {
+      throw new Error('Area not found.');
+    }
+
+    const tables = storageAdapter.getItem(STORAGE_KEYS.TABLES) || [];
+    const assignedTables = tables.filter((t) => t.areaId === id);
+    if (assignedTables.length > 0) {
+      throw new Error(`Cannot delete Dining Area "${area.name}" because ${assignedTables.length} table(s) are assigned to it. Please reassign or delete the tables first.`);
+    }
+
+    areas = areas.filter((a) => a.id !== id);
+    storageAdapter.setItem(STORAGE_KEYS.AREAS, areas);
+
+    await auditRepository.logEvent({
+      actorId: actor.id,
+      actorName: actor.name,
+      action: 'AREA_DELETED',
+      entityType: 'Area',
+      entityId: id,
+      details: `Dining area "${area.name}" was deleted.`
+    });
+
+    return { success: true };
+  }
 }
+
 
 export const branchLocalRepository = new BranchLocalRepository();

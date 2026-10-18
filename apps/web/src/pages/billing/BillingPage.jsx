@@ -142,7 +142,13 @@ export const BillingPage = () => {
       );
 
       const targetTableId = searchParams.get('tableId');
-      if (targetTableId) {
+      const targetOrderId = searchParams.get('orderId');
+      if (targetOrderId) {
+        const match = pendingOrders.find((o) => o.id === targetOrderId);
+        if (match) {
+          handleOpenCheckout(match);
+        }
+      } else if (targetTableId) {
         const match = pendingOrders.find((o) => o.tableId === targetTableId);
         if (match) {
           handleOpenCheckout(match);
@@ -308,8 +314,12 @@ export const BillingPage = () => {
       setPaymentAmount(result.bill.balance > 0 ? result.bill.balance.toString() : '');
 
       if (result.isSettled) {
-        // Automatically print invoice upon full settlement!
-        printService.printInvoice(result.bill, selectedOrder, selectedCustomer);
+        // Automatically print invoice upon full settlement with dynamic UPI QR if applicable!
+        const configuredUpiId = localStorage.getItem('gts_pos_upi_id') || 'q705457761@ybl';
+        printService.printInvoice(result.bill, selectedOrder, selectedCustomer, null, {
+          paymentMode,
+          upiId: configuredUpiId,
+        });
         await loadBillingData();
       }
     } catch (err) {
@@ -356,7 +366,10 @@ export const BillingPage = () => {
   };
 
   const handleReprintInvoice = (bill) => {
-    printService.printInvoice(bill, null, { name: bill.customerName, mobile: bill.customerMobile });
+    const configuredUpiId = localStorage.getItem('gts_pos_upi_id') || 'q705457761@ybl';
+    printService.printInvoice(bill, null, { name: bill.customerName, mobile: bill.customerMobile }, null, {
+      upiId: configuredUpiId,
+    });
   };
 
   const historyColumns = [
@@ -366,9 +379,26 @@ export const BillingPage = () => {
       className: 'w-24 font-mono font-bold text-blue-700'
     },
     {
-      header: 'Table',
+      header: 'Table / Source',
       accessor: 'tableNo',
-      render: (row) => <span className="font-extrabold text-slate-800">Table {row.tableNo}</span>
+      render: (row) => {
+        if (row.orderType && row.orderType !== 'DINE_IN') {
+          const typeBadgeStyles = {
+            TAKEAWAY: 'bg-amber-50 text-amber-800 border-amber-200',
+            ZOMATO: 'bg-rose-50 text-rose-800 border-rose-200',
+            SWIGGY: 'bg-orange-50 text-orange-800 border-orange-200',
+            ONLINE_OTHER: 'bg-purple-50 text-purple-800 border-purple-200',
+          };
+          const badgeClass = typeBadgeStyles[row.orderType] || 'bg-slate-100 text-slate-800 border-slate-200';
+          const typeLabel = row.orderType === 'TAKEAWAY' ? 'Take Away' : row.orderType;
+          return (
+            <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-black border ${badgeClass}`}>
+              {typeLabel}
+            </span>
+          );
+        }
+        return <span className="font-extrabold text-slate-800">{row.tableNo ? `Table ${row.tableNo}` : 'Direct'}</span>;
+      }
     },
     {
       header: 'Guest / Customer',
@@ -452,20 +482,20 @@ export const BillingPage = () => {
         </Button>
       </PageHeader>
 
-      {/* Top Section: Active Tables Ready for Billing */}
+      {/* Top Section: Active Tables & Online Orders Ready for Billing */}
       <div>
         <h2 className="text-base font-bold text-slate-800 mb-3 flex items-center gap-2">
-          <span>Tables Pending Settlement</span>
+          <span>Orders Pending Settlement</span>
           <span className="w-6 h-6 rounded-full bg-blue-100 text-blue-800 text-xs font-black flex items-center justify-center">
             {readyOrders.length}
           </span>
         </h2>
 
         {loading ? (
-          <p className="text-xs text-slate-400">Checking pending table bills...</p>
+          <p className="text-xs text-slate-400">Checking pending bills...</p>
         ) : readyOrders.length === 0 ? (
           <div className="bg-white rounded-2xl border border-dashed border-slate-300 p-8 text-center text-slate-500 text-xs font-medium">
-            No active dining tables pending bill settlement.
+            No active dining tables or takeaway orders pending bill settlement.
           </div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4">
@@ -483,9 +513,32 @@ export const BillingPage = () => {
                   </div>
 
                   <div className="my-3">
-                    <h3 className="text-xl font-black text-slate-800">Table {ord.tableNo}</h3>
-                    <p className="text-xs text-slate-500 mt-0.5">Captain: {ord.captainName}</p>
-                    <p className="text-xs text-slate-600 mt-1 font-semibold">
+                    {ord.orderType && ord.orderType !== 'DINE_IN' ? (
+                      <div>
+                        <div className="flex items-center gap-1.5 mb-1">
+                          <span className="px-2 py-0.5 rounded text-xs font-black bg-amber-100 text-amber-900 border border-amber-200">
+                            {ord.orderType === 'TAKEAWAY' ? 'Take Away' : ord.orderType}
+                          </span>
+                          {ord.onlineOrderRef && (
+                            <span className="text-[11px] font-mono font-bold text-slate-600">
+                              #{ord.onlineOrderRef}
+                            </span>
+                          )}
+                        </div>
+                        <h3 className="text-base font-black text-slate-800 truncate">
+                          {ord.customerName || 'Walk-in Guest'}
+                        </h3>
+                        {ord.customerPhone && (
+                          <p className="text-xs text-slate-500 font-mono">{ord.customerPhone}</p>
+                        )}
+                      </div>
+                    ) : (
+                      <>
+                        <h3 className="text-xl font-black text-slate-800">Table {ord.tableNo}</h3>
+                        <p className="text-xs text-slate-500 mt-0.5">Captain: {ord.captainName || 'Staff'}</p>
+                      </>
+                    )}
+                    <p className="text-xs text-slate-600 mt-1.5 font-semibold">
                       {ord.items?.length} dishes ({ord.items?.reduce((a, b) => a + b.quantity, 0)} items)
                     </p>
                   </div>
@@ -538,7 +591,7 @@ export const BillingPage = () => {
         isOpen={!!selectedOrder && !!activeBill}
         onClose={handleCloseDesk}
         title={`Settle Bill: ${activeBill?.billNo}`}
-        subtitle={`Table ${selectedOrder?.tableNo} • Order ${selectedOrder?.orderNo}`}
+        subtitle={`${selectedOrder?.orderType && selectedOrder.orderType !== 'DINE_IN' ? (selectedOrder.orderType === 'TAKEAWAY' ? 'Take Away' : selectedOrder.orderType) : `Table ${selectedOrder?.tableNo}`} • Order ${selectedOrder?.orderNo}`}
         maxWidth="max-w-4xl"
       >
         {activeBill && (
@@ -788,13 +841,21 @@ export const BillingPage = () => {
                     <CheckCircle2 className="w-8 h-8 text-emerald-600 mx-auto" />
                     <p className="font-black text-sm">Bill is Fully Settled!</p>
                     <p className="text-xs text-emerald-700">
-                      Table {selectedOrder?.tableNo} is released to AVAILABLE and tax invoice is generated.
+                      {selectedOrder?.orderType && selectedOrder.orderType !== 'DINE_IN'
+                        ? 'Order is completed and tax invoice is generated.'
+                        : `Table ${selectedOrder?.tableNo} is released to AVAILABLE and tax invoice is generated.`}
                     </p>
                     <Button
                       variant="primary"
                       icon={Printer}
                       className="w-full sm:w-auto"
-                      onClick={() => printService.printInvoice(activeBill, selectedOrder, selectedCustomer)}
+                      onClick={() => {
+                        const configuredUpiId = localStorage.getItem('gts_pos_upi_id') || 'q705457761@ybl';
+                        printService.printInvoice(activeBill, selectedOrder, selectedCustomer, null, {
+                          paymentMode: activeBill.payments?.find((p) => p.mode === 'UPI') ? 'UPI' : paymentMode,
+                          upiId: configuredUpiId,
+                        });
+                      }}
                     >
                       Print Tax Invoice
                     </Button>

@@ -24,7 +24,7 @@ class KOTService {
     const now = utcNowIso();
 
     const kotItems = (order.items || [])
-      .filter((it) => (it.status || 'ACTIVE') === 'ACTIVE')
+      .filter((it) => (it.status || 'ACTIVE') === 'ACTIVE' && it.kotRequired !== false)
       .map((it) => ({
         productId: it.productId,
         productName: it.productName,
@@ -34,7 +34,13 @@ class KOTService {
         changeType: 'ADD',
       }));
 
+    if (kotItems.length === 0) {
+      // None of the dishes in the order require a kitchen ticket
+      return null;
+    }
+
     const orderId = order._id || order.id;
+
     const kotDoc = {
       _id: crypto.randomUUID(),
       kotNumber,

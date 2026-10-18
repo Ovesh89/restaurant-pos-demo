@@ -30,6 +30,7 @@ class CategoryLocalRepository {
       code: categoryData.code?.trim().toUpperCase() || '',
       sortOrder: Number(categoryData.sortOrder) || categories.length + 1,
       isActive: true,
+      kotRequired: categoryData.kotRequired !== undefined ? Boolean(categoryData.kotRequired) : true,
       createdAt: new Date().toISOString()
     };
 
@@ -69,8 +70,11 @@ class CategoryLocalRepository {
       name: categoryData.name?.trim() || categories[index].name,
       code: categoryData.code !== undefined ? categoryData.code.trim().toUpperCase() : categories[index].code,
       sortOrder: categoryData.sortOrder !== undefined ? Number(categoryData.sortOrder) : categories[index].sortOrder,
+      isActive: categoryData.isActive !== undefined ? Boolean(categoryData.isActive) : categories[index].isActive,
+      kotRequired: categoryData.kotRequired !== undefined ? Boolean(categoryData.kotRequired) : (categories[index].kotRequired !== false),
       updatedAt: new Date().toISOString()
     };
+
 
     storageAdapter.setItem(STORAGE_KEYS.CATEGORIES, categories);
 

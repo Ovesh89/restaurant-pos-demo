@@ -12,7 +12,8 @@ class CategoryApiRepository {
     return {
       ...cat,
       id,
-      _id: cat._id || id
+      _id: cat._id || id,
+      kotRequired: cat.kotRequired !== undefined ? Boolean(cat.kotRequired) : true,
     };
   }
 
@@ -41,7 +42,8 @@ class CategoryApiRepository {
       name: categoryData.name.trim(),
       code: categoryData.code?.trim().toUpperCase() || '',
       sortOrder: Number(categoryData.sortOrder) || 1,
-      isActive: true
+      isActive: categoryData.isActive !== undefined ? Boolean(categoryData.isActive) : true,
+      kotRequired: categoryData.kotRequired !== undefined ? Boolean(categoryData.kotRequired) : true,
     };
     const created = await apiClient.post('/menu/categories', payload);
     return this.normalizeCategory(created);
@@ -53,10 +55,12 @@ class CategoryApiRepository {
     if (categoryData.code !== undefined) payload.code = categoryData.code.trim().toUpperCase();
     if (categoryData.sortOrder !== undefined) payload.sortOrder = Number(categoryData.sortOrder);
     if (categoryData.isActive !== undefined) payload.isActive = Boolean(categoryData.isActive);
+    if (categoryData.kotRequired !== undefined) payload.kotRequired = Boolean(categoryData.kotRequired);
 
     const updated = await apiClient.patch(`/menu/categories/${id}`, payload);
     return this.normalizeCategory(updated);
   }
+
 
   async toggleCategoryStatus(id) {
     const current = await this.getCategoryById(id);

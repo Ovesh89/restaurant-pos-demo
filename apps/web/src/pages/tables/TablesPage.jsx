@@ -12,6 +12,7 @@ import { Modal } from '../../components/common/Modal';
 import { Badge } from '../../components/common/Badge';
 import { TABLE_STATUS_CONFIG, TABLE_STATUS } from '../../constants/tableStatus';
 import { PERMISSIONS } from '../../constants/permissions';
+import { DiningAreaManager } from '../../components/restaurant/DiningAreaManager.jsx';
 
 export const TablesPage = () => {
   const { user, hasPermission, hasAnyPermission } = useAuth();
@@ -22,6 +23,9 @@ export const TablesPage = () => {
   const [areas, setAreas] = useState([]);
   const [selectedAreaId, setSelectedAreaId] = useState('ALL');
   const [loading, setLoading] = useState(true);
+
+  // Dining Areas Modal State
+  const [isAreaModalOpen, setIsAreaModalOpen] = useState(false);
 
   // Add / Edit Table Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -170,9 +174,14 @@ export const TablesPage = () => {
         subtitle="Floor layout visualizer, dining sections, table seating capacity, and status overview"
       >
         {canManage && (
-          <Button variant="primary" icon={Plus} onClick={handleOpenAdd}>
-            Add Table
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button variant="secondary" icon={Layers} onClick={() => setIsAreaModalOpen(true)}>
+              Manage Areas
+            </Button>
+            <Button variant="primary" icon={Plus} onClick={handleOpenAdd}>
+              Add Table
+            </Button>
+          </div>
         )}
       </PageHeader>
 
@@ -441,6 +450,20 @@ export const TablesPage = () => {
             </Button>
           </div>
         </form>
+      </Modal>
+
+      {/* Dining Area Manager Modal */}
+      <Modal
+        isOpen={isAreaModalOpen}
+        onClose={() => {
+          setIsAreaModalOpen(false);
+          loadFloor();
+        }}
+        title="Manage Assigned Dining Areas"
+        subtitle="Add, edit, toggle active status, and remove restaurant floor sections"
+        maxWidth="max-w-4xl"
+      >
+        <DiningAreaManager onAreasChanged={loadFloor} />
       </Modal>
     </div>
   );

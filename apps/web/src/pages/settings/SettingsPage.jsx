@@ -7,7 +7,9 @@ import {
   Save,
   RotateCcw,
   CheckCircle2,
-  AlertCircle
+  AlertCircle,
+  Layers,
+  Flame,
 } from 'lucide-react';
 import { settingsRepository, DEFAULT_SETTINGS } from '../../services/repositories/settingsRepository';
 import { useAuth } from '../../hooks/useAuth';
@@ -15,11 +17,13 @@ import { PageHeader } from '../../components/common/PageHeader';
 import { Button } from '../../components/common/Button';
 import { Input } from '../../components/common/Input';
 import { Select } from '../../components/common/Select';
+import { DiningAreaManager } from '../../components/restaurant/DiningAreaManager.jsx';
+import { KitchenStationManager } from '../../components/restaurant/KitchenStationManager.jsx';
 
 export const SettingsPage = () => {
   const { user } = useAuth();
 
-  const [activeTab, setActiveTab] = useState('PROFILE'); // PROFILE, TAXES, PRINTING
+  const [activeTab, setActiveTab] = useState('PROFILE'); // PROFILE, AREAS, STATIONS, TAXES, PRINTING
   const [formData, setFormData] = useState({ ...DEFAULT_SETTINGS });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -58,6 +62,9 @@ export const SettingsPage = () => {
     try {
       const actor = { id: user?.id || 'admin', name: user?.name || 'Admin' };
       const updated = await settingsRepository.updateSettings(formData, actor);
+      if (updated.upiId) {
+        localStorage.setItem('gts_pos_upi_id', updated.upiId);
+      }
       setFormData(updated);
       setSuccessMsg('Settings saved successfully and applied across billing & KOTs!');
       setTimeout(() => setSuccessMsg(''), 4000);
@@ -129,6 +136,30 @@ export const SettingsPage = () => {
         </button>
 
         <button
+          onClick={() => setActiveTab('AREAS')}
+          className={`flex items-center gap-2 px-3.5 sm:px-4 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap shrink-0 ${
+            activeTab === 'AREAS'
+              ? 'bg-blue-600 text-white shadow-sm'
+              : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
+          }`}
+        >
+          <Layers className="w-4 h-4" />
+          Assigned Dining Areas
+        </button>
+
+        <button
+          onClick={() => setActiveTab('STATIONS')}
+          className={`flex items-center gap-2 px-3.5 sm:px-4 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap shrink-0 ${
+            activeTab === 'STATIONS'
+              ? 'bg-blue-600 text-white shadow-sm'
+              : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
+          }`}
+        >
+          <Flame className="w-4 h-4" />
+          Kitchen Stations
+        </button>
+
+        <button
           onClick={() => setActiveTab('TAXES')}
           className={`flex items-center gap-2 px-3.5 sm:px-4 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap shrink-0 ${
             activeTab === 'TAXES'
@@ -137,7 +168,7 @@ export const SettingsPage = () => {
           }`}
         >
           <Percent className="w-4 h-4" />
-          Taxes & Financials
+          Taxes &amp; UPI QR
         </button>
 
         <button
@@ -149,7 +180,7 @@ export const SettingsPage = () => {
           }`}
         >
           <Printer className="w-4 h-4" />
-          Thermal Printing & Prefixes
+          Thermal Printing &amp; Prefixes
         </button>
       </div>
 
@@ -217,10 +248,18 @@ export const SettingsPage = () => {
               </div>
             )}
 
+            {activeTab === 'AREAS' && (
+              <DiningAreaManager />
+            )}
+
+            {activeTab === 'STATIONS' && (
+              <KitchenStationManager />
+            )}
+
             {activeTab === 'TAXES' && (
               <div className="space-y-4">
                 <h3 className="text-base font-bold text-slate-800 border-b border-slate-100 pb-2">
-                  Tax Rates & Financial Limits
+                  Tax Rates, UPI QR & Financial Limits
                 </h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <Input
@@ -244,6 +283,13 @@ export const SettingsPage = () => {
                     value={formData.maxDiscountPercent}
                     onChange={(e) => handleChange('maxDiscountPercent', Number(e.target.value))}
                     helperText="Cashier and staff discount limit"
+                  />
+                  <Input
+                    label="UPI ID / VPA (For Dynamic Bill QR Code)"
+                    value={formData.upiId || ''}
+                    placeholder="e.g. q705457761@ybl"
+                    onChange={(e) => handleChange('upiId', e.target.value)}
+                    helperText="Used to generate dynamic scan-and-pay UPI QR code on final settled bills"
                   />
                   <Input
                     label="Currency Symbol"
@@ -296,11 +342,13 @@ export const SettingsPage = () => {
               </div>
             )}
 
-            <div className="pt-4 border-t border-slate-100 flex justify-end">
-              <Button type="submit" variant="primary" icon={Save} loading={saving}>
-                Save System Settings
-              </Button>
-            </div>
+            {['PROFILE', 'TAXES', 'PRINTING'].includes(activeTab) && (
+              <div className="pt-4 border-t border-slate-100 flex justify-end">
+                <Button type="submit" variant="primary" icon={Save} loading={saving}>
+                  Save System Settings
+                </Button>
+              </div>
+            )}
           </form>
         )}
       </div>

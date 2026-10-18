@@ -111,7 +111,87 @@ router.patch(
   })
 );
 
+// DELETE /api/v1/areas/:areaId
+router.delete(
+  '/areas/:areaId',
+  authenticate,
+  requirePermissions(['area.manage']),
+  asyncHandler(async (req, res) => {
+    const result = await restaurantService.deleteArea(req.params.areaId, req.user);
+    return successResponse(res, result, 'Area deleted successfully.');
+  })
+);
+
+// --- Kitchen Stations ---
+
+// GET /api/v1/kitchen-stations
+router.get(
+  '/kitchen-stations',
+  authenticate,
+  requireAnyPermission(['kot.view', 'menu.view', 'table.view']),
+  asyncHandler(async (req, res) => {
+    const branchId = resolveBranchId(req);
+    const isActiveOnly = ['true', '1', 'yes'].includes(
+      String(req.query.isActiveOnly || 'false').toLowerCase()
+    );
+    const stations = await restaurantService.listKitchenStations(branchId, req.user, isActiveOnly);
+    return successResponse(res, stations);
+  })
+);
+
+// POST /api/v1/kitchen-stations
+router.post(
+  '/kitchen-stations',
+  authenticate,
+  requireAnyPermission(['menu.manage', 'branch.manage', 'settings.manage']),
+  asyncHandler(async (req, res) => {
+    const created = await restaurantService.createKitchenStation(req.body || {}, req.user);
+    return createdResponse(res, created, 'Kitchen station created successfully.');
+  })
+);
+
+// GET /api/v1/kitchen-stations/:stationId
+router.get(
+  '/kitchen-stations/:stationId',
+  authenticate,
+  requireAnyPermission(['kot.view', 'menu.view']),
+  asyncHandler(async (req, res) => {
+    const station = await restaurantService.getKitchenStation(req.params.stationId, req.user);
+    return successResponse(res, station);
+  })
+);
+
+// PATCH /api/v1/kitchen-stations/:stationId
+router.patch(
+  '/kitchen-stations/:stationId',
+  authenticate,
+  requireAnyPermission(['menu.manage', 'branch.manage', 'settings.manage']),
+  asyncHandler(async (req, res) => {
+    const updated = await restaurantService.updateKitchenStation(
+      req.params.stationId,
+      req.body || {},
+      req.user
+    );
+    return successResponse(res, updated, 'Kitchen station updated successfully.');
+  })
+);
+
+// DELETE /api/v1/kitchen-stations/:stationId
+router.delete(
+  '/kitchen-stations/:stationId',
+  authenticate,
+  requireAnyPermission(['menu.manage', 'branch.manage', 'settings.manage']),
+  asyncHandler(async (req, res) => {
+    const result = await restaurantService.deleteKitchenStation(
+      req.params.stationId,
+      req.user
+    );
+    return successResponse(res, result, 'Kitchen station deleted successfully.');
+  })
+);
+
 // --- Tables ---
+
 
 // GET /api/v1/tables
 router.get(

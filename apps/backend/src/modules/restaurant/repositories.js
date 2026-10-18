@@ -79,3 +79,26 @@ export class TableRepository extends BaseMongoRepository {
 export const branchRepository = new BranchRepository();
 export const areaRepository = new AreaRepository();
 export const tableRepository = new TableRepository();
+
+export class KitchenStationRepository extends BaseMongoRepository {
+  constructor() {
+    super('kitchen_stations', 'station');
+  }
+
+  async findByBranch(branchId, isActiveOnly = false) {
+    const query = { branchId };
+    if (isActiveOnly) query.isActive = true;
+    return this.findMany(query, { sort: [['sortOrder', 1], ['name', 1]] });
+  }
+
+  async findByName(branchId, name) {
+    if (!branchId || !name) return null;
+    return this.findOne({
+      branchId,
+      name: String(name).trim(),
+    });
+  }
+}
+
+export const kitchenStationRepository = new KitchenStationRepository();
+

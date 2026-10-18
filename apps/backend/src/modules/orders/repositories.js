@@ -3,6 +3,7 @@ import {
   BaseMongoRepository,
   paginateMongoQuery,
   utcNowIso,
+  serializeMongoDoc,
 } from '../../repositories/BaseMongoRepository.js';
 
 export function expandTableIdAliases(tableId) {
@@ -19,6 +20,23 @@ export function expandTableIdAliases(tableId) {
 export class OrderRepository extends BaseMongoRepository {
   constructor() {
     super('orders');
+  }
+
+  async findById(docId, projection = null) {
+    if (!docId) return null;
+    const col = await this.collection();
+    const strId = String(docId);
+    const doc = await col.findOne(
+      {
+        $or: [
+          { _id: strId },
+          { id: strId },
+          { orderNumber: strId },
+        ],
+      },
+      projection ? { projection } : undefined
+    );
+    return serializeMongoDoc(doc);
   }
 
   async findActiveByTable(branchId, tableId) {

@@ -23,5 +23,7 @@ export const STORAGE_KEYS = {
   AUDIT_LOGS: 'restaurant_pos_audit_logs',
   SHIFTS: 'restaurant_pos_shifts',
   SETTINGS: 'restaurant_pos_settings',
-  NOTIFICATIONS: 'restaurant_pos_notifications'
+  NOTIFICATIONS: 'restaurant_pos_notifications',
+  KITCHEN_STATIONS: 'restaurant_pos_kitchen_stations'
 };
+

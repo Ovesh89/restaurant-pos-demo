@@ -58,6 +58,10 @@ class OrderApiRepository {
       subtotal,
       notes: order.notes || '',
       status: order.status || ORDER_STATUS.DRAFT,
+      orderType: order.orderType || (order.tableId ? 'DINE_IN' : 'TAKEAWAY'),
+      customerName: order.customerName || '',
+      customerPhone: order.customerPhone || '',
+      onlineOrderRef: order.onlineOrderRef || '',
       rejectionReason: order.rejectionReason || '',
       cancellationReason: order.cancellationReason || '',
       kotRevision: Number(order.kotRevision) || (kots.length > 0 ? kots.length : 1),
@@ -72,6 +76,7 @@ class OrderApiRepository {
       updatedAt: order.updatedAt
     };
   }
+
 
   async getOrders(filters = {}) {
     const params = {
@@ -153,6 +158,10 @@ class OrderApiRepository {
     table,
     tableId,
     tableNo,
+    orderType = 'DINE_IN',
+    customerName = '',
+    customerPhone = '',
+    onlineOrderRef = '',
     captain,
     captainId,
     captainName,
@@ -164,12 +173,26 @@ class OrderApiRepository {
       throw new Error('Order must contain at least one menu dish.');
     }
 
-    const tId = table?.id || tableId;
+    const isTableOrder = orderType === 'DINE_IN';
+    const tId = isTableOrder ? (table?.id || tableId) : null;
     const branchId = table?.branchId || APP_CONFIG.DEFAULT_BRANCH_ID || 'branch-main';
+
+    let resolvedTableNumber = table?.tableNo || tableNo || '';
+    if (!isTableOrder) {
+      if (orderType === 'TAKEAWAY') resolvedTableNumber = 'Take Away';
+      else if (orderType === 'ZOMATO') resolvedTableNumber = onlineOrderRef ? `Zomato #${onlineOrderRef}` : 'Zomato';
+      else if (orderType === 'SWIGGY') resolvedTableNumber = onlineOrderRef ? `Swiggy #${onlineOrderRef}` : 'Swiggy';
+      else resolvedTableNumber = 'Online';
+    }
 
     const payload = {
       branchId,
+      orderType,
       tableId: tId,
+      tableNumber: resolvedTableNumber,
+      customerName,
+      customerPhone,
+      onlineOrderRef,
       items: items.map((i) => ({
         productId: i.productId,
         quantity: Number(i.quantity) || 1,
@@ -182,6 +205,7 @@ class OrderApiRepository {
     const res = await apiClient.post('/orders', payload);
     return this.normalizeOrder(res);
   }
+
 
   async submitOrder(orderId, actor) {
     const res = await apiClient.post(`/orders/${orderId}/submit`);
@@ -212,8 +236,24 @@ class OrderApiRepository {
     }
 
     const currentOrder = await this.getOrderById(orderId);
+    if (!currentOrder) {
+      throw new Error('Order not found.');
+    }
+    const targetOrderId = currentOrder.id || currentOrder._id || orderId;
     const prevItems = currentOrder?.items || [];
 
+    // 1. Detect removed items and cancel them on the server
+    const removedItems = prevItems.filter(
+      (pi) => (pi.status || 'ACTIVE') !== 'CANCELLED' && !updatedItems.some((ui) => ui.productId === pi.productId)
+    );
+    for (const rem of removedItems) {
+      await apiClient.post(`/orders/${targetOrderId}/cancel-item`, {
+        itemId: rem.id || rem._id,
+        reason: modificationReason.trim(),
+      });
+    }
+
+    // 2. Detect added items or increased quantities
     let itemsToAdd = [];
     const hasExistingProducts = updatedItems.some((ni) =>
       prevItems.some((pi) => pi.productId === ni.productId)
@@ -244,22 +284,32 @@ class OrderApiRepository {
       }));
     }
 
-    if (itemsToAdd.length === 0) {
-      return { order: currentOrder, deltaKOT: null };
+    let deltaKOT = null;
+    if (itemsToAdd.length > 0) {
+      const res = await apiClient.post(`/orders/${targetOrderId}/items`, {
+        items: itemsToAdd,
+        reason: modificationReason.trim()
+      });
+      deltaKOT = res?.modificationKot
+        ? kotApiRepository.normalizeKOT(res.modificationKot)
+        : null;
     }
 
-    const res = await apiClient.post(`/orders/${orderId}/items`, {
-      items: itemsToAdd,
-      reason: modificationReason.trim()
-    });
-
-    const order = this.normalizeOrder(res?.order || res);
-    const deltaKOT = res?.modificationKot
-      ? kotApiRepository.normalizeKOT(res.modificationKot)
-      : null;
-
-    return { order, deltaKOT };
+    const freshOrder = await this.getOrderById(targetOrderId);
+    return { order: freshOrder, deltaKOT };
   }
+
+  async cancelOrderItem(orderId, itemId, reason) {
+    if (!reason || !reason.trim()) {
+      throw new Error('Mandatory cancellation reason is required.');
+    }
+    const res = await apiClient.post(`/orders/${orderId}/cancel-item`, {
+      itemId,
+      reason: reason.trim(),
+    });
+    return this.normalizeOrder(res?.order || res);
+  }
+
 
   async cancelOrder(orderId, reason, actor) {
     if (!reason || !reason.trim()) {

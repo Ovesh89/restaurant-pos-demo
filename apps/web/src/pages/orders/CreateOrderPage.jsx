@@ -42,8 +42,12 @@ export const CreateOrderPage = () => {
   // Mobile active tab: 'menu' | 'cart'
   const [mobileTab, setMobileTab] = useState('menu');
 
-  // Selected Table
+  // Selected Table & Order Type
   const [selectedTable, setSelectedTable] = useState(null);
+  const [orderType, setOrderType] = useState('DINE_IN'); // DINE_IN, TAKEAWAY, ZOMATO, SWIGGY, ONLINE_OTHER
+  const [customerName, setCustomerName] = useState('');
+  const [customerPhone, setCustomerPhone] = useState('');
+  const [onlineOrderRef, setOnlineOrderRef] = useState('');
 
   // Cart
   const [cart, setCart] = useState([]);
@@ -99,6 +103,9 @@ export const CreateOrderPage = () => {
 
   // Cart Item Management
   const handleAddToCart = (product) => {
+    const cat = categories.find((c) => c.id === product.categoryId);
+    const kotRequired = cat ? cat.kotRequired !== false : (product.kotRequired !== false);
+
     setCart((prev) => {
       const existsIndex = prev.findIndex((item) => item.productId === product.id);
       if (existsIndex > -1) {
@@ -114,7 +121,8 @@ export const CreateOrderPage = () => {
             code: product.code,
             price: product.price,
             taxRate: product.taxRate || 5,
-            station: product.station || 'Main Curry',
+            station: product.station || product.kitchenStation || 'Main Curry',
+            kotRequired,
             quantity: 1,
             notes: ''
           }
@@ -167,6 +175,7 @@ export const CreateOrderPage = () => {
       price: Number(customItem.price),
       taxRate: 5,
       station: customItem.station,
+      kotRequired: true,
       quantity: Number(customItem.quantity) || 1,
       notes: customItem.notes.trim()
     };
@@ -178,8 +187,9 @@ export const CreateOrderPage = () => {
 
   // Submit / Hold
   const handleProcessOrder = async (isDraft = false) => {
-    if (!selectedTable) {
-      setActionError('Please select a dining table for this order.');
+    const isTableOrder = orderType === 'DINE_IN';
+    if (isTableOrder && !selectedTable) {
+      setActionError('Please select a dining table for Dine-in orders.');
       return;
     }
 
@@ -197,12 +207,27 @@ export const CreateOrderPage = () => {
         name: user?.name || 'Captain'
       };
 
-      const newOrder = await orderRepository.createOrder({
-        table: selectedTable,
+      const resolvedTableNo = isTableOrder
+        ? selectedTable?.tableNo
+        : orderType === 'TAKEAWAY'
+        ? (customerName ? `Take Away (${customerName})` : 'Take Away')
+        : orderType === 'ZOMATO'
+        ? (onlineOrderRef ? `Zomato #${onlineOrderRef}` : 'Zomato')
+        : orderType === 'SWIGGY'
+        ? (onlineOrderRef ? `Swiggy #${onlineOrderRef}` : 'Swiggy')
+        : (customerName ? `Online (${customerName})` : 'Online');
+
+      await orderRepository.createOrder({
+        table: isTableOrder ? selectedTable : null,
+        tableNo: resolvedTableNo,
         captain,
         items: cart,
         notes: orderNotes,
-        isDraft
+        isDraft,
+        orderType,
+        customerName: customerName.trim(),
+        customerPhone: customerPhone.trim(),
+        onlineOrderRef: onlineOrderRef.trim(),
       });
 
       // Navigate to orders list or reception
@@ -228,24 +253,99 @@ export const CreateOrderPage = () => {
 
   return (
     <div className="min-h-[calc(100vh-9.5rem)] lg:h-[calc(100vh-8.5rem)] flex flex-col">
-      {/* Top Header / Table Selector */}
-      <div className="bg-white border border-slate-200 rounded-2xl p-3 sm:p-4 mb-3 sm:mb-4 shadow-xs flex flex-wrap items-center justify-between gap-3 sm:gap-4">
-        <div className="flex items-center gap-2 sm:gap-3">
-          <Button variant="ghost" size="sm" icon={ArrowLeft} onClick={() => navigate('/orders')}>
-            Back
-          </Button>
-          <div className="h-6 w-px bg-slate-200"></div>
-          <div>
-            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Order For</span>
-            <div className="flex items-center gap-1.5 sm:gap-2">
-              <Coffee className="w-4 h-4 sm:w-5 sm:h-5 text-blue-600 shrink-0" />
+      {/* Top Header / Table & Order Type Selector */}
+      <div className="bg-white border border-slate-200 rounded-2xl p-3 sm:p-4 mb-3 sm:mb-4 shadow-xs space-y-3">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
+            <Button variant="ghost" size="sm" icon={ArrowLeft} onClick={() => navigate('/orders')}>
+              Back
+            </Button>
+            <div className="h-6 w-px bg-slate-200 hidden sm:block"></div>
+
+            {/* Order Type Selector */}
+            <div className="flex items-center bg-slate-100 p-1 rounded-xl gap-1 text-xs font-bold">
+              <button
+                type="button"
+                onClick={() => setOrderType('DINE_IN')}
+                className={`px-3 py-1.5 rounded-lg transition-all ${
+                  orderType === 'DINE_IN'
+                    ? 'bg-blue-600 text-white shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                Dine-In
+              </button>
+              <button
+                type="button"
+                onClick={() => setOrderType('TAKEAWAY')}
+                className={`px-3 py-1.5 rounded-lg transition-all ${
+                  orderType === 'TAKEAWAY'
+                    ? 'bg-emerald-600 text-white shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                Take Away
+              </button>
+              <button
+                type="button"
+                onClick={() => setOrderType('ZOMATO')}
+                className={`px-3 py-1.5 rounded-lg transition-all ${
+                  orderType === 'ZOMATO'
+                    ? 'bg-red-600 text-white shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                Zomato
+              </button>
+              <button
+                type="button"
+                onClick={() => setOrderType('SWIGGY')}
+                className={`px-3 py-1.5 rounded-lg transition-all ${
+                  orderType === 'SWIGGY'
+                    ? 'bg-orange-600 text-white shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                Swiggy
+              </button>
+              <button
+                type="button"
+                onClick={() => setOrderType('ONLINE_OTHER')}
+                className={`px-3 py-1.5 rounded-lg transition-all ${
+                  orderType === 'ONLINE_OTHER'
+                    ? 'bg-purple-600 text-white shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                Online Other
+              </button>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 sm:gap-3">
+            <Button variant="secondary" size="sm" icon={Plus} onClick={() => setIsCustomModalOpen(true)}>
+              Off-Menu Item
+            </Button>
+            <div className="text-right hidden sm:block">
+              <span className="text-[10px] text-slate-400 font-semibold uppercase">Captain</span>
+              <p className="text-xs font-bold text-slate-800">{user?.name}</p>
+            </div>
+          </div>
+        </div>
+
+        {/* Dynamic Context Fields based on Order Type */}
+        <div className="pt-2 border-t border-slate-100 flex flex-wrap items-center gap-3">
+          {orderType === 'DINE_IN' ? (
+            <div className="flex items-center gap-2">
+              <Coffee className="w-4 h-4 text-blue-600 shrink-0" />
+              <span className="text-xs font-bold text-slate-500">Select Table:</span>
               <select
                 value={selectedTable?.id || ''}
                 onChange={(e) => {
                   const t = tables.find((tbl) => tbl.id === e.target.value);
                   setSelectedTable(t);
                 }}
-                className="text-sm sm:text-base font-extrabold text-slate-800 bg-transparent border-none focus:ring-0 cursor-pointer pr-4 py-0"
+                className="text-xs sm:text-sm font-bold text-slate-800 bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1 focus:ring-1 focus:ring-blue-500 cursor-pointer"
               >
                 {tables.map((t) => (
                   <option key={t.id} value={t.id}>
@@ -254,17 +354,45 @@ export const CreateOrderPage = () => {
                 ))}
               </select>
             </div>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-2 sm:gap-3">
-          <Button variant="secondary" size="sm" icon={Plus} onClick={() => setIsCustomModalOpen(true)}>
-            Off-Menu Item
-          </Button>
-          <div className="text-right hidden sm:block">
-            <span className="text-[10px] text-slate-400 font-semibold uppercase">Captain</span>
-            <p className="text-xs font-bold text-slate-800">{user?.name}</p>
-          </div>
+          ) : orderType === 'TAKEAWAY' ? (
+            <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
+              <ShoppingBag className="w-4 h-4 text-emerald-600 shrink-0" />
+              <span className="text-xs font-bold text-emerald-700">Take Away Parcel:</span>
+              <input
+                type="text"
+                placeholder="Guest Full Name (e.g. Ramesh Patel)"
+                value={customerName}
+                onChange={(e) => setCustomerName(e.target.value)}
+                className="text-xs bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5 focus:ring-1 focus:ring-emerald-500 w-52"
+              />
+              <input
+                type="text"
+                placeholder="Mobile # (Optional)"
+                value={customerPhone}
+                onChange={(e) => setCustomerPhone(e.target.value)}
+                className="text-xs bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5 focus:ring-1 focus:ring-emerald-500 w-36"
+              />
+            </div>
+          ) : (
+            <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
+              <UtensilsCrossed className="w-4 h-4 text-purple-600 shrink-0" />
+              <span className="text-xs font-bold text-purple-700">{orderType} Order:</span>
+              <input
+                type="text"
+                placeholder="Online Order Ref # (e.g. ZOM-8921)"
+                value={onlineOrderRef}
+                onChange={(e) => setOnlineOrderRef(e.target.value)}
+                className="text-xs bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5 focus:ring-1 focus:ring-purple-500 w-44"
+              />
+              <input
+                type="text"
+                placeholder="Customer Name (Optional)"
+                value={customerName}
+                onChange={(e) => setCustomerName(e.target.value)}
+                className="text-xs bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5 focus:ring-1 focus:ring-purple-500 w-48"
+              />
+            </div>
+          )}
         </div>
       </div>
 

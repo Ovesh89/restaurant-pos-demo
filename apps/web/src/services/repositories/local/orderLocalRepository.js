@@ -6,6 +6,26 @@ import { kotRepository } from '../kotRepository.js';
 import { tableRepository } from '../tableRepository.js';
 import { auditRepository } from '../auditRepository.js';
 
+function getDailyOrderNo(orders) {
+  const now = new Date();
+  const day = String(now.getDate()).padStart(2, '0');
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const year = String(now.getFullYear());
+  const dateKey = `${day}${month}${year}`;
+  const prefix = `ORD-${dateKey}-`;
+
+  const dailyOrders = orders.filter((o) => o.orderNo && o.orderNo.startsWith(prefix));
+  let maxSeq = 0;
+  for (const o of dailyOrders) {
+    const parts = o.orderNo.split('-');
+    const seq = parseInt(parts[parts.length - 1], 10);
+    if (!isNaN(seq) && seq > maxSeq) {
+      maxSeq = seq;
+    }
+  }
+  return `${prefix}${maxSeq + 1}`;
+}
+
 class OrderLocalRepository {
   async getOrders(filters = {}) {
     const orders = storageAdapter.getItem(STORAGE_KEYS.ORDERS) || [];
@@ -23,6 +43,10 @@ class OrderLocalRepository {
       list = list.filter((o) => o.tableId === filters.tableId);
     }
 
+    if (filters.orderType) {
+      list = list.filter((o) => (o.orderType || 'DINE_IN') === filters.orderType);
+    }
+
     if (filters.captainId) {
       list = list.filter((o) => o.captainId === filters.captainId);
     }
@@ -31,9 +55,10 @@ class OrderLocalRepository {
       const q = filters.search.toLowerCase();
       list = list.filter(
         (o) =>
-          o.orderNo.toLowerCase().includes(q) ||
-          o.tableNo.toLowerCase().includes(q) ||
-          o.captainName.toLowerCase().includes(q)
+          (o.orderNo && o.orderNo.toLowerCase().includes(q)) ||
+          (o.tableNo && o.tableNo.toLowerCase().includes(q)) ||
+          (o.customerName && o.customerName.toLowerCase().includes(q)) ||
+          (o.captainName && o.captainName.toLowerCase().includes(q))
       );
     }
 
@@ -70,9 +95,17 @@ class OrderLocalRepository {
     return paginated;
   }
 
+  _findOrderIndex(orders, orderId) {
+    if (!orderId) return -1;
+    return orders.findIndex(
+      (o) => o.id === orderId || o._id === orderId || o.orderNo === orderId || o.orderNumber === orderId
+    );
+  }
+
   async getOrderById(id) {
     const orders = storageAdapter.getItem(STORAGE_KEYS.ORDERS) || [];
-    return orders.find((o) => o.id === id) || null;
+    const idx = this._findOrderIndex(orders, id);
+    return idx !== -1 ? orders[idx] : null;
   }
 
   async getActiveOrderByTable(tableId) {
@@ -99,29 +132,50 @@ class OrderLocalRepository {
     captainName,
     items,
     notes = '',
-    isDraft = false
+    isDraft = false,
+    orderType = 'DINE_IN',
+    customerName = '',
+    customerPhone = '',
+    onlineOrderRef = '',
   }) {
     const orders = storageAdapter.getItem(STORAGE_KEYS.ORDERS) || [];
-    const count = orders.length + 1;
-    const orderNo = `ORD-${String(count).padStart(3, '0')}`;
+    const orderNo = getDailyOrderNo(orders);
 
     if (!items || items.length === 0) {
       throw new Error('Order must contain at least one menu dish.');
     }
 
-    const tableObj = table || { id: tableId, tableNo: tableNo, branchId: 'branch-001' };
+    const isTableOrder = !orderType || orderType === 'DINE_IN';
+    const tableObj = table || (tableId ? { id: tableId, tableNo: tableNo, branchId: 'branch-001' } : null);
     const captainObj = captain || { id: captainId || 'captain-01', name: captainName || 'Captain' };
+
+    const resolvedTableId = isTableOrder ? (tableObj ? tableObj.id : tableId || null) : null;
+    let resolvedTableNo = tableNo || (tableObj ? tableObj.tableNo : null);
+    if (!isTableOrder) {
+      if (tableNo) {
+        resolvedTableNo = tableNo;
+      } else if (orderType === 'TAKEAWAY') {
+        resolvedTableNo = 'Take Away';
+      } else if (orderType === 'ZOMATO') {
+        resolvedTableNo = 'Zomato';
+      } else if (orderType === 'SWIGGY') {
+        resolvedTableNo = 'Swiggy';
+      } else {
+        resolvedTableNo = 'Online';
+      }
+    }
 
     // Freeze captured prices for each line item
     const orderItems = items.map((i, idx) => ({
       lineId: `line-${Date.now()}-${idx}`,
-      productId: i.productId,
+      productId: i.productId || i.id,
       name: i.name,
       code: i.code || '',
       quantity: Number(i.quantity) || 1,
       unitPrice: Number(i.unitPrice !== undefined ? i.unitPrice : i.price) || 0, // CAPTURED PRICE SNAPSHOT
       taxRate: Number(i.taxRate) || 5.0,
-      station: i.station || 'Main Curry',
+      station: i.station || i.kitchenStation || 'Main Curry',
+      kotRequired: i.kotRequired !== undefined ? Boolean(i.kotRequired) : true,
       notes: i.notes?.trim() || ''
     }));
 
@@ -132,9 +186,13 @@ class OrderLocalRepository {
     const newOrder = {
       id: `ord-${Date.now()}`,
       orderNo,
-      branchId: tableObj.branchId || 'branch-001',
-      tableId: tableObj.id,
-      tableNo: tableObj.tableNo,
+      orderType: orderType || 'DINE_IN',
+      customerName: customerName || '',
+      customerPhone: customerPhone || '',
+      onlineOrderRef: onlineOrderRef || '',
+      branchId: tableObj?.branchId || 'branch-001',
+      tableId: resolvedTableId,
+      tableNo: resolvedTableNo || 'N/A',
       captainId: captainObj.id,
       captainName: captainObj.name,
       items: orderItems,
@@ -150,10 +208,10 @@ class OrderLocalRepository {
     orders.unshift(newOrder);
     storageAdapter.setItem(STORAGE_KEYS.ORDERS, orders);
 
-    // Update Table status
-    if (!isDraft) {
+    // Update Table status only if dine in table order
+    if (isTableOrder && resolvedTableId && !isDraft) {
       await tableRepository.updateOperationalStatus(
-        tableObj.id,
+        resolvedTableId,
         TABLE_STATUS.OCCUPIED,
         newOrder.id,
         captainObj
@@ -166,7 +224,7 @@ class OrderLocalRepository {
       action: isDraft ? 'ORDER_HELD' : 'ORDER_SUBMITTED',
       entityType: 'Order',
       entityId: newOrder.id,
-      details: `${newOrder.orderNo} for Table ${tableObj.tableNo} with ${orderItems.length} items (Total: ₹${subtotal}) was ${isDraft ? 'saved as draft' : 'submitted to reception'}.`
+      details: `${newOrder.orderNo} (${newOrder.orderType}) for ${resolvedTableNo} with ${orderItems.length} items (Total: ₹${subtotal}) was ${isDraft ? 'saved as draft' : 'submitted to reception'}.`
     });
 
     return newOrder;
@@ -177,7 +235,7 @@ class OrderLocalRepository {
    */
   async submitOrder(orderId, actor) {
     const orders = storageAdapter.getItem(STORAGE_KEYS.ORDERS) || [];
-    const index = orders.findIndex((o) => o.id === orderId);
+    const index = this._findOrderIndex(orders, orderId);
     if (index === -1) {
       throw new Error('Order not found.');
     }
@@ -217,7 +275,7 @@ class OrderLocalRepository {
    */
   async confirmOrder(orderId, actor = { id: 'reception', name: 'Reception' }) {
     const orders = storageAdapter.getItem(STORAGE_KEYS.ORDERS) || [];
-    const index = orders.findIndex((o) => o.id === orderId);
+    const index = this._findOrderIndex(orders, orderId);
     if (index === -1) {
       throw new Error('Order not found.');
     }
@@ -274,7 +332,7 @@ class OrderLocalRepository {
     }
 
     const orders = storageAdapter.getItem(STORAGE_KEYS.ORDERS) || [];
-    const index = orders.findIndex((o) => o.id === orderId);
+    const index = this._findOrderIndex(orders, orderId);
     if (index === -1) {
       throw new Error('Order not found.');
     }
@@ -317,12 +375,23 @@ class OrderLocalRepository {
     }
 
     const orders = storageAdapter.getItem(STORAGE_KEYS.ORDERS) || [];
-    const index = orders.findIndex((o) => o.id === orderId);
+    const index = this._findOrderIndex(orders, orderId);
     if (index === -1) {
       throw new Error('Order not found.');
     }
 
     const order = orders[index];
+
+    // Block modifications once bill is settled
+    if (order.status === ORDER_STATUS.COMPLETED || order.status === 'PAID') {
+      throw new Error('Cannot modify items on a completed/settled order.');
+    }
+    const bills = storageAdapter.getItem(STORAGE_KEYS.BILLS) || [];
+    const linkedBill = bills.find((b) => b.orderId === order.id || b.orderId === order._id || b.orderId === order.orderNo);
+    if (linkedBill && ['COMPLETED', 'PAID'].includes(linkedBill.status)) {
+      throw new Error('Cannot modify items on an order once the bill is settled.');
+    }
+
     const previousItems = [...order.items];
 
     // Calculate delta items for kitchen KOT
@@ -334,40 +403,46 @@ class OrderLocalRepository {
       const oldItm = previousItems.find((oi) => oi.productId === newItm.productId);
       if (!oldItm) {
         // Entirely new dish
-        deltaItems.push({
-          productId: newItm.productId,
-          name: newItm.name,
-          quantity: `+${newItm.quantity}`,
-          station: newItm.station,
-          notes: newItm.notes ? `ADD NEW: ${newItm.notes}` : 'ADD NEW'
-        });
+        if (newItm.kotRequired !== false) {
+          deltaItems.push({
+            productId: newItm.productId,
+            name: newItm.name,
+            quantity: `+${newItm.quantity}`,
+            station: newItm.station,
+            notes: newItm.notes ? `ADD NEW: ${newItm.notes}` : 'ADD NEW'
+          });
+        }
       } else if (newItm.quantity > oldItm.quantity) {
         // Quantity increased
-        const diff = newItm.quantity - oldItm.quantity;
-        deltaItems.push({
-          productId: newItm.productId,
-          name: newItm.name,
-          quantity: `+${diff}`,
-          station: newItm.station,
-          notes: newItm.notes ? `ADDITIONAL: ${newItm.notes}` : 'ADDITIONAL QTY'
-        });
+        if (newItm.kotRequired !== false) {
+          const diff = newItm.quantity - oldItm.quantity;
+          deltaItems.push({
+            productId: newItm.productId,
+            name: newItm.name,
+            quantity: `+${diff}`,
+            station: newItm.station,
+            notes: newItm.notes ? `ADDITIONAL: ${newItm.notes}` : 'ADDITIONAL QTY'
+          });
+        }
       } else if (newItm.quantity < oldItm.quantity) {
         // Quantity decreased
-        const diff = oldItm.quantity - newItm.quantity;
-        deltaItems.push({
-          productId: newItm.productId,
-          name: newItm.name,
-          quantity: `-${diff}`,
-          station: newItm.station,
-          notes: 'REDUCED QTY'
-        });
+        if (newItm.kotRequired !== false) {
+          const diff = oldItm.quantity - newItm.quantity;
+          deltaItems.push({
+            productId: newItm.productId,
+            name: newItm.name,
+            quantity: `-${diff}`,
+            station: newItm.station,
+            notes: 'REDUCED QTY'
+          });
+        }
       }
     });
 
     // Find removed items
     previousItems.forEach((oldItm) => {
       const stillExists = updatedItems.some((ni) => ni.productId === oldItm.productId);
-      if (!stillExists) {
+      if (!stillExists && oldItm.kotRequired !== false) {
         deltaItems.push({
           productId: oldItm.productId,
           name: oldItm.name,
@@ -386,6 +461,34 @@ class OrderLocalRepository {
 
     orders[index] = order;
     storageAdapter.setItem(STORAGE_KEYS.ORDERS, orders);
+
+    // Sync unsettled bill if exists
+    if (linkedBill && !['COMPLETED', 'PAID', 'CANCELLED', 'VOIDED'].includes(linkedBill.status)) {
+      const billIdx = bills.findIndex((b) => b.id === linkedBill.id);
+      if (billIdx !== -1) {
+        const subtotal = order.subtotal;
+        const discountAmount = Number(linkedBill.discountAmount || 0);
+        const taxableValue = Math.max(0, subtotal - discountAmount);
+        const taxRate = Number(linkedBill.taxRate || 5);
+        const taxAmount = (taxableValue * taxRate) / 100;
+        const rawGrandTotal = taxableValue + taxAmount;
+        const grandTotal = Math.round(rawGrandTotal);
+        const rounding = grandTotal - rawGrandTotal;
+
+        bills[billIdx] = {
+          ...linkedBill,
+          items: order.items,
+          subtotal,
+          taxableValue,
+          taxAmount,
+          rounding,
+          grandTotal,
+          balance: grandTotal,
+          updatedAt: new Date().toISOString(),
+        };
+        storageAdapter.setItem(STORAGE_KEYS.BILLS, bills);
+      }
+    }
 
     // Create Delta KOT
     let deltaKOT = null;
@@ -413,6 +516,104 @@ class OrderLocalRepository {
   }
 
   /**
+   * Cancel / Remove an individual item from an order
+   * Allowed anytime before/after served, but blocked once bill is settled.
+   * Automatically recalculates order subtotal and unsettled bill totals.
+   */
+  async cancelOrderItem(orderId, itemId, reason = 'Item removed', actor = {}) {
+    const orders = storageAdapter.getItem(STORAGE_KEYS.ORDERS) || [];
+    const index = this._findOrderIndex(orders, orderId);
+    if (index === -1) {
+      throw new Error('Order not found.');
+    }
+
+    const order = orders[index];
+    if (order.status === ORDER_STATUS.COMPLETED || order.status === 'PAID') {
+      throw new Error('Cannot remove items from an order once the bill is settled.');
+    }
+
+    // Check if linked bill is settled
+    const bills = storageAdapter.getItem(STORAGE_KEYS.BILLS) || [];
+    const linkedBill = bills.find((b) => b.orderId === orderId);
+    if (linkedBill && ['COMPLETED', 'PAID'].includes(linkedBill.status)) {
+      throw new Error('Cannot remove items from an order once the bill is settled.');
+    }
+
+    const itemIdx = order.items.findIndex(
+      (it) => it.lineId === itemId || it.productId === itemId || it.id === itemId || it._id === itemId
+    );
+    if (itemIdx === -1) {
+      throw new Error('Item not found in order.');
+    }
+
+    const removedItem = order.items[itemIdx];
+    order.items.splice(itemIdx, 1);
+    order.subtotal = order.items.reduce((acc, i) => acc + i.quantity * i.unitPrice, 0);
+    order.kotRevision = (order.kotRevision || 1) + 1;
+    order.updatedAt = new Date().toISOString();
+
+    orders[index] = order;
+    storageAdapter.setItem(STORAGE_KEYS.ORDERS, orders);
+
+    // Sync unsettled bill if exists
+    if (linkedBill && !['COMPLETED', 'PAID', 'CANCELLED', 'VOIDED'].includes(linkedBill.status)) {
+      const billIdx = bills.findIndex((b) => b.id === linkedBill.id);
+      if (billIdx !== -1) {
+        const subtotal = order.subtotal;
+        const discountAmount = Number(linkedBill.discountAmount || 0);
+        const taxableValue = Math.max(0, subtotal - discountAmount);
+        const taxRate = Number(linkedBill.taxRate || 5);
+        const taxAmount = (taxableValue * taxRate) / 100;
+        const rawGrandTotal = taxableValue + taxAmount;
+        const grandTotal = Math.round(rawGrandTotal);
+        const rounding = grandTotal - rawGrandTotal;
+
+        bills[billIdx] = {
+          ...linkedBill,
+          items: order.items,
+          subtotal,
+          taxableValue,
+          taxAmount,
+          rounding,
+          grandTotal,
+          balance: grandTotal,
+          updatedAt: new Date().toISOString(),
+        };
+        storageAdapter.setItem(STORAGE_KEYS.BILLS, bills);
+      }
+    }
+
+    // Create Delta KOT for cancellation if item required KOT
+    if (removedItem.kotRequired !== false) {
+      await kotRepository.createKOT({
+        order,
+        items: [{
+          productId: removedItem.productId,
+          name: removedItem.name,
+          quantity: `-${removedItem.quantity}`,
+          station: removedItem.station,
+          notes: `CANCELLED: ${reason}`,
+        }],
+        type: KOT_TYPE.MODIFICATION,
+        revision: order.kotRevision,
+        modificationReason: reason,
+        actor,
+      });
+    }
+
+    await auditRepository.logEvent({
+      actorId: actor?.id || 'staff',
+      actorName: actor?.name || 'Staff',
+      action: 'ORDER_ITEM_CANCELLED',
+      entityType: 'Order',
+      entityId: orderId,
+      details: `Removed dish "${removedItem.name}" from ${order.orderNo}. Reason: "${reason}". New Subtotal: ₹${order.subtotal}`,
+    });
+
+    return { order, linkedBill: linkedBill ? bills.find((b) => b.id === linkedBill.id) : null };
+  }
+
+  /**
    * Cancel an order with mandatory reason
    */
   async cancelOrder(orderId, reason, actor) {
@@ -421,7 +622,7 @@ class OrderLocalRepository {
     }
 
     const orders = storageAdapter.getItem(STORAGE_KEYS.ORDERS) || [];
-    const index = orders.findIndex((o) => o.id === orderId);
+    const index = this._findOrderIndex(orders, orderId);
     if (index === -1) {
       throw new Error('Order not found.');
     }

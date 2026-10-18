@@ -26,6 +26,7 @@ class BillingService {
     if (!order) {
       throw new NotFoundAppError('Order not found.');
     }
+    const canonicalOrderId = order._id;
 
     const orderStatus = order.status;
     if (['CANCELLED', 'REJECTED'].includes(orderStatus)) {
@@ -35,7 +36,13 @@ class BillingService {
     }
 
     // Idempotency check: if any bill exists for this order, return it with _isExisting flag
-    const existingBill = await billRepository.findOne({ orderId });
+    const existingBill = await billRepository.findOne({
+      $or: [
+        { orderId: canonicalOrderId },
+        { orderId: String(orderId) },
+        { orderNumber: order.orderNumber },
+      ],
+    });
     if (existingBill) {
       const payments = await paymentRepository.findByBill(existingBill._id);
       return {
@@ -69,7 +76,7 @@ class BillingService {
       _id: crypto.randomUUID(),
       billNumber,
       branchId: order.branchId,
-      orderId,
+      orderId: canonicalOrderId,
       orderNumber: order.orderNumber,
       tableId: order.tableId,
       tableNumber: order.tableNumber,
@@ -254,6 +261,58 @@ class BillingService {
       payments,
     };
   }
+
+  /**
+   * Automatically synchronizes an existing unsettled bill when order items are modified or removed.
+   * Recalculates subtotal, discount, taxes, and balance based on currently active order items.
+   */
+  async syncUnsettledBill(orderId) {
+    const order = await orderRepository.findById(orderId);
+    if (!order) return null;
+    const canonicalOrderId = order._id;
+
+    const bill = await billRepository.findOne({
+      $or: [
+        { orderId: canonicalOrderId },
+        { orderId: String(orderId) },
+        { orderNumber: order.orderNumber },
+      ],
+    });
+    if (!bill || bill.status === 'COMPLETED' || bill.status === 'CANCELLED') {
+      return null;
+    }
+
+    const activeItems = (order.items || []).filter(
+      (it) => (it.status || 'ACTIVE') !== 'CANCELLED'
+    );
+    const branch = await branchRepository.findById(order.branchId);
+    const branchTaxConfig = branch?.taxConfig || { gstRate: '5.00', mode: 'EXCLUSIVE' };
+
+    const calcResult = BillingCalculator.calculateBill({
+      items: activeItems,
+      discountInput: bill.discount,
+      branchTaxConfig,
+      paidAmountInput: bill.paidAmount || '0.00',
+    });
+
+    const now = utcNowIso();
+    const updated = await billRepository.updateById(bill._id || bill.id, {
+      items: calcResult.items,
+      subtotal: calcResult.subtotal,
+      discount: calcResult.discount,
+      taxableAmount: calcResult.taxableAmount,
+      tax: calcResult.tax,
+      cgst: calcResult.cgst,
+      sgst: calcResult.sgst,
+      taxBreakdown: calcResult.taxBreakdown,
+      rounding: calcResult.rounding,
+      grandTotal: calcResult.grandTotal,
+      balanceAmount: calcResult.balanceAmount,
+      updatedAt: now,
+    });
+    return updated;
+  }
+
 
   async listBills(filters = {}) {
     const paginated = await billRepository.listBills(filters);

@@ -9,6 +9,7 @@ import {
   areaRepository,
   branchRepository,
   tableRepository,
+  kitchenStationRepository,
 } from './repositories.js';
 
 export const VALID_TABLE_STATUSES = [
@@ -27,7 +28,9 @@ export class RestaurantService {
     this.branchRepo = branchRepository;
     this.areaRepo = areaRepository;
     this.tableRepo = tableRepository;
+    this.stationRepo = kitchenStationRepository;
   }
+
 
   // --- Branches ---
 
@@ -203,6 +206,175 @@ export class RestaurantService {
 
     return updated;
   }
+
+  async deleteArea(areaId, actor) {
+    const beforeDoc = await this.areaRepo.findById(areaId);
+    if (!beforeDoc) {
+      throw new NotFoundAppError(`Area '${areaId}' not found.`);
+    }
+    ensureBranchAccess(actor, beforeDoc.branchId);
+
+    const tablesInArea = await this.tableRepo.findByBranch(beforeDoc.branchId, { areaId });
+    if (tablesInArea && tablesInArea.length > 0) {
+      throw new ValidationAppError(
+        `Cannot delete Dining Area '${beforeDoc.name}' because ${tablesInArea.length} table(s) are assigned to it. Please reassign or delete the tables first.`
+      );
+    }
+
+    await this.areaRepo.deleteById(areaId);
+
+    await auditService.logAction({
+      branchId: beforeDoc.branchId,
+      action: 'AREA_DELETED',
+      entityType: 'area',
+      entityId: areaId,
+      actorUserId: actor.id,
+      actorName: actor.displayName,
+      before: beforeDoc,
+    });
+
+    return { success: true, message: `Dining Area '${beforeDoc.name}' deleted successfully.` };
+  }
+
+  // --- Kitchen Stations ---
+
+  async listKitchenStations(branchId, user, isActiveOnly = false) {
+    ensureBranchAccess(user, branchId);
+    let stations = await this.stationRepo.findByBranch(branchId, isActiveOnly);
+
+    // Auto-seed default stations if none exist for this branch
+    if (stations.length === 0 && !isActiveOnly) {
+      const defaultStations = [
+        { name: 'Main Kitchen', code: 'MAIN', sortOrder: 1 },
+        { name: 'Tandoor Station', code: 'TANDOOR', sortOrder: 2 },
+        { name: 'Main Curry Station', code: 'CURRY', sortOrder: 3 },
+        { name: 'Bar & Beverages', code: 'BAR', sortOrder: 4 },
+        { name: 'Breads & Bakery', code: 'BAKERY', sortOrder: 5 },
+        { name: 'Dessert Station', code: 'DESSERT', sortOrder: 6 },
+      ];
+      for (const def of defaultStations) {
+        await this.stationRepo.insertOne(
+          {
+            branchId,
+            name: def.name,
+            code: def.code,
+            description: '',
+            sortOrder: def.sortOrder,
+            isActive: true,
+          },
+          'station'
+        );
+      }
+      stations = await this.stationRepo.findByBranch(branchId, isActiveOnly);
+    }
+
+    return stations;
+  }
+
+  async getKitchenStation(stationId, user) {
+    const station = await this.stationRepo.findById(stationId);
+    if (!station) {
+      throw new NotFoundAppError(`Kitchen Station '${stationId}' not found.`);
+    }
+    ensureBranchAccess(user, station.branchId);
+    return station;
+  }
+
+  async createKitchenStation(data, actor) {
+    const branchId = data.branchId || (actor.branchIds || [])[0] || 'branch-main';
+    ensureBranchAccess(actor, branchId);
+
+    const name = String(data.name || '').trim();
+    if (!name) {
+      throw new ValidationAppError('Kitchen Station name is required.');
+    }
+
+    const code = data.code ? String(data.code).trim().toUpperCase() : name.toUpperCase().slice(0, 10);
+    const existing = await this.stationRepo.findByName(branchId, name);
+    if (existing) {
+      throw new ConflictAppError(`Kitchen Station '${name}' already exists in this branch.`);
+    }
+
+    const doc = {
+      branchId,
+      name,
+      code,
+      description: data.description || '',
+      sortOrder: Number(data.sortOrder ?? 0),
+      isActive: data.isActive !== undefined ? Boolean(data.isActive) : true,
+    };
+
+    const created = await this.stationRepo.insertOne(doc, 'station');
+
+    await auditService.logAction({
+      branchId,
+      action: 'KITCHEN_STATION_CREATED',
+      entityType: 'kitchen_station',
+      entityId: created.id,
+      actorUserId: actor.id,
+      actorName: actor.displayName,
+      after: created,
+    });
+
+    return created;
+  }
+
+  async updateKitchenStation(stationId, data, actor) {
+    const beforeDoc = await this.stationRepo.findById(stationId);
+    if (!beforeDoc) {
+      throw new NotFoundAppError(`Kitchen Station '${stationId}' not found.`);
+    }
+    ensureBranchAccess(actor, beforeDoc.branchId);
+
+    const updateFields = {};
+    if (data.name !== undefined) {
+      const trimmed = String(data.name).trim();
+      if (!trimmed) throw new ValidationAppError('Kitchen Station name cannot be empty.');
+      updateFields.name = trimmed;
+    }
+    if (data.code !== undefined) updateFields.code = String(data.code).trim().toUpperCase();
+    if (data.description !== undefined) updateFields.description = data.description;
+    if (data.sortOrder !== undefined) updateFields.sortOrder = Number(data.sortOrder);
+    if (data.isActive !== undefined) updateFields.isActive = Boolean(data.isActive);
+
+    const updated = await this.stationRepo.updateById(stationId, updateFields);
+
+    await auditService.logAction({
+      branchId: beforeDoc.branchId,
+      action: 'KITCHEN_STATION_UPDATED',
+      entityType: 'kitchen_station',
+      entityId: stationId,
+      actorUserId: actor.id,
+      actorName: actor.displayName,
+      before: beforeDoc,
+      after: updated,
+    });
+
+    return updated;
+  }
+
+  async deleteKitchenStation(stationId, actor) {
+    const beforeDoc = await this.stationRepo.findById(stationId);
+    if (!beforeDoc) {
+      throw new NotFoundAppError(`Kitchen Station '${stationId}' not found.`);
+    }
+    ensureBranchAccess(actor, beforeDoc.branchId);
+
+    await this.stationRepo.deleteById(stationId);
+
+    await auditService.logAction({
+      branchId: beforeDoc.branchId,
+      action: 'KITCHEN_STATION_DELETED',
+      entityType: 'kitchen_station',
+      entityId: stationId,
+      actorUserId: actor.id,
+      actorName: actor.displayName,
+      before: beforeDoc,
+    });
+
+    return { success: true, message: `Kitchen Station '${beforeDoc.name}' deleted successfully.` };
+  }
+
 
   // --- Tables ---
 

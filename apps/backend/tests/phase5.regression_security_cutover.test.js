@@ -221,11 +221,12 @@ describe('Phase 5 — Security, Branch Isolation, Print/Settlement Invariants & 
       .send({ reason: 'Post-settlement cancel attempt' });
     assert.equal(cancelCompletedOrderRes.status, 409);
 
+    // Post-settlement discount: permitted by manager to update discount on settled invoices
     const discountCompletedBillRes = await request(app)
       .post(`/api/v1/bills/${billId}/discount`)
       .set('Authorization', `Bearer ${managerToken}`)
       .send({ type: 'FIXED', value: '50', reason: 'Late discount attempt' });
-    assert.equal(discountCompletedBillRes.status, 409);
+    assert.equal(discountCompletedBillRes.status, 200);
   });
 
   it('verifies Web printService, billingCalculator, and shiftApiRepository end-to-end', async () => {
