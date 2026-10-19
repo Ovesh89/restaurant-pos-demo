@@ -14,10 +14,10 @@ async function startServer() {
     );
   }
 
-  const server = app.listen(env.port, () => {
-    console.log(
-      `[Restaurant POS MERN Backend] Listening on http://127.0.0.1:${env.port} (env: ${env.nodeEnv})`
-    );
+  const PORT = Number(process.env.PORT || 8001);
+
+  const server = app.listen(PORT, '0.0.0.0', () => {
+    console.log(`Restaurant POS API listening on port ${PORT}`);
   });
 
   const shutdown = async (signal) => {
