@@ -24,9 +24,11 @@ import { Badge } from '../../components/common/Badge';
 import { DataTable } from '../../components/common/DataTable';
 import { APP_CONFIG } from '../../config/appConfig';
 import { PERMISSIONS } from '../../constants/permissions';
+import { useTranslation } from '../../hooks/useTranslation';
 
 export const ProductsPage = () => {
   const { user, role, hasPermission } = useAuth();
+  const { t, formatNumber, formatCurrency } = useTranslation();
   const canEdit = hasPermission(PERMISSIONS.MENU_EDIT);
   const isAdminOrOwner = user?.role === 'owner' || user?.role === 'admin' || role === 'owner' || role === 'admin';
 
@@ -275,12 +277,12 @@ export const ProductsPage = () => {
 
   const columns = [
     {
-      header: 'Code',
+      header: t('menu.shortCode', 'Code'),
       accessor: 'code',
       className: 'w-24 font-mono font-bold text-slate-500'
     },
     {
-      header: 'Product Name',
+      header: t('menu.productName', 'Product Name'),
       accessor: 'name',
       render: (row) => (
         <div>
@@ -292,7 +294,7 @@ export const ProductsPage = () => {
       )
     },
     {
-      header: 'Category',
+      header: t('menu.categoryName', 'Category'),
       accessor: 'categoryId',
       render: (row) => (
         <Badge variant="primary" size="sm">
@@ -301,7 +303,7 @@ export const ProductsPage = () => {
       )
     },
     {
-      header: 'Station',
+      header: t('menu.kitchenStation', 'Station'),
       accessor: 'station',
       render: (row) => (
         <span className="text-xs font-semibold text-slate-600 bg-slate-100 px-2 py-0.5 rounded-md">
@@ -310,18 +312,18 @@ export const ProductsPage = () => {
       )
     },
     {
-      header: 'Price (INR)',
+      header: t('menu.price', 'Price'),
       accessor: 'price',
       align: 'right',
       render: (row) => (
         <div className="text-right">
-          <span className="font-extrabold text-slate-900 text-sm">₹{row.price.toLocaleString()}</span>
-          <span className="block text-[10px] text-slate-400 font-mono">+{row.taxRate}% GST</span>
+          <span className="font-extrabold text-slate-900 text-sm">{formatCurrency(row.price)}</span>
+          <span className="block text-[10px] text-slate-400 font-mono">+{formatNumber(row.taxRate)}% GST</span>
         </div>
       )
     },
     {
-      header: 'Kitchen Avail.',
+      header: t('menu.availability', 'Kitchen Avail.'),
       accessor: 'isAvailable',
       align: 'center',
       render: (row) => (
@@ -336,21 +338,21 @@ export const ProductsPage = () => {
           }`}
         >
           <span className={`w-2 h-2 rounded-full ${row.isAvailable ? 'bg-emerald-500' : 'bg-rose-500'}`}></span>
-          {row.isAvailable ? 'In Stock' : 'Sold Out'}
+          {row.isAvailable ? t('menu.inStock', 'In Stock') : t('menu.outOfStock', 'Sold Out')}
         </button>
       )
     },
     {
-      header: 'Status',
+      header: t('common.status', 'Status'),
       accessor: 'isActive',
       render: (row) => (
         <Badge variant={row.isActive ? 'success' : 'default'} size="sm">
-          {row.isActive ? 'Active' : 'Archived'}
+          {row.isActive ? t('common.active', 'Active') : t('common.inactive', 'Archived')}
         </Badge>
       )
     },
     {
-      header: 'Actions',
+      header: t('common.actions', 'Actions'),
       align: 'right',
       render: (row) => {
         if (!canEdit) return null;
@@ -363,7 +365,7 @@ export const ProductsPage = () => {
               title="Update item selling price with reason"
               onClick={() => handleOpenPriceChange(row)}
             >
-              Price
+              {t('menu.price', 'Price')}
             </Button>
             <Button
               variant="secondary"
@@ -372,7 +374,7 @@ export const ProductsPage = () => {
               title="Edit dish description and details"
               onClick={() => handleOpenEdit(row)}
             >
-              Edit
+              {t('common.edit', 'Edit')}
             </Button>
             <button
               onClick={() => handleOpenHistory(row)}
@@ -389,7 +391,7 @@ export const ProductsPage = () => {
                 title="Permanently Delete Dish"
                 onClick={() => handleDeleteProduct(row)}
               >
-                Delete
+                {t('common.delete', 'Delete')}
               </Button>
             )}
           </div>
@@ -401,19 +403,19 @@ export const ProductsPage = () => {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Menu Products & Pricing"
-        subtitle="Configure dishes, price history, kitchen stations, and real-time 86/stock availability"
+        title={t('menu.productsTitle', 'Menu Products & Pricing')}
+        subtitle={t('menu.productsSubtitle', 'Configure dishes, price history, kitchen stations, and real-time 86/stock availability')}
       >
         <Button
           variant="secondary"
           icon={History}
           onClick={() => handleOpenHistory(null)}
         >
-          Full Price Audit
+          {t('menu.priceHistory', 'Price History')}
         </Button>
         {canEdit && (
           <Button variant="primary" icon={Plus} onClick={handleOpenAdd}>
-            Add Dish
+            {t('menu.addProduct', 'Add Dish')}
           </Button>
         )}
       </PageHeader>
@@ -423,7 +425,7 @@ export const ProductsPage = () => {
         <div className="w-full sm:w-64">
           <Input
             icon={Search}
-            placeholder="Search dish or SKU..."
+            placeholder={t('common.search', 'Search dish or SKU...')}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
@@ -434,7 +436,7 @@ export const ProductsPage = () => {
             value={selectedCategory}
             onChange={(e) => setSelectedCategory(e.target.value)}
             options={[
-              { value: '', label: 'All Categories' },
+              { value: '', label: t('orders.allCategories', 'All Categories') },
               ...categories.map((c) => ({ value: c.id, label: c.name }))
             ]}
           />
@@ -445,14 +447,14 @@ export const ProductsPage = () => {
             value={selectedStation}
             onChange={(e) => setSelectedStation(e.target.value)}
             options={[
-              { value: '', label: 'All Stations' },
+              { value: '', label: t('kitchen.allStations', 'All Stations') },
               ...APP_CONFIG.DEFAULT_KITCHEN_STATIONS.map((s) => ({ value: s.name, label: s.name }))
             ]}
           />
         </div>
 
         <div className="w-full sm:w-auto sm:ml-auto text-xs text-slate-500 font-semibold text-right">
-          Total: {pagination?.total ?? products.length} dishes
+          {t('common.total', 'Total')}: {formatNumber(pagination?.total ?? products.length)}
         </div>
       </div>
 
@@ -461,7 +463,7 @@ export const ProductsPage = () => {
         columns={columns}
         data={products}
         loading={loading}
-        emptyMessage="No products match your filter criteria."
+        emptyMessage={t('menu.noProducts', 'No products match your filter criteria.')}
         pagination={pagination}
         onPageChange={(newPage) => {
           setPage(newPage);
@@ -478,8 +480,8 @@ export const ProductsPage = () => {
       <Modal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
-        title={editingProduct ? 'Edit Product Information' : 'Add New Menu Product'}
-        subtitle="Manage dish naming, ingredients description, and kitchen preparation station"
+        title={editingProduct ? t('menu.editProduct', 'Edit Product Information') : t('menu.addProduct', 'Add New Menu Product')}
+        subtitle={t('menu.productsSubtitle', 'Manage dish naming, ingredients description, and kitchen preparation station')}
         maxWidth="max-w-xl"
       >
         <form onSubmit={handleSubmit} className="space-y-4">
@@ -491,7 +493,7 @@ export const ProductsPage = () => {
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
             <Input
-              label="Dish / Item Name"
+              label={t('menu.productName', 'Dish / Item Name')}
               placeholder="e.g. Butter Chicken"
               value={formData.name}
               onChange={(e) => setFormData({ ...formData, name: e.target.value })}
@@ -499,7 +501,7 @@ export const ProductsPage = () => {
             />
 
             <Input
-              label="Product Code / SKU"
+              label={t('menu.shortCode', 'Product Code / SKU')}
               placeholder="e.g. CHK-01"
               value={formData.code}
               onChange={(e) => setFormData({ ...formData, code: e.target.value.toUpperCase() })}
@@ -509,7 +511,7 @@ export const ProductsPage = () => {
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
             <Select
-              label="Category"
+              label={t('menu.categoryName', 'Category')}
               value={formData.categoryId}
               onChange={(e) => setFormData({ ...formData, categoryId: e.target.value })}
               options={categories.map((c) => ({ value: c.id, label: c.name }))}
@@ -517,7 +519,7 @@ export const ProductsPage = () => {
             />
 
             <Select
-              label="Kitchen Station"
+              label={t('menu.kitchenStation', 'Kitchen Station')}
               value={formData.station}
               onChange={(e) => setFormData({ ...formData, station: e.target.value })}
               options={APP_CONFIG.DEFAULT_KITCHEN_STATIONS.map((s) => ({ value: s.name, label: s.name }))}
@@ -526,7 +528,7 @@ export const ProductsPage = () => {
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
             <Input
-              label="Selling Price (₹)"
+              label={`${t('menu.price', 'Selling Price')} (₹)`}
               type="number"
               min="0"
               placeholder="e.g. 450"
@@ -538,7 +540,7 @@ export const ProductsPage = () => {
             />
 
             <Input
-              label="GST / Tax Rate (%)"
+              label={t('settings.defaultTaxRate', 'GST / Tax Rate (%)')}
               type="number"
               min="0"
               max="28"
@@ -550,7 +552,7 @@ export const ProductsPage = () => {
 
           <div>
             <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">
-              Description & Notes
+              {t('common.description', 'Description & Notes')}
             </label>
             <textarea
               rows="3"
@@ -563,10 +565,10 @@ export const ProductsPage = () => {
 
           <div className="flex justify-end gap-2 pt-4 border-t border-slate-100">
             <Button variant="secondary" onClick={() => setIsModalOpen(false)}>
-              Cancel
+              {t('common.cancel', 'Cancel')}
             </Button>
             <Button type="submit" loading={formLoading}>
-              {editingProduct ? 'Save Updates' : 'Add to Menu'}
+              {editingProduct ? t('common.save', 'Save Updates') : t('common.create', 'Add to Menu')}
             </Button>
           </div>
         </form>
@@ -576,7 +578,7 @@ export const ProductsPage = () => {
       <Modal
         isOpen={isPriceModalOpen}
         onClose={() => setIsPriceModalOpen(false)}
-        title="Modify Selling Price"
+        title={t('menu.modifyPrice', 'Modify Selling Price')}
         subtitle={`Update price for "${priceProduct?.name}" with mandatory audit reason`}
       >
         <form onSubmit={handlePriceSubmit} className="space-y-4">
@@ -588,17 +590,17 @@ export const ProductsPage = () => {
 
           <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 flex items-center justify-between">
             <div>
-              <span className="text-xs text-slate-500 font-medium">Current Price</span>
-              <p className="text-lg font-bold text-slate-700">₹{priceProduct?.price}</p>
+              <span className="text-xs text-slate-500 font-medium">{t('menu.currentPrice', 'Current Price')}</span>
+              <p className="text-lg font-bold text-slate-700">{formatCurrency(priceProduct?.price || 0)}</p>
             </div>
             <div className="text-right">
-              <span className="text-xs text-slate-500 font-medium">Product Code</span>
+              <span className="text-xs text-slate-500 font-medium">{t('menu.shortCode', 'Product Code')}</span>
               <p className="text-sm font-mono font-bold text-slate-700">{priceProduct?.code}</p>
             </div>
           </div>
 
           <Input
-            label="New Selling Price (₹)"
+            label={`${t('menu.newPrice', 'New Selling Price')} (₹)`}
             type="number"
             min="0"
             step="1"
@@ -611,7 +613,7 @@ export const ProductsPage = () => {
 
           <div>
             <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">
-              Reason for Price Revision (Mandatory)
+              {t('menu.priceReason', 'Reason for Price Revision (Mandatory)')}
             </label>
             <textarea
               rows="3"
@@ -625,10 +627,10 @@ export const ProductsPage = () => {
 
           <div className="flex justify-end gap-2 pt-4 border-t border-slate-100">
             <Button variant="secondary" onClick={() => setIsPriceModalOpen(false)}>
-              Cancel
+              {t('common.cancel', 'Cancel')}
             </Button>
             <Button type="submit" variant="primary" loading={priceLoading}>
-              Commit Price Change
+              {t('common.save', 'Commit Price Change')}
             </Button>
           </div>
         </form>
@@ -638,15 +640,15 @@ export const ProductsPage = () => {
       <Modal
         isOpen={isHistoryModalOpen}
         onClose={() => setIsHistoryModalOpen(false)}
-        title={historyProduct ? `Price History: ${historyProduct.name}` : 'Master Price Change History'}
+        title={historyProduct ? `${t('menu.priceHistory', 'Price History')}: ${historyProduct.name}` : t('menu.masterPriceHistory', 'Master Price Change History')}
         subtitle="Chronological audit records of all food selling price revisions"
         maxWidth="max-w-2xl"
       >
         <div className="space-y-4">
           {historyLoading ? (
-            <p className="text-sm text-slate-500 text-center py-6">Loading audit records...</p>
+            <p className="text-sm text-slate-500 text-center py-6">{t('common.loading', 'Loading audit records...')}</p>
           ) : priceHistoryRecords.length === 0 ? (
-            <p className="text-sm text-slate-500 text-center py-6">No historical price changes recorded.</p>
+            <p className="text-sm text-slate-500 text-center py-6">{t('menu.noPriceHistory', 'No historical price changes recorded.')}</p>
           ) : (
             <div className="divide-y divide-slate-100 max-h-96 overflow-y-auto pr-1">
               {priceHistoryRecords.map((rec) => (
@@ -669,8 +671,8 @@ export const ProductsPage = () => {
                     </div>
                   </div>
                   <div className="flex items-center gap-2 mt-0.5">
-                    <span className="line-through text-slate-400 font-semibold">₹{rec.oldPrice}</span>
-                    <span className="font-extrabold text-blue-600 text-sm">→ ₹{rec.newPrice}</span>
+                    <span className="line-through text-slate-400 font-semibold">{formatCurrency(rec.oldPrice)}</span>
+                    <span className="font-extrabold text-blue-600 text-sm">→ {formatCurrency(rec.newPrice)}</span>
                     <span className="ml-auto text-slate-500">Changed by: <b className="text-slate-700">{rec.changedBy}</b></span>
                   </div>
                   <div className="bg-slate-50 border border-slate-200/60 p-2 rounded-lg text-slate-600 mt-1 italic">
@@ -683,7 +685,7 @@ export const ProductsPage = () => {
 
           <div className="flex justify-end pt-3 border-t border-slate-100">
             <Button variant="secondary" onClick={() => setIsHistoryModalOpen(false)}>
-              Close
+              {t('common.close', 'Close')}
             </Button>
           </div>
         </div>

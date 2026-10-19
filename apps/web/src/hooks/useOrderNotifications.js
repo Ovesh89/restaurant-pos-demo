@@ -80,15 +80,21 @@ export const useOrderNotifications = () => {
           // 2. Trigger native browser Web Push notification
           if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
             try {
+              let notifIcon = '/logo.png';
+              try {
+                const s = JSON.parse(localStorage.getItem('restaurant_pos_settings') || '{}');
+                if (s.logo) notifIcon = s.logo;
+              } catch (e) {}
               new Notification(item.title || 'Order Update', {
                 body: item.message || '',
-                icon: '/logo.png',
+                icon: notifIcon,
                 tag: notifId,
               });
             } catch (err) {
               console.warn('Browser Notification instantiation failed:', err);
             }
           }
+
 
           // 3. Display floating toast in web app
           setActiveToast({

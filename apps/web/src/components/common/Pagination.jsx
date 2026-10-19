@@ -5,6 +5,7 @@ import {
   ChevronsLeft,
   ChevronsRight
 } from 'lucide-react';
+import { useTranslation } from '../../hooks/useTranslation';
 
 export const Pagination = ({
   currentPage = 1,
@@ -17,6 +18,8 @@ export const Pagination = ({
   disabled = false,
   className = ''
 }) => {
+  const { t, formatNumber } = useTranslation();
+
   const safePage = Math.max(1, Number(currentPage) || 1);
   const safeTotalPages = Math.max(1, Number(totalPages) || 1);
   const safeTotalItems = Math.max(0, Number(totalItems) || 0);
@@ -79,26 +82,27 @@ export const Pagination = ({
     <div
       className={`flex flex-col sm:flex-row items-center justify-between gap-3 px-4 py-3 bg-white border-t border-slate-200 text-xs text-slate-600 select-none ${className}`}
     >
-      {/* Range and Total Info */}
+      {/* Range and Total Info (English numerals) */}
       <div className="flex items-center gap-3 w-full sm:w-auto justify-between sm:justify-start">
         <span className="font-medium text-slate-500">
-          Showing <span className="font-bold text-slate-800">{startItem}</span> to{' '}
-          <span className="font-bold text-slate-800">{endItem}</span> of{' '}
-          <span className="font-bold text-slate-900">{safeTotalItems.toLocaleString()}</span> entries
+          {t('common.showingOf', {
+            start: formatNumber(startItem),
+            end: formatNumber(endItem),
+            total: formatNumber(safeTotalItems)
+          })}
         </span>
 
         {onPageSizeChange && (
           <div className="flex items-center gap-1.5 ml-2">
-            <span className="text-slate-400 hidden md:inline">Per page:</span>
             <select
               value={safePageSize}
               onChange={handleSizeChange}
               disabled={disabled}
-              className="px-2 py-1 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-md font-semibold text-slate-700 text-xs focus:ring-2 focus:ring-blue-500 focus:outline-none transition-colors disabled:opacity-50"
+              className="px-2 py-1 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-md font-semibold text-slate-700 text-xs focus:ring-2 focus:ring-blue-500 focus:outline-none transition-colors disabled:opacity-50 cursor-pointer"
             >
               {pageSizeOptions.map((opt) => (
                 <option key={opt} value={opt}>
-                  {opt} / page
+                  {formatNumber(opt)} / {t('common.page', null, 'page')}
                 </option>
               ))}
             </select>
@@ -126,8 +130,8 @@ export const Pagination = ({
           onClick={() => handlePageClick(safePage - 1)}
           disabled={disabled || safePage <= 1}
           className="p-1.5 rounded-lg border border-slate-200 hover:bg-slate-100 active:bg-slate-200 text-slate-600 disabled:opacity-30 disabled:pointer-events-none transition-colors"
-          title="Previous page"
-          aria-label="Previous page"
+          title={t('common.previous', null, 'Previous')}
+          aria-label={t('common.previous', null, 'Previous page')}
         >
           <ChevronLeft className="w-4 h-4" />
         </button>
@@ -159,7 +163,7 @@ export const Pagination = ({
                     : 'border border-slate-200 text-slate-700 hover:bg-slate-100 active:bg-slate-200'
                 } disabled:opacity-50`}
               >
-                {p}
+                {formatNumber(p)}
               </button>
             );
           })}
@@ -171,8 +175,8 @@ export const Pagination = ({
           onClick={() => handlePageClick(safePage + 1)}
           disabled={disabled || safePage >= safeTotalPages}
           className="p-1.5 rounded-lg border border-slate-200 hover:bg-slate-100 active:bg-slate-200 text-slate-600 disabled:opacity-30 disabled:pointer-events-none transition-colors"
-          title="Next page"
-          aria-label="Next page"
+          title={t('common.next', null, 'Next')}
+          aria-label={t('common.next', null, 'Next page')}
         >
           <ChevronRight className="w-4 h-4" />
         </button>

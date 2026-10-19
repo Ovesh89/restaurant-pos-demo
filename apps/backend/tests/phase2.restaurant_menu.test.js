@@ -49,21 +49,50 @@ describe('Phase 2B — Branches, Areas, Tables, Menu Categories, Products & Pric
       .patch('/api/v1/branches/branch-main')
       .set('Authorization', `Bearer ${ownerToken}`)
       .send({
-        name: 'Green Garden — Flagship',
+        name: 'Green Tandoor — Flagship',
         invoiceConfig: {
           prefix: 'GT-',
           terms: 'Thank you! Visit Again.',
         },
       });
     assert.equal(patchRes.status, 200);
-    assert.equal(patchRes.body.data.name, 'Green Garden — Flagship');
+    assert.equal(patchRes.body.data.name, 'Green Tandoor — Flagship');
     assert.equal(patchRes.body.data.invoiceConfig.prefix, 'GT-');
+
+    // Public unauthenticated /restaurant/branding endpoint returns initial branding
+    const brandingRes = await request(app).get('/api/v1/restaurant/branding');
+    assert.equal(brandingRes.status, 200);
+    assert.ok(brandingRes.body.data.restaurantName);
+    assert.ok(brandingRes.body.data.logo);
+
+    // Update restaurant branding & logo variants via PATCH /branches/branch-main
+    const updateBrandingRes = await request(app)
+      .patch('/api/v1/branches/branch-main')
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({
+        restaurantName: 'Royal Spice Palace',
+        tagline: 'Fine Dining & Grill',
+        logo: 'data:image/png;base64,mockColorLogo',
+        logoWhite: 'data:image/png;base64,mockWhiteLogo',
+        logoReceipt: 'data:image/png;base64,mockReceiptLogo',
+      });
+    assert.equal(updateBrandingRes.status, 200);
+    assert.equal(updateBrandingRes.body.data.restaurantName, 'Royal Spice Palace');
+    assert.equal(updateBrandingRes.body.data.tagline, 'Fine Dining & Grill');
+    assert.equal(updateBrandingRes.body.data.logo, 'data:image/png;base64,mockColorLogo');
+
+    // Public branding reflects updated branding immediately without auth token
+    const updatedBrandingRes = await request(app).get('/api/v1/restaurant/branding');
+    assert.equal(updatedBrandingRes.status, 200);
+    assert.equal(updatedBrandingRes.body.data.restaurantName, 'Royal Spice Palace');
+    assert.equal(updatedBrandingRes.body.data.tagline, 'Fine Dining & Grill');
+    assert.equal(updatedBrandingRes.body.data.logo, 'data:image/png;base64,mockColorLogo');
 
     // Create second branch & verify branch isolation for Captain
     const branch2Res = await request(app)
       .post('/api/v1/branches')
       .set('Authorization', `Bearer ${ownerToken}`)
-      .send({ code: 'SOUTH', name: 'Green Garden — South' });
+      .send({ code: 'SOUTH', name: 'Green Tandoor — South' });
     assert.equal(branch2Res.status, 201);
     const secondBranchId = branch2Res.body.data.id;
 
@@ -142,36 +171,36 @@ describe('Phase 2B — Branches, Areas, Tables, Menu Categories, Products & Pric
   });
 
   it('supports Menu Categories & Products CRUD (with Decision 5 optional branchId shim) and Price History (with Decision 2 newPrice shim)', async () => {
-    // 1. Categories list (13 seeded categories from pure veg menu)
+    // 1. Categories list (17 seeded categories from menu card)
     const catListRes = await request(app)
       .get('/api/v1/menu/categories?branchId=branch-main&isActiveOnly=true')
       .set('Authorization', `Bearer ${captainToken}`);
     assert.equal(catListRes.status, 200);
-    assert.equal(catListRes.body.data.length, 13);
+    assert.equal(catListRes.body.data.length, 17);
 
     // 2. Create category omitting branchId (Web categoryApiRepository contract)
     const createCatRes = await request(app)
       .post('/api/v1/menu/categories')
       .set('Authorization', `Bearer ${ownerToken}`)
-      .send({ name: 'Chef Specials', code: 'SPC', sortOrder: 14 });
+      .send({ name: 'Chef Specials', code: 'SPC', sortOrder: 18 });
     assert.equal(createCatRes.status, 201);
     assert.equal(createCatRes.body.data.branchId, 'branch-main');
     const specialCatId = createCatRes.body.data.id;
 
-    // 3. Products paginated list (89 seeded products from pure veg menu)
+    // 3. Products paginated list (159 seeded products from menu card)
     const prodListRes = await request(app)
       .get('/api/v1/menu/products?isAvailableOnly=true&limit=200')
       .set('Authorization', `Bearer ${captainToken}`);
     assert.equal(prodListRes.status, 200);
-    assert.equal(prodListRes.body.data.items.length, 89);
-    assert.equal(prodListRes.body.data.pagination.total, 89);
+    assert.equal(prodListRes.body.data.items.length, 159);
+    assert.equal(prodListRes.body.data.pagination.total, 159);
 
     // Search filter
     const searchRes = await request(app)
-      .get('/api/v1/menu/products?search=Paneer&limit=100')
+      .get('/api/v1/menu/products?search=Chicken&limit=100')
       .set('Authorization', `Bearer ${captainToken}`);
     assert.equal(searchRes.status, 200);
-    assert.equal(searchRes.body.data.items.length, 18);
+    assert.equal(searchRes.body.data.items.length, 33);
 
     // 4. Create product omitting branchId (Web productApiRepository contract)
     const createProdRes = await request(app)
@@ -179,24 +208,24 @@ describe('Phase 2B — Branches, Areas, Tables, Menu Categories, Products & Pric
       .set('Authorization', `Bearer ${ownerToken}`)
       .send({
         code: 'SPC-01',
-        name: 'Royal Saffron Platter',
+        name: 'TandooriLobster Platter',
         categoryId: specialCatId,
-        price: '450.00',
+        price: '850.00',
         taxConfig: { rate: '5.00', mode: 'EXCLUSIVE' },
         available: true,
         kitchenStation: 'TANDOOR',
       });
     assert.equal(createProdRes.status, 201);
-    assert.equal(createProdRes.body.data.currentPrice, '450.00');
+    assert.equal(createProdRes.body.data.currentPrice, '850.00');
     const newProdId = createProdRes.body.data.id;
 
     // 5. Price change using `newPrice` (Web productApiRepository contract — Decision 2 shim)
     const priceChangeWebRes = await request(app)
       .post(`/api/v1/menu/products/${newProdId}/price`)
       .set('Authorization', `Bearer ${ownerToken}`)
-      .send({ newPrice: '500.00', reason: 'Seasonal ingredients cost adjustment' });
+      .send({ newPrice: '900.00', reason: 'Seasonal seafood cost adjustment' });
     assert.equal(priceChangeWebRes.status, 200);
-    assert.equal(priceChangeWebRes.body.data.currentPrice, '500.00');
+    assert.equal(priceChangeWebRes.body.data.currentPrice, '900.00');
 
     // 6. Price change using `price` (Django contract)
     const priceChangeDjangoRes = await request(app)

@@ -17,6 +17,7 @@ import {
   ArrowRight
 } from 'lucide-react';
 import { useAuth } from '../../hooks/useAuth';
+import { useTranslation } from '../../hooks/useTranslation';
 import { tableRepository } from '../../services/repositories/tableRepository';
 import { productRepository } from '../../services/repositories/productRepository';
 import { categoryRepository } from '../../services/repositories/categoryRepository';
@@ -29,6 +30,7 @@ import { Badge } from '../../components/common/Badge';
 
 export const CreateOrderPage = () => {
   const { user } = useAuth();
+  const { t, formatNumber } = useTranslation();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const preselectedTableId = searchParams.get('tableId');
@@ -258,7 +260,7 @@ export const CreateOrderPage = () => {
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
             <Button variant="ghost" size="sm" icon={ArrowLeft} onClick={() => navigate('/orders')}>
-              Back
+              {t('common.back', null, 'Back')}
             </Button>
             <div className="h-6 w-px bg-slate-200 hidden sm:block"></div>
 
@@ -273,7 +275,7 @@ export const CreateOrderPage = () => {
                     : 'text-slate-600 hover:text-slate-900'
                 }`}
               >
-                Dine-In
+                {t('orders.dineIn', null, 'Dine-In')}
               </button>
               <button
                 type="button"
@@ -284,7 +286,7 @@ export const CreateOrderPage = () => {
                     : 'text-slate-600 hover:text-slate-900'
                 }`}
               >
-                Take Away
+                {t('orders.takeaway', null, 'Take Away')}
               </button>
               <button
                 type="button"
@@ -324,10 +326,10 @@ export const CreateOrderPage = () => {
 
           <div className="flex items-center gap-2 sm:gap-3">
             <Button variant="secondary" size="sm" icon={Plus} onClick={() => setIsCustomModalOpen(true)}>
-              Off-Menu Item
+              {t('orders.offMenuItem', null, 'Off-Menu Item')}
             </Button>
             <div className="text-right hidden sm:block">
-              <span className="text-[10px] text-slate-400 font-semibold uppercase">Captain</span>
+              <span className="text-[10px] text-slate-400 font-semibold uppercase">{t('orders.captain', null, 'Captain')}</span>
               <p className="text-xs font-bold text-slate-800">{user?.name}</p>
             </div>
           </div>
@@ -338,7 +340,7 @@ export const CreateOrderPage = () => {
           {orderType === 'DINE_IN' ? (
             <div className="flex items-center gap-2">
               <Coffee className="w-4 h-4 text-blue-600 shrink-0" />
-              <span className="text-xs font-bold text-slate-500">Select Table:</span>
+              <span className="text-xs font-bold text-slate-500">{t('orders.selectTable', null, 'Select Table:')}</span>
               <select
                 value={selectedTable?.id || ''}
                 onChange={(e) => {
@@ -347,9 +349,9 @@ export const CreateOrderPage = () => {
                 }}
                 className="text-xs sm:text-sm font-bold text-slate-800 bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1 focus:ring-1 focus:ring-blue-500 cursor-pointer"
               >
-                {tables.map((t) => (
-                  <option key={t.id} value={t.id}>
-                    Table {t.tableNo} ({t.capacity} Pax) - {t.status}
+                {tables.map((tbl) => (
+                  <option key={tbl.id} value={tbl.id}>
+                    {t('orders.table', null, 'Table')} {tbl.tableNo} ({formatNumber(tbl.capacity)} Pax) - {tbl.status}
                   </option>
                 ))}
               </select>
@@ -357,17 +359,17 @@ export const CreateOrderPage = () => {
           ) : orderType === 'TAKEAWAY' ? (
             <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
               <ShoppingBag className="w-4 h-4 text-emerald-600 shrink-0" />
-              <span className="text-xs font-bold text-emerald-700">Take Away Parcel:</span>
+              <span className="text-xs font-bold text-emerald-700">{t('orders.takeawayParcel', null, 'Take Away Parcel:')}</span>
               <input
                 type="text"
-                placeholder="Guest Full Name (e.g. Ramesh Patel)"
+                placeholder={t('customers.customerName', null, 'Guest Full Name (e.g. Ramesh Patel)')}
                 value={customerName}
                 onChange={(e) => setCustomerName(e.target.value)}
                 className="text-xs bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5 focus:ring-1 focus:ring-emerald-500 w-52"
               />
               <input
                 type="text"
-                placeholder="Mobile # (Optional)"
+                placeholder={t('customers.mobileNumber', null, 'Mobile # (Optional)')}
                 value={customerPhone}
                 onChange={(e) => setCustomerPhone(e.target.value)}
                 className="text-xs bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5 focus:ring-1 focus:ring-emerald-500 w-36"
@@ -376,7 +378,7 @@ export const CreateOrderPage = () => {
           ) : (
             <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
               <UtensilsCrossed className="w-4 h-4 text-purple-600 shrink-0" />
-              <span className="text-xs font-bold text-purple-700">{orderType} Order:</span>
+              <span className="text-xs font-bold text-purple-700">{orderType} {t('orders.order', null, 'Order')}:</span>
               <input
                 type="text"
                 placeholder="Online Order Ref # (e.g. ZOM-8921)"
@@ -386,7 +388,7 @@ export const CreateOrderPage = () => {
               />
               <input
                 type="text"
-                placeholder="Customer Name (Optional)"
+                placeholder={t('customers.customerName', null, 'Customer Name (Optional)')}
                 value={customerName}
                 onChange={(e) => setCustomerName(e.target.value)}
                 className="text-xs bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5 focus:ring-1 focus:ring-purple-500 w-48"
@@ -414,7 +416,7 @@ export const CreateOrderPage = () => {
               : 'text-slate-600 hover:text-slate-900'
           }`}
         >
-          Menu Catalog ({filteredProducts.length})
+          {t('menu.productsTitle', null, 'Menu Catalog')} ({formatNumber(filteredProducts.length)})
         </button>
         <button
           type="button"
@@ -426,10 +428,10 @@ export const CreateOrderPage = () => {
           }`}
         >
           <ShoppingBag className="w-3.5 h-3.5" />
-          <span>Order Ticket</span>
+          <span>{t('orders.orderItems', null, 'Order Ticket')}</span>
           {totalCartItems > 0 && (
             <span className="bg-blue-600 text-white text-[10px] px-1.5 py-0.2 rounded-full font-black">
-              {totalCartItems}
+              {formatNumber(totalCartItems)}
             </span>
           )}
         </button>
@@ -448,7 +450,7 @@ export const CreateOrderPage = () => {
             <div className="w-full">
               <Input
                 icon={Search}
-                placeholder="Search dishes by name or SKU..."
+                placeholder={t('orders.searchDishes', null, 'Search dishes by name or SKU...')}
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
               />
@@ -465,7 +467,7 @@ export const CreateOrderPage = () => {
                     : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
                 }`}
               >
-                All Menu ({products.length})
+                {t('menu.productsTitle', null, 'All Menu')} ({formatNumber(products.length)})
               </button>
               {categories.map((c) => (
                 <button
@@ -487,23 +489,23 @@ export const CreateOrderPage = () => {
           {/* Dish Grid */}
           <div className="flex-1 overflow-y-auto p-4">
             {loading ? (
-              <p className="text-center py-12 text-slate-400 text-sm">Loading available menu...</p>
+              <p className="text-center py-12 text-slate-400 text-sm">{t('common.loading', null, 'Loading available menu...')}</p>
             ) : loadError ? (
               <div className="text-center py-12 text-red-500 text-sm space-y-3">
                 <AlertCircle className="w-8 h-8 mx-auto text-red-400 mb-1" />
                 <p className="font-semibold">{loadError}</p>
                 <Button variant="secondary" size="sm" onClick={() => initData()}>
-                  Retry
+                  {t('common.retry', null, 'Retry')}
                 </Button>
               </div>
             ) : products.length === 0 ? (
               <div className="text-center py-12 text-slate-400 text-sm space-y-1">
-                <p className="font-medium">No dishes available on the menu.</p>
+                <p className="font-medium">{t('orders.noDishesAvailable', null, 'No dishes available on the menu.')}</p>
                 <p className="text-xs text-slate-400">Please verify menu products configuration.</p>
               </div>
             ) : filteredProducts.length === 0 ? (
               <div className="text-center py-12 text-slate-400 text-sm">
-                <p>No dishes match your filter.</p>
+                <p>{t('orders.noDishesMatch', null, 'No dishes match your filter.')}</p>
               </div>
             ) : (
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-3.5">
@@ -532,10 +534,10 @@ export const CreateOrderPage = () => {
                       </div>
 
                       <div className="mt-3 pt-2 border-t border-slate-100 flex items-center justify-between">
-                        <span className="text-sm font-extrabold text-slate-900">₹{p.price}</span>
+                        <span className="text-sm font-extrabold text-slate-900">₹{formatNumber(p.price)}</span>
                         {inCart ? (
                           <span className="w-6 h-6 rounded-full bg-blue-600 text-white font-bold text-xs flex items-center justify-center shadow-xs">
-                            {inCart.quantity}
+                            {formatNumber(inCart.quantity)}
                           </span>
                         ) : (
                           <span className="w-6 h-6 rounded-full bg-slate-100 text-slate-600 group-hover:bg-blue-600 group-hover:text-white font-bold text-xs flex items-center justify-center transition-colors">
@@ -561,10 +563,10 @@ export const CreateOrderPage = () => {
           <div className="p-3 sm:p-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
             <div className="flex items-center gap-2">
               <ShoppingBag className="w-5 h-5 text-blue-600" />
-              <h3 className="text-base font-bold text-slate-800">Order Items</h3>
+              <h3 className="text-base font-bold text-slate-800">{t('orders.orderItems', null, 'Order Items')}</h3>
             </div>
             <span className="text-xs font-bold text-slate-500 bg-white px-2 py-0.5 rounded-full border border-slate-200">
-              {totalCartItems} Items
+              {formatNumber(totalCartItems)} {t('orders.dishes', null, 'Items')}
             </span>
           </div>
 
@@ -573,14 +575,14 @@ export const CreateOrderPage = () => {
             {cart.length === 0 ? (
               <div className="text-center py-12 text-slate-400">
                 <UtensilsCrossed className="w-10 h-10 mx-auto mb-2 opacity-30" />
-                <p className="text-xs font-semibold">No dishes added yet</p>
-                <p className="text-[11px] text-slate-400 mt-0.5">Click any item from the menu to add</p>
+                <p className="text-xs font-semibold">{t('orders.noItemsInCart', null, 'No dishes added yet')}</p>
+                <p className="text-[11px] text-slate-400 mt-0.5">{t('orders.chooseFromMenu', null, 'Click any item from the menu to add')}</p>
                 <button
                   type="button"
                   onClick={() => setMobileTab('menu')}
                   className="mt-3 lg:hidden inline-flex items-center gap-1 text-xs font-bold text-blue-600 bg-blue-50 px-3 py-1.5 rounded-xl"
                 >
-                  Browse Menu Catalog
+                  {t('menu.productsTitle', null, 'Browse Menu Catalog')}
                 </button>
               </div>
             ) : (
@@ -589,11 +591,11 @@ export const CreateOrderPage = () => {
                   <div className="flex items-start justify-between gap-2">
                     <div className="flex-1">
                       <span className="font-bold text-slate-800 text-sm block leading-tight">{item.name}</span>
-                      <span className="text-[10px] text-slate-400 font-mono">₹{item.price} each</span>
+                      <span className="text-[10px] text-slate-400 font-mono">₹{formatNumber(item.price)} each</span>
                     </div>
 
                     <span className="font-extrabold text-slate-900 text-sm">
-                      ₹{item.quantity * item.price}
+                      ₹{formatNumber(item.quantity * item.price)}
                     </span>
                   </div>
 
@@ -612,7 +614,7 @@ export const CreateOrderPage = () => {
                       className="text-[11px] font-semibold text-slate-500 hover:text-blue-600 flex items-center gap-1"
                     >
                       <FileText className="w-3 h-3" />
-                      {item.notes ? 'Edit Note' : 'Add Note'}
+                      {item.notes ? t('orders.editNote', null, 'Edit Note') : t('orders.addNote', null, 'Add Note')}
                     </button>
 
                     <div className="flex items-center gap-2">
@@ -624,7 +626,7 @@ export const CreateOrderPage = () => {
                         <Minus className="w-3.5 h-3.5" />
                       </button>
 
-                      <span className="font-bold text-slate-800 text-xs px-1 min-w-[16px] text-center">{item.quantity}</span>
+                      <span className="font-bold text-slate-800 text-xs px-1 min-w-[16px] text-center">{formatNumber(item.quantity)}</span>
 
                       <button
                         type="button"
@@ -652,15 +654,15 @@ export const CreateOrderPage = () => {
           <div className="p-3 sm:p-4 border-t border-slate-200 bg-slate-50 space-y-3">
             <div>
               <Input
-                placeholder="Special instruction for entire order..."
+                placeholder={t('orders.specialInstructions', null, 'Special instruction for entire order...')}
                 value={orderNotes}
                 onChange={(e) => setOrderNotes(e.target.value)}
               />
             </div>
 
             <div className="flex items-center justify-between text-sm">
-              <span className="font-medium text-slate-600">Subtotal</span>
-              <span className="text-lg font-black text-slate-900">₹{subtotal.toLocaleString()}</span>
+              <span className="font-medium text-slate-600">{t('billing.subtotalAmount', null, 'Subtotal')}</span>
+              <span className="text-lg font-black text-slate-900">₹{formatNumber(subtotal)}</span>
             </div>
 
             <div className="grid grid-cols-2 gap-2 pt-1">
@@ -669,7 +671,7 @@ export const CreateOrderPage = () => {
                 disabled={cart.length === 0 || submitting}
                 onClick={() => handleProcessOrder(true)}
               >
-                Hold Order
+                {t('orders.holdOrder', null, 'Hold Order')}
               </Button>
               <Button
                 variant="primary"
@@ -677,7 +679,7 @@ export const CreateOrderPage = () => {
                 loading={submitting}
                 onClick={() => handleProcessOrder(false)}
               >
-                Submit Order
+                {t('orders.submitOrder', null, 'Send to Kitchen')}
               </Button>
             </div>
           </div>
@@ -689,11 +691,11 @@ export const CreateOrderPage = () => {
         <div className="lg:hidden fixed bottom-16 left-3 right-3 z-30 bg-blue-600 text-white px-4 py-3 rounded-2xl shadow-xl flex items-center justify-between animate-in slide-in-from-bottom duration-200">
           <div className="flex items-center gap-2.5">
             <div className="w-8 h-8 rounded-xl bg-white/20 flex items-center justify-center font-black text-xs">
-              {totalCartItems}
+              {formatNumber(totalCartItems)}
             </div>
             <div>
-              <span className="text-xs font-bold block leading-tight">{totalCartItems} Dishes in Ticket</span>
-              <span className="text-sm font-black">₹{subtotal.toLocaleString()}</span>
+              <span className="text-xs font-bold block leading-tight">{formatNumber(totalCartItems)} {t('orders.dishes', null, 'Dishes in Ticket')}</span>
+              <span className="text-sm font-black">₹{formatNumber(subtotal)}</span>
             </div>
           </div>
           <button
@@ -701,7 +703,7 @@ export const CreateOrderPage = () => {
             onClick={() => setMobileTab('cart')}
             className="px-3.5 py-1.5 bg-white text-blue-700 font-extrabold text-xs rounded-xl shadow-sm flex items-center gap-1 active:scale-95 transition-transform"
           >
-            <span>Review Ticket</span>
+            <span>{t('orders.reviewTicket', null, 'Review Ticket')}</span>
             <ArrowRight className="w-3.5 h-3.5" />
           </button>
         </div>
@@ -711,22 +713,22 @@ export const CreateOrderPage = () => {
       <Modal
         isOpen={!!editingItemNote}
         onClose={() => setEditingItemNote(null)}
-        title="Kitchen Instruction"
+        title={t('orders.kitchenInstruction', null, 'Kitchen Instruction')}
         subtitle={`Special notes for "${editingItemNote?.name}"`}
       >
         <div className="space-y-4">
           <Input
-            label="Dish Preparation Note"
-            placeholder="e.g. Less spicy, no onion/garlic, well-done..."
+            label={t('orders.dishPrepNote', null, 'Dish Preparation Note')}
+            placeholder={t('orders.dishPrepPlaceholder', null, 'e.g. Less spicy, no onion/garlic, well-done...')}
             value={noteText}
             onChange={(e) => setNoteText(e.target.value)}
             autoFocus
           />
           <div className="flex justify-end gap-2 pt-2">
             <Button variant="secondary" onClick={() => setEditingItemNote(null)}>
-              Cancel
+              {t('common.cancel', null, 'Cancel')}
             </Button>
-            <Button onClick={handleSaveItemNote}>Save Note</Button>
+            <Button onClick={handleSaveItemNote}>{t('common.save', null, 'Save Note')}</Button>
           </div>
         </div>
       </Modal>
@@ -735,12 +737,12 @@ export const CreateOrderPage = () => {
       <Modal
         isOpen={isCustomModalOpen}
         onClose={() => setIsCustomModalOpen(false)}
-        title="Add Off-Menu Dish"
+        title={t('orders.offMenuItem', null, 'Add Off-Menu Dish')}
         subtitle="Special request dish not listed in regular menu"
       >
         <form onSubmit={handleAddCustomItem} className="space-y-4">
           <Input
-            label="Dish Name"
+            label={t('menu.productName', null, 'Dish Name')}
             placeholder="e.g. Chef Special Halwa"
             value={customItem.name}
             onChange={(e) => setCustomItem({ ...customItem, name: e.target.value })}
@@ -749,7 +751,7 @@ export const CreateOrderPage = () => {
 
           <div className="grid grid-cols-2 gap-4">
             <Input
-              label="Price (₹)"
+              label={`${t('menu.price', null, 'Price')} (₹)`}
               type="number"
               min="0"
               placeholder="e.g. 250"
@@ -758,7 +760,7 @@ export const CreateOrderPage = () => {
               required
             />
             <Input
-              label="Quantity"
+              label={t('common.qty', null, 'Quantity')}
               type="number"
               min="1"
               value={customItem.quantity}
@@ -768,7 +770,7 @@ export const CreateOrderPage = () => {
           </div>
 
           <Input
-            label="Cooking Notes"
+            label={t('orders.cookingNotes', null, 'Cooking Notes')}
             placeholder="e.g. Made in pure desi ghee"
             value={customItem.notes}
             onChange={(e) => setCustomItem({ ...customItem, notes: e.target.value })}
@@ -776,9 +778,9 @@ export const CreateOrderPage = () => {
 
           <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
             <Button variant="secondary" onClick={() => setIsCustomModalOpen(false)}>
-              Cancel
+              {t('common.cancel', null, 'Cancel')}
             </Button>
-            <Button type="submit">Add to Order</Button>
+            <Button type="submit">{t('orders.addToOrder', null, 'Add to Order')}</Button>
           </div>
         </form>
       </Modal>

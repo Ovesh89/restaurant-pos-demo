@@ -43,6 +43,44 @@ router.post(
   })
 );
 
+// --- Public Restaurant Branding ---
+// GET /api/v1/restaurant/branding (Public endpoint for login screen, tab title, and branding assets)
+router.get(
+  '/restaurant/branding',
+  asyncHandler(async (req, res) => {
+    const branchId = req.query.branchId || 'branch-main';
+    const branch = await restaurantService.branchRepo.findById(branchId);
+    if (!branch) {
+      return successResponse(res, {
+        restaurantName: 'Green Tandoor Se',
+        tagline: 'Garden Restaurant',
+        branchName: 'Main Branch (Gandhinagar)',
+        logo: '/logo.png',
+        logoWhite: '/logo-white.png',
+        logoBlack: '/logo-black.png',
+        logoReceipt: '/logo-receipt.png',
+        logoRedReceipt: '/logo-red-receipt.png',
+        favicon: '/favicon.png',
+      });
+    }
+    return successResponse(res, {
+      restaurantName: branch.restaurantName || branch.name || 'Green Tandoor Se',
+      tagline: branch.tagline !== undefined ? branch.tagline : 'Garden Restaurant',
+      branchName: branch.name || 'Main Branch (Gandhinagar)',
+      address: branch.address || '',
+      phone: branch.phone || '',
+      email: branch.email || '',
+      gstin: branch.gstin || '',
+      logo: branch.logo || '/logo.png',
+      logoWhite: branch.logoWhite || '/logo-white.png',
+      logoBlack: branch.logoBlack || '/logo-black.png',
+      logoReceipt: branch.logoReceipt || '/logo-receipt.png',
+      logoRedReceipt: branch.logoRedReceipt || '/logo-red-receipt.png',
+      favicon: branch.favicon || '/favicon.png',
+    });
+  })
+);
+
 // GET /api/v1/branches/:branchId (Decision 3 compatibility endpoint for Web Settings & Mobile Branch lookup)
 router.get(
   '/branches/:branchId',

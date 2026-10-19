@@ -70,9 +70,19 @@ export class RestaurantService {
     const doc = {
       code,
       name,
+      restaurantName: data.restaurantName || name,
+      tagline: data.tagline !== undefined ? data.tagline : 'Garden Restaurant',
+      logo: data.logo || null,
+      logoWhite: data.logoWhite || null,
+      logoBlack: data.logoBlack || null,
+      logoReceipt: data.logoReceipt || null,
+      logoRedReceipt: data.logoRedReceipt || null,
+      favicon: data.favicon || null,
       address: data.address || '',
       phone: data.phone || '',
+      email: data.email || '',
       gstin: data.gstin || '',
+      fssai: data.fssai || '',
       timezone: data.timezone || 'Asia/Kolkata',
       currency: data.currency || 'INR',
       taxConfig: data.taxConfig || {
@@ -111,9 +121,19 @@ export class RestaurantService {
 
     const updateFields = {};
     if (data.name !== undefined) updateFields.name = String(data.name).trim();
+    if (data.restaurantName !== undefined) updateFields.restaurantName = String(data.restaurantName).trim();
+    if (data.tagline !== undefined) updateFields.tagline = data.tagline;
+    if (data.logo !== undefined) updateFields.logo = data.logo;
+    if (data.logoWhite !== undefined) updateFields.logoWhite = data.logoWhite;
+    if (data.logoBlack !== undefined) updateFields.logoBlack = data.logoBlack;
+    if (data.logoReceipt !== undefined) updateFields.logoReceipt = data.logoReceipt;
+    if (data.logoRedReceipt !== undefined) updateFields.logoRedReceipt = data.logoRedReceipt;
+    if (data.favicon !== undefined) updateFields.favicon = data.favicon;
     if (data.address !== undefined) updateFields.address = data.address;
     if (data.phone !== undefined) updateFields.phone = data.phone;
+    if (data.email !== undefined) updateFields.email = data.email;
     if (data.gstin !== undefined) updateFields.gstin = data.gstin;
+    if (data.fssai !== undefined) updateFields.fssai = data.fssai;
     if (data.timezone !== undefined) updateFields.timezone = data.timezone;
     if (data.currency !== undefined) updateFields.currency = data.currency;
     if (data.taxConfig !== undefined) updateFields.taxConfig = data.taxConfig;

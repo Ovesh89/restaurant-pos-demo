@@ -32,6 +32,7 @@ class AuthApiRepository {
         mobile: user.mobile || '',
         branchId: primaryBranch,
         branchIds: user.branchIds || [primaryBranch],
+        language: user.language || 'en',
         isActive: user.isActive
       },
       permissions: permissions || []
@@ -81,6 +82,7 @@ class AuthApiRepository {
           mobile: user.mobile || '',
           branchId: primaryBranch,
           branchIds: user.branchIds || [primaryBranch],
+          language: user.language || 'en',
           isActive: user.isActive
         },
         permissions: permissions || []
@@ -99,6 +101,7 @@ class AuthApiRepository {
     if (profileData.name) payload.displayName = profileData.name.trim();
     if (profileData.username) payload.username = profileData.username.trim().toLowerCase();
     if (profileData.mobile !== undefined) payload.mobile = profileData.mobile.trim();
+    if (profileData.language) payload.language = profileData.language.trim();
 
     const updated = await apiClient.patch(`/users/${userId}`, payload);
 
@@ -109,12 +112,14 @@ class AuthApiRepository {
       current.user.displayName = updated.displayName;
       current.user.username = updated.username || current.user.username;
       current.user.mobile = updated.mobile;
+      current.user.language = updated.language || profileData.language || current.user.language;
       tokenStorage.setSessionData(current);
     }
 
     return {
       ...updated,
-      name: updated.displayName
+      name: updated.displayName,
+      language: updated.language || profileData.language
     };
   }
 

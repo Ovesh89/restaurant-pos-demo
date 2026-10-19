@@ -20,15 +20,18 @@ import {
   X
 } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
+import { useTranslation } from '../hooks/useTranslation';
+import { useRestaurant } from '../context/RestaurantContext';
 import { PERMISSIONS } from '../constants/permissions';
 
 export const Sidebar = ({ onClose }) => {
   const { hasPermission, hasAnyPermission, role } = useAuth();
+  const { restaurantName, restaurantTitle, logo } = useRestaurant();
+  const { t } = useTranslation();
   const location = useLocation();
 
   const isLinkActive = (to) => {
     if (to === '/orders') {
-      // Live Orders is active on /orders or /orders/new, but NOT on /orders/history
       return (
         location.pathname === '/orders' ||
         location.pathname === '/orders/' ||
@@ -46,40 +49,40 @@ export const Sidebar = ({ onClose }) => {
 
   const navItems = [
     {
-      title: 'Operations',
+      title: t('nav.operations', null, 'Operations'),
       items: [
         {
-          name: 'Dashboard',
+          name: t('nav.dashboard', null, 'Dashboard'),
           to: '/dashboard',
           icon: LayoutDashboard,
           show: true
         },
         {
-          name: 'Live Orders',
+          name: t('nav.liveOrders', null, 'Live Orders'),
           to: '/orders',
           icon: ShoppingBag,
           show: hasAnyPermission([PERMISSIONS.ORDER_CREATE, PERMISSIONS.ORDER_CONFIRM, PERMISSIONS.TABLE_VIEW])
         },
         {
-          name: 'Order History',
+          name: t('nav.orderHistory', null, 'Order History'),
           to: '/orders/history',
           icon: Clock,
           show: hasAnyPermission([PERMISSIONS.ORDER_CREATE, PERMISSIONS.ORDER_CONFIRM, PERMISSIONS.REPORT_VIEW, PERMISSIONS.BILLING_GENERATE])
         },
         {
-          name: 'Order Approval',
+          name: t('nav.orderApproval', null, 'Order Approval'),
           to: '/reception',
           icon: BellRing,
           show: hasPermission(PERMISSIONS.ORDER_CONFIRM)
         },
         {
-          name: 'Kitchen KDS',
+          name: t('nav.kitchenKds', null, 'Kitchen KDS'),
           to: '/kitchen',
           icon: ChefHat,
           show: hasPermission(PERMISSIONS.KOT_VIEW)
         },
         {
-          name: 'Table Floor',
+          name: t('nav.tableFloor', null, 'Table Floor'),
           to: '/tables',
           icon: Coffee,
           show: hasPermission(PERMISSIONS.TABLE_VIEW)
@@ -87,28 +90,28 @@ export const Sidebar = ({ onClose }) => {
       ]
     },
     {
-      title: 'Billing & Finance',
+      title: t('nav.billingFinance', null, 'Billing & Finance'),
       items: [
         {
-          name: 'Billing Desk',
+          name: t('nav.billingDesk', null, 'Billing Desk'),
           to: '/billing',
           icon: Receipt,
           show: hasAnyPermission([PERMISSIONS.BILLING_GENERATE, PERMISSIONS.PAYMENT_COLLECT])
         },
         {
-          name: 'Customers CRM',
+          name: t('nav.customersCrm', null, 'Customers CRM'),
           to: '/customers',
           icon: Contact,
           show: hasPermission(PERMISSIONS.CUSTOMER_VIEW)
         },
         {
-          name: 'Reports & Analytics',
+          name: t('nav.reportsAnalytics', null, 'Reports & Analytics'),
           to: '/reports',
           icon: BarChart3,
           show: hasPermission(PERMISSIONS.REPORT_VIEW)
         },
         {
-          name: 'Register Shifts',
+          name: t('nav.registerShifts', null, 'Register Shifts'),
           to: '/shifts',
           icon: Clock,
           show: hasAnyPermission([PERMISSIONS.BILLING_GENERATE, PERMISSIONS.PAYMENT_COLLECT, PERMISSIONS.REPORT_VIEW])
@@ -116,16 +119,16 @@ export const Sidebar = ({ onClose }) => {
       ]
     },
     {
-      title: 'Menu Management',
+      title: t('nav.menuManagement', null, 'Menu Management'),
       items: [
         {
-          name: 'Categories',
+          name: t('nav.categories', null, 'Categories'),
           to: '/menu/categories',
           icon: Layers,
           show: hasPermission(PERMISSIONS.MENU_VIEW)
         },
         {
-          name: 'Products & Pricing',
+          name: t('nav.productsPricing', null, 'Products & Pricing'),
           to: '/menu/products',
           icon: UtensilsCrossed,
           show: hasPermission(PERMISSIONS.MENU_VIEW)
@@ -133,28 +136,28 @@ export const Sidebar = ({ onClose }) => {
       ]
     },
     {
-      title: 'Administration',
+      title: t('nav.administration', null, 'Administration'),
       items: [
         {
-          name: 'Staff Users',
+          name: t('nav.staffUsers', null, 'Staff Users'),
           to: '/users',
           icon: Users,
           show: hasPermission(PERMISSIONS.USER_MANAGE)
         },
         {
-          name: 'Roles & Matrix',
+          name: t('nav.rolesMatrix', null, 'Roles & Matrix'),
           to: '/roles',
           icon: ShieldCheck,
           show: hasPermission(PERMISSIONS.ROLE_MANAGE)
         },
         {
-          name: 'Audit Trail',
+          name: t('nav.auditTrail', null, 'Audit Trail'),
           to: '/audit',
           icon: ClipboardList,
           show: hasPermission(PERMISSIONS.AUDIT_VIEW)
         },
         {
-          name: 'System Settings',
+          name: t('nav.systemSettings', null, 'System Settings'),
           to: '/settings',
           icon: Settings,
           show: hasPermission(PERMISSIONS.SETTINGS_MANAGE)
@@ -162,10 +165,10 @@ export const Sidebar = ({ onClose }) => {
       ]
     },
     {
-      title: 'Account',
+      title: t('nav.account', null, 'Account'),
       items: [
         {
-          name: 'My Profile',
+          name: t('nav.myProfile', null, 'My Profile'),
           to: '/profile',
           icon: User,
           show: true
@@ -175,16 +178,16 @@ export const Sidebar = ({ onClose }) => {
   ];
 
   return (
-    <aside className="w-64 bg-slate-900 text-slate-300 flex flex-col shrink-0 border-r border-slate-800">
+    <aside className="w-64 h-full bg-slate-900 text-slate-300 flex flex-col shrink-0 border-r border-slate-800 select-none">
       {/* Brand Header */}
-      <div className="h-16 flex items-center justify-between px-4 border-b border-slate-800 bg-slate-950/40">
+      <div className="h-16 flex items-center justify-between px-4 border-b border-slate-800 bg-slate-950/40 shrink-0">
         <div className="flex items-center gap-2.5 min-w-0">
           <div className="w-10 h-10 rounded-xl bg-white/95 p-1 flex items-center justify-center shadow-md shadow-black/20 shrink-0 border border-slate-700/60 overflow-hidden">
-            <img src="/logo.png" alt="Green Garden Pure Veg Logo" className="w-full h-full object-contain" />
+            <img src={logo} alt={restaurantName} className="w-full h-full object-contain" />
           </div>
           <div className="min-w-0">
-            <h2 className="text-sm font-bold text-white tracking-tight truncate leading-tight">Green Garden</h2>
-            <span className="text-[10px] text-emerald-400 font-semibold uppercase tracking-wider block truncate">Pure Veg Restaurant</span>
+            <h2 className="text-sm font-bold text-white tracking-tight truncate leading-tight">{restaurantName}</h2>
+            <span className="text-[10px] text-red-400 font-semibold uppercase tracking-wider block truncate">{restaurantTitle}</span>
           </div>
         </div>
         {onClose && (
@@ -198,8 +201,8 @@ export const Sidebar = ({ onClose }) => {
         )}
       </div>
 
-      {/* Navigation Sections */}
-      <div className="flex-1 overflow-y-auto px-4 py-6 space-y-6">
+      {/* Navigation Sections with custom visible scroller */}
+      <div className="flex-1 overflow-y-auto custom-sidebar-scroll px-4 py-6 space-y-6">
         {navItems.map((section, sIdx) => {
           const visibleItems = section.items.filter((item) => item.show);
           if (visibleItems.length === 0) return null;
@@ -244,7 +247,7 @@ export const Sidebar = ({ onClose }) => {
       <div className="p-4 border-t border-slate-800 bg-slate-950/40">
         <div className="flex items-center gap-2">
           <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div>
-          <span className="text-xs text-slate-400">Mode:</span>
+          <span className="text-xs text-slate-400">{t('nav.mode', null, 'Mode')}:</span>
           <span className="text-xs font-bold text-slate-200 capitalize">{role}</span>
         </div>
       </div>

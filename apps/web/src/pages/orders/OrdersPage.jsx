@@ -30,11 +30,13 @@ import { Input } from '../../components/common/Input';
 import { Modal } from '../../components/common/Modal';
 import { Badge } from '../../components/common/Badge';
 import { DataTable } from '../../components/common/DataTable';
-import { ORDER_STATUS, ORDER_STATUS_CONFIG } from '../../constants/orderStatus';
+import { ORDER_STATUS, ORDER_STATUS_CONFIG, getOrderStatusConfig } from '../../constants/orderStatus';
 import { PERMISSIONS } from '../../constants/permissions';
+import { useTranslation } from '../../hooks/useTranslation';
 
 export const OrdersPage = () => {
   const { user, hasPermission, hasAnyPermission } = useAuth();
+  const { t, formatNumber, formatCurrency } = useTranslation();
   const navigate = useNavigate();
 
   const [orders, setOrders] = useState([]);
@@ -383,12 +385,12 @@ export const OrdersPage = () => {
 
   const columns = [
     {
-      header: 'Order #',
+      header: t('orders.orderId', null, 'Order #'),
       accessor: 'orderNo',
       className: 'w-24 font-mono font-extrabold text-blue-700'
     },
     {
-      header: 'Table / Source',
+      header: t('tables.tableNumber', null, 'Table / Source'),
       accessor: 'tableNo',
       render: (row) => {
         if (row.orderType && row.orderType !== 'DINE_IN') {
@@ -399,7 +401,7 @@ export const OrdersPage = () => {
             ONLINE_OTHER: 'bg-purple-50 text-purple-800 border-purple-200',
           };
           const badgeClass = typeBadgeStyles[row.orderType] || 'bg-slate-100 text-slate-800 border-slate-200';
-          const typeLabel = row.orderType === 'TAKEAWAY' ? 'Take Away' : row.orderType;
+          const typeLabel = row.orderType === 'TAKEAWAY' ? t('common.takeaway', null, 'Take Away') : row.orderType;
 
           return (
             <div>
@@ -418,7 +420,9 @@ export const OrdersPage = () => {
 
         return (
           <div>
-            <span className="font-extrabold text-slate-800 text-sm">Table {row.tableNo || '-'}</span>
+            <span className="font-extrabold text-slate-800 text-sm">
+              {row.tableNo ? `${t('tables.tableNumber', null, 'Table')} ${formatNumber(row.tableNo)}` : '-'}
+            </span>
             {row.customerName && (
               <p className="text-[11px] text-slate-500 font-medium">{row.customerName}</p>
             )}
@@ -427,7 +431,7 @@ export const OrdersPage = () => {
       }
     },
     {
-      header: 'Captain',
+      header: t('orders.captain', null, 'Captain'),
       accessor: 'captainName',
       render: (row) => (
         <div className="flex items-center gap-1.5 text-xs text-slate-600 font-semibold">
@@ -437,27 +441,27 @@ export const OrdersPage = () => {
       )
     },
     {
-      header: 'Dishes',
+      header: t('orders.itemsCount', { count: '' }, 'Dishes'),
       accessor: 'items',
       render: (row) => (
         <span className="text-xs text-slate-600 font-medium">
-          {row.items?.reduce((a, b) => a + b.quantity, 0)} items ({row.items?.length} dishes)
+          {formatNumber(row.items?.reduce((a, b) => a + b.quantity, 0))} ({formatNumber(row.items?.length)})
         </span>
       )
     },
     {
-      header: 'Subtotal (INR)',
+      header: t('common.subtotal', null, 'Subtotal (INR)'),
       accessor: 'subtotal',
       align: 'right',
       render: (row) => (
-        <span className="font-extrabold text-slate-900 text-sm">₹{row.subtotal?.toLocaleString()}</span>
+        <span className="font-extrabold text-slate-900 text-sm">{formatCurrency(row.subtotal)}</span>
       )
     },
     {
-      header: 'Status',
+      header: t('common.status', null, 'Status'),
       accessor: 'status',
       render: (row) => {
-        const config = ORDER_STATUS_CONFIG[row.status] || { label: row.status, color: 'bg-slate-100 text-slate-700' };
+        const config = getOrderStatusConfig(row.status, t);
         return (
           <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold border ${config.color}`}>
             {config.label}
@@ -466,13 +470,13 @@ export const OrdersPage = () => {
       }
     },
     {
-      header: 'Time',
+      header: t('common.time', null, 'Time'),
       accessor: 'createdAt',
       className: 'text-xs text-slate-400 font-mono',
       render: (row) => new Date(row.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
     },
     {
-      header: 'Actions',
+      header: t('common.actions', null, 'Actions'),
       align: 'right',
       render: (row) => {
         const isCompleted = row.status === ORDER_STATUS.COMPLETED || row.status === ORDER_STATUS.CANCELLED;
@@ -528,15 +532,15 @@ export const OrdersPage = () => {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Live Restaurant Orders"
-        subtitle="Manage ongoing table orders, modification deltas, kitchen state, and cancellations"
+        title={t('orders.title', null, 'Live Restaurant Orders')}
+        subtitle={t('orders.subtitle', null, 'Manage ongoing table orders, modification deltas, kitchen state, and cancellations')}
       >
         <div className="flex items-center gap-2">
           <Button variant="secondary" icon={Clock} onClick={() => navigate('/orders/history')}>
-            Order History & Analytics
+            {t('orders.historyTitle', null, 'Order History & Analytics')}
           </Button>
           <Button variant="primary" icon={Plus} onClick={() => navigate('/orders/new')}>
-            Take New Order
+            {t('orders.newOrder', null, 'Take New Order')}
           </Button>
         </div>
       </PageHeader>
@@ -546,13 +550,13 @@ export const OrdersPage = () => {
         {/* Status Switcher Tabs */}
         <div className="flex items-center gap-1.5 overflow-x-auto pb-1 text-xs no-scrollbar">
           {[
-            { id: 'ACTIVE', label: 'Active Orders' },
-            { id: 'WAITING', label: 'Waiting Approval' },
-            { id: ORDER_STATUS.KOT_SENT, label: 'KOT Sent' },
-            { id: ORDER_STATUS.PREPARING, label: 'In Kitchen' },
-            { id: ORDER_STATUS.READY, label: 'Ready to Serve' },
-            { id: ORDER_STATUS.SERVED, label: 'Served' },
-            { id: 'ALL', label: 'All History' }
+            { id: 'ACTIVE', label: t('dashboard.activeOrders', null, 'Active Orders') },
+            { id: 'WAITING', label: t('dashboard.waitingApproval', null, 'Waiting Approval') },
+            { id: ORDER_STATUS.KOT_SENT, label: t('orders.kotSent', null, 'KOT Sent') },
+            { id: ORDER_STATUS.PREPARING, label: t('common.preparing', null, 'In Kitchen') },
+            { id: ORDER_STATUS.READY, label: t('common.ready', null, 'Ready to Serve') },
+            { id: ORDER_STATUS.SERVED, label: t('common.served', null, 'Served') },
+            { id: 'ALL', label: t('common.all', null, 'All History') }
           ].map((tab) => (
             <button
               key={tab.id}
@@ -573,11 +577,11 @@ export const OrdersPage = () => {
           <select
             value={orderTypeFilter}
             onChange={(e) => setOrderTypeFilter(e.target.value)}
-            className="text-xs font-bold border border-slate-200 rounded-xl px-3 py-2 bg-slate-50 text-slate-700 hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-100"
+            className="text-xs font-bold border border-slate-200 rounded-xl px-3 py-2 bg-slate-50 text-slate-700 hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-100 cursor-pointer"
           >
-            <option value="ALL">All Order Types</option>
-            <option value="DINE_IN">Dine In (Tables)</option>
-            <option value="TAKEAWAY">Take Away</option>
+            <option value="ALL">{t('common.all', null, 'All Order Types')}</option>
+            <option value="DINE_IN">{t('common.dineIn', null, 'Dine In (Tables)')}</option>
+            <option value="TAKEAWAY">{t('common.takeaway', null, 'Take Away')}</option>
             <option value="ZOMATO">Zomato</option>
             <option value="SWIGGY">Swiggy</option>
             <option value="ONLINE_OTHER">Online Other</option>
@@ -586,7 +590,7 @@ export const OrdersPage = () => {
           <div className="w-full sm:w-64">
             <Input
               icon={Search}
-              placeholder="Search order #, table, captain..."
+              placeholder={t('orders.searchMenu', null, 'Search order #, table, captain...')}
               value={search}
               onChange={(e) => setSearch(e.target.value)}
             />
@@ -602,7 +606,7 @@ export const OrdersPage = () => {
           return (o.orderType || 'DINE_IN') === orderTypeFilter;
         })}
         loading={loading}
-        emptyMessage="No table orders found for this filter."
+        emptyMessage={t('common.noRecords', null, 'No table orders found for this filter.')}
         pagination={pagination}
         onPageChange={(p) => {
           setPage(p);

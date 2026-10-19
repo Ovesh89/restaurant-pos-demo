@@ -31,6 +31,7 @@ import { settingsRepository } from '../../services/repositories/settingsReposito
 import { printService, formatReceiptSequence } from '../../services/printing/printService';
 import { billingCalculator, DISCOUNT_TYPES, PAYMENT_MODES } from '../../services/calculations/billingCalculator';
 import { useAuth } from '../../hooks/useAuth';
+import { useTranslation } from '../../hooks/useTranslation';
 import { PageHeader } from '../../components/common/PageHeader';
 import { Button } from '../../components/common/Button';
 import { Input } from '../../components/common/Input';
@@ -42,6 +43,7 @@ import { ORDER_STATUS } from '../../constants/orderStatus';
 
 export const BillingPage = () => {
   const { user } = useAuth();
+  const { t, formatCurrency, formatNumber } = useTranslation();
   const [searchParams] = useSearchParams();
 
   const [readyOrders, setReadyOrders] = useState([]);
@@ -641,7 +643,7 @@ export const BillingPage = () => {
 
   const historyColumns = [
     {
-      header: 'Invoice #',
+      header: t('billing.invoiceNumber', null, 'Invoice #'),
       accessor: 'billNo',
       className: 'w-24 font-mono font-bold text-blue-700',
       render: (row) => (
@@ -656,7 +658,7 @@ export const BillingPage = () => {
       )
     },
     {
-      header: 'Table / Source',
+      header: t('tables.table', null, 'Table / Source'),
       accessor: 'tableNo',
       render: (row) => {
         if (row.orderType && row.orderType !== 'DINE_IN') {
@@ -667,46 +669,46 @@ export const BillingPage = () => {
             ONLINE_OTHER: 'bg-purple-50 text-purple-800 border-purple-200',
           };
           const badgeClass = typeBadgeStyles[row.orderType] || 'bg-slate-100 text-slate-800 border-slate-200';
-          const typeLabel = row.orderType === 'TAKEAWAY' ? 'Take Away' : row.orderType;
+          const typeLabel = row.orderType === 'TAKEAWAY' ? t('orders.takeaway', null, 'Take Away') : row.orderType;
           return (
             <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-black border ${badgeClass}`}>
               {typeLabel}
             </span>
           );
         }
-        return <span className="font-extrabold text-slate-800">{row.tableNo ? `Table ${row.tableNo}` : 'Direct'}</span>;
+        return <span className="font-extrabold text-slate-800">{row.tableNo ? `${t('orders.table', null, 'Table')} ${row.tableNo}` : t('orders.direct', null, 'Direct')}</span>;
       }
     },
     {
-      header: 'Guest / Customer',
+      header: t('billing.customerInfo', null, 'Guest / Customer'),
       accessor: 'customerName',
       render: (row) => (
         <span className="text-xs text-slate-700 font-medium">
-          {row.customerName ? `${row.customerName} (${row.customerMobile})` : 'Walk-in Guest'}
+          {row.customerName ? `${row.customerName} (${row.customerMobile})` : t('orders.walkinGuest', null, 'Walk-in Guest')}
         </span>
       )
     },
     {
-      header: 'Grand Total (INR)',
+      header: `${t('billing.finalPayable', null, 'Grand Total')} (₹)`,
       accessor: 'grandTotal',
       align: 'right',
-      render: (row) => <span className="font-extrabold text-slate-900">₹{row.grandTotal?.toLocaleString()}</span>
+      render: (row) => <span className="font-extrabold text-slate-900">₹{formatNumber(row.grandTotal)}</span>
     },
     {
-      header: 'Payment Modes',
+      header: t('billing.paymentMode', null, 'Payment Modes'),
       accessor: 'payments',
       render: (row) => (
         <div className="flex flex-wrap gap-1 text-[11px]">
           {row.payments?.map((p, pIdx) => (
             <span key={pIdx} className="bg-slate-100 text-slate-700 px-2 py-0.5 rounded font-mono">
-              {p.mode}: ₹{p.amount}
+              {p.mode}: ₹{formatNumber(p.amount)}
             </span>
           ))}
         </div>
       )
     },
     {
-      header: 'Status',
+      header: t('orders.status', null, 'Status'),
       accessor: 'status',
       render: (row) => (
         <Badge variant={row.status === BILL_STATUS.PAID ? 'success' : 'default'} size="sm">
@@ -715,13 +717,13 @@ export const BillingPage = () => {
       )
     },
     {
-      header: 'Time',
+      header: t('common.time', null, 'Time'),
       accessor: 'createdAt',
       className: 'text-xs text-slate-400 font-mono',
       render: (row) => new Date(row.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
     },
     {
-      header: 'Actions',
+      header: t('common.actions', null, 'Actions'),
       align: 'right',
       render: (row) => (
         <div className="flex items-center justify-end gap-1.5">
@@ -732,7 +734,7 @@ export const BillingPage = () => {
             onClick={() => handleOpenInspectInvoice(row)}
             title="Inspect Invoice Details & Payments"
           >
-            Details
+            {t('common.details', null, 'Details')}
           </Button>
           <Button
             variant="secondary"
@@ -741,7 +743,7 @@ export const BillingPage = () => {
             onClick={() => handleOpenDiscountModal(row)}
             title="Update Post-Settlement Discount"
           >
-            Discount
+            {t('billing.discountAmount', null, 'Discount')}
           </Button>
           <Button
             variant="secondary"
@@ -750,7 +752,7 @@ export const BillingPage = () => {
             onClick={() => handleReprintInvoice(row)}
             title="Reprint Invoice"
           >
-            Reprint
+            {t('billing.reprint', null, 'Reprint')}
           </Button>
         </div>
       )
@@ -760,28 +762,28 @@ export const BillingPage = () => {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Billing Desk & Payment Settlement"
-        subtitle="Generate final tax invoices, apply approved discounts, accept split payments (Cash, UPI, Card), and release tables"
+        title={t('billing.title', null, 'Billing Desk & Payment Settlement')}
+        subtitle={t('billing.subtitle', null, 'Generate final tax invoices, apply approved discounts, accept split payments (Cash, UPI, Card), and release tables')}
       >
         <Button variant="secondary" icon={RefreshCw} onClick={loadBillingData} loading={loading}>
-          Refresh Queue
+          {t('common.refresh', null, 'Refresh Queue')}
         </Button>
       </PageHeader>
 
       {/* Top Section: Active Tables & Online Orders Ready for Billing */}
       <div>
         <h2 className="text-base font-bold text-slate-800 mb-3 flex items-center gap-2">
-          <span>Orders Pending Settlement</span>
+          <span>{t('billing.pendingSettlement', null, 'Orders Pending Settlement')}</span>
           <span className="w-6 h-6 rounded-full bg-blue-100 text-blue-800 text-xs font-black flex items-center justify-center">
-            {readyOrders.length}
+            {formatNumber(readyOrders.length)}
           </span>
         </h2>
 
         {loading ? (
-          <p className="text-xs text-slate-400">Checking pending bills...</p>
+          <p className="text-xs text-slate-400">{t('common.loading', null, 'Checking pending bills...')}</p>
         ) : readyOrders.length === 0 ? (
           <div className="bg-white rounded-2xl border border-dashed border-slate-300 p-8 text-center text-slate-500 text-xs font-medium">
-            No active dining tables or takeaway orders pending bill settlement.
+            {t('billing.noPendingBills', null, 'No active dining tables or takeaway orders pending bill settlement.')}
           </div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4">
@@ -806,7 +808,7 @@ export const BillingPage = () => {
                       <div>
                         <div className="flex items-center gap-1.5 mb-1">
                           <span className="px-2 py-0.5 rounded text-xs font-black bg-amber-100 text-amber-900 border border-amber-200">
-                            {ord.orderType === 'TAKEAWAY' ? 'Take Away' : ord.orderType}
+                            {ord.orderType === 'TAKEAWAY' ? t('orders.takeaway', null, 'Take Away') : ord.orderType}
                           </span>
                           {ord.onlineOrderRef && (
                             <span className="text-[11px] font-mono font-bold text-slate-600">
@@ -815,7 +817,7 @@ export const BillingPage = () => {
                           )}
                         </div>
                         <h3 className="text-base font-black text-slate-800 truncate">
-                          {ord.customerName || 'Walk-in Guest'}
+                          {ord.customerName || t('orders.walkinGuest', null, 'Walk-in Guest')}
                         </h3>
                         {ord.customerPhone && (
                           <p className="text-xs text-slate-500 font-mono">{ord.customerPhone}</p>
@@ -823,20 +825,20 @@ export const BillingPage = () => {
                       </div>
                     ) : (
                       <>
-                        <h3 className="text-xl font-black text-slate-800">Table {ord.tableNo}</h3>
-                        <p className="text-xs text-slate-500 mt-0.5">Captain: {ord.captainName || 'Staff'}</p>
+                        <h3 className="text-xl font-black text-slate-800">{t('orders.table', null, 'Table')} {ord.tableNo}</h3>
+                        <p className="text-xs text-slate-500 mt-0.5">{t('orders.captain', null, 'Captain')}: {ord.captainName || t('orders.captain', null, 'Staff')}</p>
                       </>
                     )}
                     <p className="text-xs text-slate-600 mt-1.5 font-semibold">
-                      {ord.items?.length} dishes ({ord.items?.reduce((a, b) => a + b.quantity, 0)} items)
+                      {formatNumber(ord.items?.length)} {t('orders.dishes', null, 'dishes')} ({formatNumber(ord.items?.reduce((a, b) => a + b.quantity, 0))} {t('orders.dishes', null, 'items')})
                     </p>
                   </div>
                 </div>
 
                 <div className="pt-3 border-t border-slate-100 flex items-center justify-between">
                   <div>
-                    <span className="text-[10px] text-slate-400 uppercase font-semibold">Subtotal</span>
-                    <p className="text-base font-black text-slate-900">₹{ord.subtotal}</p>
+                    <span className="text-[10px] text-slate-400 uppercase font-semibold">{t('billing.subtotalAmount', null, 'Subtotal')}</span>
+                    <p className="text-base font-black text-slate-900">₹{formatNumber(ord.subtotal)}</p>
                   </div>
 
                   <Button
@@ -848,7 +850,7 @@ export const BillingPage = () => {
                       handleOpenCheckout(ord);
                     }}
                   >
-                    Settle Bill
+                    {t('billing.settleBill', null, 'Settle Bill')}
                   </Button>
                 </div>
               </div>
@@ -859,12 +861,12 @@ export const BillingPage = () => {
 
       {/* Bottom Section: Invoices & Receipts History */}
       <div className="space-y-3">
-        <h2 className="text-base font-bold text-slate-800">Recent Settled Invoices</h2>
+        <h2 className="text-base font-bold text-slate-800">{t('billing.settledInvoices', null, 'Recent Settled Invoices')}</h2>
         <DataTable
           columns={historyColumns}
           data={billsHistory}
           loading={historyLoading}
-          emptyMessage="No historical bills settled yet."
+          emptyMessage={t('billing.noSettledInvoices', null, 'No historical bills settled yet.')}
           pagination={historyPagination}
           onPageChange={(p) => {
             setHistoryPage(p);
@@ -882,8 +884,8 @@ export const BillingPage = () => {
       <Modal
         isOpen={!!selectedOrder && !!activeBill}
         onClose={handleCloseDesk}
-        title={`Settle Bill: ${formatReceiptSequence(activeBill?.billNo)} (${activeBill?.billNo})`}
-        subtitle={`${selectedOrder?.orderType && selectedOrder.orderType !== 'DINE_IN' ? (selectedOrder.orderType === 'TAKEAWAY' ? 'Take Away' : selectedOrder.orderType) : `Table ${selectedOrder?.tableNo}`} • Order ${formatReceiptSequence(selectedOrder?.orderNo)}`}
+        title={`${t('billing.title', null, 'Settle Bill')}: ${formatReceiptSequence(activeBill?.billNo)} (${activeBill?.billNo})`}
+        subtitle={`${selectedOrder?.orderType && selectedOrder.orderType !== 'DINE_IN' ? (selectedOrder.orderType === 'TAKEAWAY' ? t('orders.takeaway', null, 'Take Away') : selectedOrder.orderType) : `${t('orders.table', null, 'Table')} ${selectedOrder?.tableNo}`} • ${t('orders.orderId', null, 'Order')} ${formatReceiptSequence(selectedOrder?.orderNo)}`}
         maxWidth="max-w-4xl"
       >
         {activeBill && (
@@ -902,14 +904,14 @@ export const BillingPage = () => {
                 <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200 text-xs">
                   <div className="flex items-center justify-between mb-2">
                     <span className="font-bold text-slate-700 uppercase tracking-wider text-[11px]">
-                      Guest Profile (Optional)
+                      {t('billing.customerInfo', null, 'Guest Profile (Optional)')}
                     </span>
                     <button
                       type="button"
                       onClick={() => setIsNewCustModalOpen(true)}
                       className="text-blue-600 hover:text-blue-700 font-bold"
                     >
-                      + Add New
+                      {t('common.add', null, '+ Add New')}
                     </button>
                   </div>
 
@@ -924,13 +926,13 @@ export const BillingPage = () => {
                         onClick={() => setSelectedCustomer(null)}
                         className="text-red-500 font-bold"
                       >
-                        Remove
+                        {t('common.delete', null, 'Remove')}
                       </button>
                     </div>
                   ) : (
                     <div className="relative">
                       <Input
-                        placeholder="Search guest by mobile or name..."
+                        placeholder={t('billing.searchGuestPlaceholder', null, 'Search guest by mobile or name...')}
                         value={customerQuery}
                         onChange={(e) => handleSearchCustomer(e.target.value)}
                       />
@@ -955,14 +957,14 @@ export const BillingPage = () => {
                 {/* Items Snapshot with Modify Dishes Button */}
                 <div>
                   <div className="flex items-center justify-between mb-2">
-                    <h4 className="text-xs font-bold uppercase text-slate-400">Ordered Dishes</h4>
+                    <h4 className="text-xs font-bold uppercase text-slate-400">{t('kitchen.orderedDishes', null, 'Ordered Dishes')}</h4>
                     <button
                       type="button"
                       onClick={() => handleOpenBillingModify(selectedOrder)}
                       className="text-xs font-bold text-blue-600 hover:text-blue-700 bg-white px-2 py-0.5 rounded border border-slate-200 flex items-center gap-1 shadow-2xs hover:bg-blue-50 transition-colors"
                     >
                       <Edit3 className="w-3.5 h-3.5" />
-                      Modify Dishes
+                      {t('billing.modifyDishes', null, 'Modify Dishes')}
                     </button>
                   </div>
                   <div className="divide-y divide-slate-100 border border-slate-200 rounded-xl overflow-hidden text-xs max-h-48 overflow-y-auto">
@@ -971,10 +973,10 @@ export const BillingPage = () => {
                         <div>
                           <span className="font-bold text-slate-800">{i.name || i.productName}</span>
                           <span className="text-slate-400 ml-1.5 font-mono">
-                            {i.quantity}x @ ₹{i.unitPrice}
+                            {formatNumber(i.quantity)}x @ ₹{formatNumber(i.unitPrice)}
                           </span>
                         </div>
-                        <span className="font-extrabold text-slate-900">₹{Number(i.quantity * i.unitPrice).toFixed(2)}</span>
+                        <span className="font-extrabold text-slate-900">₹{formatNumber(Number(i.quantity * i.unitPrice).toFixed(2))}</span>
                       </div>
                     ))}
                   </div>
@@ -984,14 +986,14 @@ export const BillingPage = () => {
                 <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200 space-y-2.5">
                   <div className="flex items-center justify-between">
                     <span className="font-bold text-slate-700 uppercase tracking-wider text-[11px] flex items-center gap-1">
-                      <Tag className="w-3.5 h-3.5 text-blue-600" /> Apply Discount (Optional)
+                      <Tag className="w-3.5 h-3.5 text-blue-600" /> {t('billing.applyDiscount', null, 'Apply Discount (Optional)')}
                     </span>
                     <button
                       type="button"
                       onClick={handleApplyDiscount}
                       className="text-xs font-bold text-blue-600 hover:text-blue-700 bg-white px-2 py-0.5 rounded border border-slate-200"
                     >
-                      Update Total
+                      {t('billing.updateTotal', null, 'Update Total')}
                     </button>
                   </div>
 
@@ -1000,21 +1002,21 @@ export const BillingPage = () => {
                       value={discountType}
                       onChange={(e) => setDiscountType(e.target.value)}
                       options={[
-                        { value: DISCOUNT_TYPES.FIXED, label: 'Fixed Amount (₹)' },
-                        { value: DISCOUNT_TYPES.PERCENTAGE, label: 'Percentage (%)' }
+                        { value: DISCOUNT_TYPES.FIXED, label: `${t('common.fixed', null, 'Fixed Amount')} (₹)` },
+                        { value: DISCOUNT_TYPES.PERCENTAGE, label: `${t('common.percentage', null, 'Percentage')} (%)` }
                       ]}
                     />
                     <Input
                       type="number"
                       min="0"
-                      placeholder="Discount value"
+                      placeholder={t('billing.discountAmount', null, 'Discount value')}
                       value={discountValue}
                       onChange={(e) => setDiscountValue(e.target.value)}
                     />
                   </div>
 
                   <Input
-                    placeholder="Reason for discount (Optional)..."
+                    placeholder={t('billing.discountReason', null, 'Reason for discount (Optional)...')}
                     value={discountReason}
                     onChange={(e) => setDiscountReason(e.target.value)}
                   />
@@ -1026,48 +1028,48 @@ export const BillingPage = () => {
                 {/* Financial Summary Card */}
                 <div className="bg-slate-900 text-slate-200 rounded-2xl p-4 shadow-sm text-xs space-y-2">
                   <div className="flex justify-between text-slate-400">
-                    <span>Subtotal:</span>
-                    <span className="font-mono text-white">₹{activeBill.subtotal?.toFixed(2)}</span>
+                    <span>{t('billing.subtotalAmount', null, 'Subtotal:')}</span>
+                    <span className="font-mono text-white">₹{formatNumber(activeBill.subtotal?.toFixed(2))}</span>
                   </div>
 
                   {activeBill.discountAmount > 0 && (
                     <div className="flex justify-between text-emerald-400 font-semibold">
-                      <span>Discount ({activeBill.discountReason || 'Discount'}):</span>
-                      <span className="font-mono">-₹{activeBill.discountAmount?.toFixed(2)}</span>
+                      <span>{t('billing.discountAmount', null, 'Discount')} ({activeBill.discountReason || 'Discount'}):</span>
+                      <span className="font-mono">-₹{formatNumber(activeBill.discountAmount?.toFixed(2))}</span>
                     </div>
                   )}
 
                   <div className="flex justify-between text-slate-400">
-                    <span>Taxable Base:</span>
-                    <span className="font-mono text-white">₹{activeBill.taxableValue?.toFixed(2)}</span>
+                    <span>{t('billing.taxableAmount', null, 'Taxable Base:')}</span>
+                    <span className="font-mono text-white">₹{formatNumber(activeBill.taxableValue?.toFixed(2))}</span>
                   </div>
 
                   <div className="flex justify-between text-slate-400">
-                    <span>CGST (2.5%) + SGST (2.5%):</span>
-                    <span className="font-mono text-white">₹{activeBill.taxAmount?.toFixed(2)}</span>
+                    <span>{t('billing.totalTax', null, 'CGST (2.5%) + SGST (2.5%):')}</span>
+                    <span className="font-mono text-white">₹{formatNumber(activeBill.taxAmount?.toFixed(2))}</span>
                   </div>
 
                   {activeBill.rounding !== 0 && (
                     <div className="flex justify-between text-slate-400">
-                      <span>Rounding:</span>
-                      <span className="font-mono text-white">₹{activeBill.rounding?.toFixed(2)}</span>
+                      <span>{t('billing.roundOff', null, 'Rounding:')}</span>
+                      <span className="font-mono text-white">₹{formatNumber(activeBill.rounding?.toFixed(2))}</span>
                     </div>
                   )}
 
                   <div className="pt-2 border-t border-slate-700 flex justify-between items-center text-sm">
-                    <span className="font-bold text-white">Grand Total:</span>
-                    <span className="text-xl font-black text-amber-400">₹{activeBill.grandTotal}</span>
+                    <span className="font-bold text-white">{t('billing.finalPayable', null, 'Grand Total:')}</span>
+                    <span className="text-xl font-black text-amber-400">₹{formatNumber(activeBill.grandTotal)}</span>
                   </div>
 
                   <div className="pt-2 border-t border-slate-800 flex justify-between items-center text-xs">
-                    <span className="text-slate-400">Paid Amount:</span>
-                    <span className="font-mono font-bold text-emerald-400">₹{activeBill.paidAmount?.toFixed(2)}</span>
+                    <span className="text-slate-400">{t('billing.amountPaid', null, 'Paid Amount:')}</span>
+                    <span className="font-mono font-bold text-emerald-400">₹{formatNumber(activeBill.paidAmount?.toFixed(2))}</span>
                   </div>
 
                   <div className="flex justify-between items-center text-sm font-bold">
-                    <span className="text-slate-300">Balance Due:</span>
+                    <span className="text-slate-300">{t('billing.balanceRemaining', null, 'Balance Due:')}</span>
                     <span className={`font-mono text-base ${activeBill.balance > 0 ? 'text-red-400 font-extrabold' : 'text-emerald-400'}`}>
-                      ₹{activeBill.balance?.toFixed(2)}
+                      ₹{formatNumber(activeBill.balance?.toFixed(2))}
                     </span>
                   </div>
                 </div>
@@ -1076,7 +1078,7 @@ export const BillingPage = () => {
                 {activeBill.payments && activeBill.payments.length > 0 && (
                   <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 text-xs">
                     <span className="font-bold text-slate-700 uppercase tracking-wider text-[11px] block mb-2">
-                      Recorded Payments ({activeBill.payments.length})
+                      {t('billing.recordedPayments', null, 'Recorded Payments')} ({formatNumber(activeBill.payments.length)})
                     </span>
                     <div className="space-y-1.5">
                       {activeBill.payments.map((p, pIdx) => (
@@ -1085,7 +1087,7 @@ export const BillingPage = () => {
                             <span className="font-bold text-slate-800">{p.mode}</span>
                             {p.reference && <span className="text-slate-400 text-[10px] ml-1.5 font-mono">Ref: {p.reference}</span>}
                           </div>
-                          <span className="font-mono font-extrabold text-emerald-600">₹{p.amount}</span>
+                          <span className="font-mono font-extrabold text-emerald-600">₹{formatNumber(p.amount)}</span>
                         </div>
                       ))}
                     </div>
@@ -1096,36 +1098,36 @@ export const BillingPage = () => {
                 {activeBill.balance > 0 ? (
                   <form onSubmit={handleAddPayment} className="bg-blue-50/50 p-3.5 rounded-xl border border-blue-200 space-y-3">
                     <span className="font-bold text-blue-900 uppercase tracking-wider text-[11px] block">
-                      Collect Payment Entry
+                      {t('billing.recordPayment', null, 'Collect Payment Entry')}
                     </span>
 
                     <div className="grid grid-cols-2 gap-2">
                       <Select
-                        label="Payment Mode"
+                        label={t('billing.paymentMode', null, 'Payment Mode')}
                         value={paymentMode}
                         onChange={(e) => setPaymentMode(e.target.value)}
                         options={[
                           { value: PAYMENT_MODES.UPI, label: 'UPI / QR Code' },
-                          { value: PAYMENT_MODES.CASH, label: 'Cash' },
-                          { value: PAYMENT_MODES.CARD, label: 'Card' },
-                          { value: PAYMENT_MODES.OTHER, label: 'Other' },
+                          { value: PAYMENT_MODES.CASH, label: t('billing.cash', null, 'Cash') },
+                          { value: PAYMENT_MODES.CARD, label: t('billing.card', null, 'Card') },
+                          { value: PAYMENT_MODES.OTHER, label: t('billing.other', null, 'Other') },
                         ]}
                       />
                       <Input
-                        label="Amount to Pay (INR)"
+                        label={`${t('billing.enterPaidAmount', null, 'Amount to Pay')} (₹)`}
                         type="number"
                         step="any"
                         min="0"
                         max={activeBill.balance}
                         value={paymentAmount}
                         onChange={(e) => setPaymentAmount(e.target.value)}
-                        placeholder={`Balance: ₹${activeBill.balance}`}
+                        placeholder={`${t('billing.balanceRemaining', null, 'Balance')}: ₹${formatNumber(activeBill.balance)}`}
                         required
                       />
                     </div>
 
                     <Input
-                      label="Transaction Ref / Auth Code (Optional)"
+                      label={t('billing.txRefOptional', null, 'Transaction Ref / Auth Code (Optional)')}
                       placeholder="e.g. UPI Ref / Card Last 4 digits"
                       value={paymentRef}
                       onChange={(e) => setPaymentRef(e.target.value)}
@@ -1137,14 +1139,14 @@ export const BillingPage = () => {
                       className="w-full bg-blue-600 hover:bg-blue-700"
                       loading={actionLoading}
                     >
-                      Record ₹{paymentAmount || activeBill.balance} via {paymentMode}
+                      {t('billing.recordPayment', null, 'Record')} ₹{formatNumber(paymentAmount || activeBill.balance)} {t('common.via', null, 'via')} {paymentMode}
                     </Button>
                   </form>
                 ) : (
                   <div className="bg-emerald-50 p-4 rounded-xl border border-emerald-200 text-center space-y-2">
                     <CheckCircle2 className="w-8 h-8 text-emerald-600 mx-auto" />
-                    <p className="font-bold text-sm text-emerald-900">Bill is Fully Settled!</p>
-                    <p className="text-xs text-emerald-700">All balances cleared. You can now close the table and print invoice.</p>
+                    <p className="font-bold text-sm text-emerald-900">{t('billing.billCompleted', null, 'Bill is Fully Settled!')}</p>
+                    <p className="text-xs text-emerald-700">{t('billing.settledDesc', null, 'All balances cleared. You can now close the table and print invoice.')}</p>
                   </div>
                 )}
 
@@ -1156,7 +1158,7 @@ export const BillingPage = () => {
                     icon={Printer}
                     onClick={handlePrintInvoice}
                   >
-                    Print Bill
+                    {t('billing.settleAndPrint', null, 'Print Bill')}
                   </Button>
                   <Button
                     variant="success"
@@ -1166,7 +1168,7 @@ export const BillingPage = () => {
                     loading={actionLoading}
                     onClick={handleCloseBill}
                   >
-                    Complete &amp; Release Table
+                    {t('billing.completeReleaseTable', null, 'Complete & Release Table')}
                   </Button>
                 </div>
               </div>
@@ -1180,8 +1182,8 @@ export const BillingPage = () => {
         <Modal
           isOpen={isBillingModifyOpen}
           onClose={() => setIsBillingModifyOpen(false)}
-          title={`Modify Order Dishes: ${selectedOrder.orderNo}`}
-          subtitle={`Adjust quantities, add extra dishes, or remove items. Price and pending settlement will update automatically.`}
+          title={`${t('billing.modifyDishes', null, 'Modify Order Dishes')}: ${selectedOrder.orderNo}`}
+          subtitle="Adjust quantities, add extra dishes, or remove items. Price and pending settlement will update automatically."
           maxWidth="max-w-4xl"
         >
           <form onSubmit={handleSaveBillingModification} className="space-y-4">
@@ -1196,9 +1198,9 @@ export const BillingPage = () => {
               {/* Left Column: Current Items in Order (5 of 12 cols) */}
               <div className="lg:col-span-5 border border-slate-200 rounded-2xl p-3.5 bg-slate-50 space-y-3">
                 <div className="flex items-center justify-between pb-2 border-b border-slate-200">
-                  <span className="text-xs font-black uppercase text-slate-700">Order Dishes</span>
+                  <span className="text-xs font-black uppercase text-slate-700">{t('kitchen.orderedDishes', null, 'Order Dishes')}</span>
                   <span className="text-xs font-extrabold text-blue-700">
-                    ₹{billingModifiedItems.reduce((acc, i) => acc + (i.quantity * i.unitPrice), 0)}
+                    ₹{formatNumber(billingModifiedItems.reduce((acc, i) => acc + (i.quantity * i.unitPrice), 0))}
                   </span>
                 </div>
 
@@ -1208,7 +1210,7 @@ export const BillingPage = () => {
                       <div className="min-w-0 flex-1">
                         <p className="font-bold text-slate-800 truncate">{itm.name || itm.productName}</p>
                         <p className="text-[11px] text-slate-400">
-                          ₹{itm.unitPrice} each • <span className="font-bold text-slate-600">₹{itm.quantity * itm.unitPrice}</span>
+                          ₹{formatNumber(itm.unitPrice)} each • <span className="font-bold text-slate-600">₹{formatNumber(itm.quantity * itm.unitPrice)}</span>
                         </p>
                       </div>
 
@@ -1220,7 +1222,7 @@ export const BillingPage = () => {
                         >
                           -
                         </button>
-                        <span className="w-6 text-center font-black text-slate-900">{itm.quantity}</span>
+                        <span className="w-6 text-center font-black text-slate-900">{formatNumber(itm.quantity)}</span>
                         <button
                           type="button"
                           onClick={() => handleAdjustBillingModQty(itm.productId || itm.id, 1)}
@@ -1247,7 +1249,7 @@ export const BillingPage = () => {
                 <div className="relative">
                   <Input
                     icon={Search}
-                    placeholder="Search dishes to add to this order..."
+                    placeholder={t('menu.searchDishes', null, 'Search dishes to add to this order...')}
                     value={billingSearch}
                     onChange={(e) => setBillingSearch(e.target.value)}
                   />
@@ -1257,7 +1259,7 @@ export const BillingPage = () => {
                       onClick={() => setBillingSearch('')}
                       className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 text-xs font-bold px-1.5 py-0.5 rounded bg-slate-100"
                     >
-                      Clear
+                      {t('common.clear', null, 'Clear')}
                     </button>
                   )}
                 </div>
@@ -1273,7 +1275,7 @@ export const BillingPage = () => {
                         : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
                     }`}
                   >
-                    All Dishes
+                    {t('common.all', null, 'All Dishes')}
                   </button>
                   {billingCategories.map((c) => (
                     <button
@@ -1297,7 +1299,7 @@ export const BillingPage = () => {
                     <div key={p.id || p._id} className="p-2 flex items-center justify-between hover:bg-slate-50 rounded-lg">
                       <div>
                         <p className="font-bold text-slate-800">{p.name}</p>
-                        <p className="text-[11px] text-slate-400">₹{p.price} • {p.station || 'Main'}</p>
+                        <p className="text-[11px] text-slate-400">₹{formatNumber(p.price)} • {p.station || 'Main'}</p>
                       </div>
                       <Button
                         type="button"
@@ -1306,7 +1308,7 @@ export const BillingPage = () => {
                         icon={Plus}
                         onClick={() => handleAddDishToBillingModified(p)}
                       >
-                        Add
+                        {t('common.add', null, 'Add')}
                       </Button>
                     </div>
                   ))}
@@ -1316,7 +1318,7 @@ export const BillingPage = () => {
 
             <div>
               <Input
-                label="Reason for Modification (Optional)"
+                label={t('billing.modReasonOptional', null, 'Reason for Modification (Optional)')}
                 placeholder="e.g. Added extra portion at checkout..."
                 value={billingModReason}
                 onChange={(e) => setBillingModReason(e.target.value)}
@@ -1325,10 +1327,10 @@ export const BillingPage = () => {
 
             <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
               <Button variant="secondary" onClick={() => setIsBillingModifyOpen(false)}>
-                Cancel
+                {t('common.cancel', null, 'Cancel')}
               </Button>
               <Button type="submit" variant="primary" loading={billingModLoading}>
-                Save Dishes &amp; Update Bill Total
+                {t('billing.saveDishesUpdate', null, 'Save Dishes & Update Bill Total')}
               </Button>
             </div>
           </form>
@@ -1340,34 +1342,34 @@ export const BillingPage = () => {
         <Modal
           isOpen={Boolean(inspectInvoiceBill)}
           onClose={() => setInspectInvoiceBill(null)}
-          title={`Settled Invoice: ${formatReceiptSequence(inspectInvoiceBill.billNo)}`}
-          subtitle={`${inspectInvoiceBill.tableNo ? `Table ${inspectInvoiceBill.tableNo}` : 'Direct Order'} • Order ${formatReceiptSequence(inspectInvoiceBill.orderNo || inspectInvoiceBill.orderNumber)} • Settled on ${new Date(inspectInvoiceBill.createdAt).toLocaleString()}`}
+          title={`${t('billing.settledInvoices', null, 'Settled Invoice')}: ${formatReceiptSequence(inspectInvoiceBill.billNo)}`}
+          subtitle={`${inspectInvoiceBill.tableNo ? `${t('orders.table', null, 'Table')} ${inspectInvoiceBill.tableNo}` : t('orders.direct', null, 'Direct Order')} • ${t('orders.orderId', null, 'Order')} ${formatReceiptSequence(inspectInvoiceBill.orderNo || inspectInvoiceBill.orderNumber)} • ${new Date(inspectInvoiceBill.createdAt).toLocaleString()}`}
           maxWidth="max-w-4xl"
         >
           <div className="space-y-5">
             {/* Top Snapshot */}
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 bg-slate-50 p-4 rounded-xl border border-slate-200 text-xs">
               <div>
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Status</span>
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">{t('orders.status', null, 'Status')}</span>
                 <span className="font-extrabold text-emerald-700 text-sm mt-0.5 block">{inspectInvoiceBill.status}</span>
               </div>
               <div>
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Cashier / Staff</span>
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">{t('users.role', null, 'Cashier / Staff')}</span>
                 <span className="font-extrabold text-slate-800 text-sm mt-0.5 block">{inspectInvoiceBill.generatedByName || inspectInvoiceBill.generatedBy || 'Staff'}</span>
               </div>
               <div>
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Guest</span>
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">{t('billing.customerInfo', null, 'Guest')}</span>
                 <span className="font-extrabold text-slate-800 text-sm mt-0.5 block">
-                  {inspectInvoiceBill.customerName || 'Walk-in Guest'}
+                  {inspectInvoiceBill.customerName || t('orders.walkinGuest', null, 'Walk-in Guest')}
                 </span>
                 {inspectInvoiceBill.customerMobile && (
                   <span className="text-[11px] text-slate-400 font-mono">{inspectInvoiceBill.customerMobile}</span>
                 )}
               </div>
               <div>
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Grand Total</span>
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">{t('billing.finalPayable', null, 'Grand Total')}</span>
                 <span className="font-black text-blue-700 text-base mt-0.5 block">
-                  ₹{Number(inspectInvoiceBill.grandTotal || 0).toLocaleString()}
+                  ₹{formatNumber(Number(inspectInvoiceBill.grandTotal || 0))}
                 </span>
               </div>
             </div>
@@ -1376,7 +1378,7 @@ export const BillingPage = () => {
             <div>
               <div className="flex items-center justify-between mb-2">
                 <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider">
-                  Ordered Dishes &amp; Quantities ({inspectInvoiceBill.items?.length || 0})
+                  {t('kitchen.orderedDishes', null, 'Ordered Dishes & Quantities')} ({formatNumber(inspectInvoiceBill.items?.length || 0)})
                 </h4>
               </div>
 
@@ -1384,20 +1386,20 @@ export const BillingPage = () => {
                 <table className="w-full text-xs text-left">
                   <thead className="bg-slate-50 text-slate-500 font-bold border-b border-slate-200">
                     <tr>
-                      <th className="py-2.5 px-3">Item / Dish</th>
-                      <th className="py-2.5 px-3 text-center">Qty</th>
-                      <th className="py-2.5 px-3 text-right">Unit Price</th>
-                      <th className="py-2.5 px-3 text-right">Total Amount</th>
+                      <th className="py-2.5 px-3">{t('menu.productName', null, 'Item / Dish')}</th>
+                      <th className="py-2.5 px-3 text-center">{t('common.qty', null, 'Qty')}</th>
+                      <th className="py-2.5 px-3 text-right">{t('menu.price', null, 'Unit Price')}</th>
+                      <th className="py-2.5 px-3 text-right">{t('common.total', null, 'Total Amount')}</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
                     {(inspectInvoiceBill.items || []).map((itm, iIdx) => (
                       <tr key={iIdx} className="hover:bg-slate-50/60">
                         <td className="py-2 px-3 font-bold text-slate-800">{itm.name || itm.productName}</td>
-                        <td className="py-2 px-3 text-center font-mono font-bold text-blue-700">{itm.quantity}x</td>
-                        <td className="py-2 px-3 text-right font-mono text-slate-600">₹{itm.unitPrice}</td>
+                        <td className="py-2 px-3 text-center font-mono font-bold text-blue-700">{formatNumber(itm.quantity)}x</td>
+                        <td className="py-2 px-3 text-right font-mono text-slate-600">₹{formatNumber(itm.unitPrice)}</td>
                         <td className="py-2 px-3 text-right font-mono font-bold text-slate-900">
-                          ₹{Number(itm.quantity * itm.unitPrice).toFixed(2)}
+                          ₹{formatNumber(Number(itm.quantity * itm.unitPrice).toFixed(2))}
                         </td>
                       </tr>
                     ))}
@@ -1411,38 +1413,38 @@ export const BillingPage = () => {
               {/* Financial Breakdown */}
               <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 text-xs space-y-2">
                 <span className="font-bold text-slate-700 uppercase tracking-wider text-[11px] block mb-1">
-                  Financial Breakdown
+                  {t('billing.billDetail', null, 'Financial Breakdown')}
                 </span>
                 <div className="flex justify-between text-slate-600">
-                  <span>Subtotal:</span>
-                  <span className="font-mono font-bold">₹{inspectInvoiceBill.subtotal}</span>
+                  <span>{t('billing.subtotalAmount', null, 'Subtotal:')}</span>
+                  <span className="font-mono font-bold">₹{formatNumber(inspectInvoiceBill.subtotal)}</span>
                 </div>
                 {inspectInvoiceBill.discountAmount > 0 && (
                   <div className="flex justify-between text-emerald-700 font-bold">
-                    <span>Discount ({inspectInvoiceBill.discountReason || 'Discount'}):</span>
-                    <span className="font-mono">-₹{inspectInvoiceBill.discountAmount}</span>
+                    <span>{t('billing.discountAmount', null, 'Discount')} ({inspectInvoiceBill.discountReason || 'Discount'}):</span>
+                    <span className="font-mono">-₹{formatNumber(inspectInvoiceBill.discountAmount)}</span>
                   </div>
                 )}
                 <div className="flex justify-between text-slate-600">
-                  <span>Taxable Base:</span>
-                  <span className="font-mono">₹{inspectInvoiceBill.taxableValue || inspectInvoiceBill.taxableAmount}</span>
+                  <span>{t('billing.taxableAmount', null, 'Taxable Base:')}</span>
+                  <span className="font-mono">₹{formatNumber(inspectInvoiceBill.taxableValue || inspectInvoiceBill.taxableAmount)}</span>
                 </div>
                 <div className="flex justify-between text-slate-600">
-                  <span>CGST + SGST:</span>
-                  <span className="font-mono">₹{inspectInvoiceBill.taxAmount || inspectInvoiceBill.tax}</span>
+                  <span>{t('billing.totalTax', null, 'CGST + SGST:')}</span>
+                  <span className="font-mono">₹{formatNumber(inspectInvoiceBill.taxAmount || inspectInvoiceBill.tax)}</span>
                 </div>
                 <div className="pt-2 border-t border-slate-200 flex justify-between items-center text-sm font-black text-slate-900">
-                  <span>Grand Total:</span>
-                  <span className="text-blue-700">₹{inspectInvoiceBill.grandTotal}</span>
+                  <span>{t('billing.finalPayable', null, 'Grand Total:')}</span>
+                  <span className="text-blue-700">₹{formatNumber(inspectInvoiceBill.grandTotal)}</span>
                 </div>
                 <div className="flex justify-between items-center text-xs font-bold text-emerald-700">
-                  <span>Total Paid:</span>
-                  <span className="font-mono">₹{inspectInvoiceBill.paidAmount}</span>
+                  <span>{t('billing.amountPaid', null, 'Total Paid:')}</span>
+                  <span className="font-mono">₹{formatNumber(inspectInvoiceBill.paidAmount)}</span>
                 </div>
                 {Number(inspectInvoiceBill.balance) > 0 && (
                   <div className="flex justify-between items-center text-xs font-bold text-red-600">
-                    <span>Balance Due:</span>
-                    <span className="font-mono">₹{inspectInvoiceBill.balance}</span>
+                    <span>{t('billing.balanceRemaining', null, 'Balance Due:')}</span>
+                    <span className="font-mono">₹{formatNumber(inspectInvoiceBill.balance)}</span>
                   </div>
                 )}
               </div>
@@ -1451,14 +1453,14 @@ export const BillingPage = () => {
               <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 text-xs space-y-2">
                 <div className="flex items-center justify-between mb-1">
                   <span className="font-bold text-slate-700 uppercase tracking-wider text-[11px]">
-                    Recorded Payments ({inspectInvoiceBill.payments?.length || 0})
+                    {t('billing.recordedPayments', null, 'Recorded Payments')} ({formatNumber(inspectInvoiceBill.payments?.length || 0)})
                   </span>
                   <button
                     type="button"
                     onClick={handleOpenExtraPayment}
                     className="text-xs font-bold text-blue-600 hover:text-blue-700 bg-white px-2 py-0.5 rounded border border-slate-200 shadow-2xs"
                   >
-                    + Add Payment
+                    {t('billing.addSplitPayment', null, '+ Add Payment')}
                   </button>
                 </div>
 
@@ -1470,7 +1472,7 @@ export const BillingPage = () => {
                         {p.reference && <span className="text-[10px] text-slate-400 font-mono ml-1.5">Ref: {p.reference}</span>}
                         <p className="text-[10px] text-slate-400 mt-0.5">{new Date(p.collectedAt || inspectInvoiceBill.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
                       </div>
-                      <span className="font-mono font-black text-emerald-700 text-sm">₹{p.amount}</span>
+                      <span className="font-mono font-black text-emerald-700 text-sm">₹{formatNumber(p.amount)}</span>
                     </div>
                   ))}
                 </div>
@@ -1486,7 +1488,7 @@ export const BillingPage = () => {
                   icon={Printer}
                   onClick={() => handleReprintInvoice(inspectInvoiceBill)}
                 >
-                  Reprint Tax Invoice
+                  {t('billing.reprint', null, 'Reprint Tax Invoice')}
                 </Button>
                 <Button
                   variant="secondary"
@@ -1494,12 +1496,12 @@ export const BillingPage = () => {
                   icon={Tag}
                   onClick={() => handleOpenDiscountModal(inspectInvoiceBill)}
                 >
-                  Adjust Discount
+                  {t('billing.discountAmount', null, 'Adjust Discount')}
                 </Button>
               </div>
 
               <Button variant="secondary" size="sm" onClick={() => setInspectInvoiceBill(null)}>
-                Close
+                {t('common.close', null, 'Close')}
               </Button>
             </div>
           </div>
@@ -1524,19 +1526,19 @@ export const BillingPage = () => {
             )}
 
             <Select
-              label="Payment Mode"
+              label={t('billing.paymentMode', null, 'Payment Mode')}
               value={extraPaymentMode}
               onChange={(e) => setExtraPaymentMode(e.target.value)}
               options={[
-                { value: PAYMENT_MODES.CASH, label: 'Cash' },
+                { value: PAYMENT_MODES.CASH, label: t('billing.cash', null, 'Cash') },
                 { value: PAYMENT_MODES.UPI, label: 'UPI / QR Code' },
-                { value: PAYMENT_MODES.CARD, label: 'Card' },
-                { value: PAYMENT_MODES.OTHER, label: 'Other' },
+                { value: PAYMENT_MODES.CARD, label: t('billing.card', null, 'Card') },
+                { value: PAYMENT_MODES.OTHER, label: t('billing.other', null, 'Other') },
               ]}
             />
 
             <Input
-              label="Payment Amount (INR)"
+              label={`${t('billing.enterPaidAmount', null, 'Payment Amount')} (₹)`}
               type="number"
               step="any"
               min="0"
@@ -1547,7 +1549,7 @@ export const BillingPage = () => {
             />
 
             <Input
-              label="Transaction / Reference Code (Optional)"
+              label={t('billing.txRefOptional', null, 'Transaction / Reference Code (Optional)')}
               value={extraPaymentRef}
               onChange={(e) => setExtraPaymentRef(e.target.value)}
               placeholder="e.g. UPI Ref / Receipt No"
@@ -1555,10 +1557,10 @@ export const BillingPage = () => {
 
             <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
               <Button variant="secondary" onClick={() => setIsExtraPaymentOpen(false)}>
-                Cancel
+                {t('common.cancel', null, 'Cancel')}
               </Button>
               <Button type="submit" variant="primary" loading={extraPaymentLoading}>
-                Save Payment Entry
+                {t('billing.recordPayment', null, 'Save Payment Entry')}
               </Button>
             </div>
           </form>
@@ -1569,20 +1571,20 @@ export const BillingPage = () => {
       <Modal
         isOpen={isNewCustModalOpen}
         onClose={() => setIsNewCustModalOpen(false)}
-        title="Register Guest Profile"
+        title={t('customers.addCustomer', null, 'Register Guest Profile')}
         subtitle="Quick save guest contact for tax invoice and visit CRM"
         maxWidth="max-w-sm"
       >
         <form onSubmit={handleCreateCustomer} className="space-y-3">
           <Input
-            label="Guest Full Name"
+            label={t('customers.customerName', null, 'Guest Full Name')}
             value={newCustName}
             onChange={(e) => setNewCustName(e.target.value)}
             placeholder="e.g. Rahul Sharma"
             required
           />
           <Input
-            label="Mobile Number"
+            label={t('customers.mobileNumber', null, 'Mobile Number')}
             value={newCustPhone}
             onChange={(e) => setNewCustPhone(e.target.value)}
             placeholder="e.g. 9876543210"
@@ -1590,10 +1592,10 @@ export const BillingPage = () => {
           />
           <div className="flex justify-end gap-2 pt-2">
             <Button variant="secondary" onClick={() => setIsNewCustModalOpen(false)}>
-              Cancel
+              {t('common.cancel', null, 'Cancel')}
             </Button>
             <Button type="submit" variant="primary">
-              Save Guest
+              {t('common.save', null, 'Save Guest')}
             </Button>
           </div>
         </form>
@@ -1603,7 +1605,7 @@ export const BillingPage = () => {
       <Modal
         isOpen={Boolean(discountModalBill)}
         onClose={() => setDiscountModalBill(null)}
-        title={`Adjust Discount: ${discountModalBill?.billNo}`}
+        title={`${t('billing.discountAmount', null, 'Adjust Discount')}: ${discountModalBill?.billNo}`}
         subtitle="Apply or modify manager-approved discount after invoice settlement"
       >
         {discountModalBill && (
@@ -1618,10 +1620,10 @@ export const BillingPage = () => {
             {discountModalSuccess ? (
               <div className="bg-emerald-50 p-4 rounded-xl border border-emerald-200 text-center space-y-2">
                 <CheckCircle2 className="w-8 h-8 text-emerald-600 mx-auto" />
-                <p className="font-bold text-sm">Discount Updated Successfully!</p>
+                <p className="font-bold text-sm">{t('billing.discountUpdatedSuccess', null, 'Discount Updated Successfully!')}</p>
                 <p className="text-xs text-emerald-700">
-                  New Grand Total: <span className="font-mono font-bold text-slate-900">₹{updatedSettledBill?.grandTotal}</span>
-                  {updatedSettledBill?.discountAmount > 0 && ` (Discount: ₹${updatedSettledBill?.discountAmount})`}
+                  {t('billing.finalPayable', null, 'New Grand Total')}: <span className="font-mono font-bold text-slate-900">₹{formatNumber(updatedSettledBill?.grandTotal)}</span>
+                  {updatedSettledBill?.discountAmount > 0 && ` (${t('billing.discountAmount', null, 'Discount')}: ₹${formatNumber(updatedSettledBill?.discountAmount)})`}
                 </p>
                 <div className="flex justify-center gap-2 pt-2">
                   <Button
@@ -1634,10 +1636,10 @@ export const BillingPage = () => {
                       });
                     }}
                   >
-                    Print Updated Tax Invoice
+                    {t('billing.reprint', null, 'Print Updated Tax Invoice')}
                   </Button>
                   <Button variant="secondary" onClick={() => setDiscountModalBill(null)}>
-                    Done
+                    {t('common.done', null, 'Done')}
                   </Button>
                 </div>
               </div>
@@ -1645,33 +1647,33 @@ export const BillingPage = () => {
               <>
                 <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 text-xs space-y-1">
                   <div className="flex justify-between">
-                    <span className="text-slate-500">Bill Subtotal:</span>
-                    <span className="font-mono font-bold text-slate-800">₹{discountModalBill.subtotal}</span>
+                    <span className="text-slate-500">{t('billing.subtotalAmount', null, 'Bill Subtotal:')}</span>
+                    <span className="font-mono font-bold text-slate-800">₹{formatNumber(discountModalBill.subtotal)}</span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-slate-500">Current Grand Total:</span>
-                    <span className="font-mono font-bold text-slate-800">₹{discountModalBill.grandTotal}</span>
+                    <span className="text-slate-500">{t('billing.finalPayable', null, 'Current Grand Total:')}</span>
+                    <span className="font-mono font-bold text-slate-800">₹{formatNumber(discountModalBill.grandTotal)}</span>
                   </div>
                   {discountModalBill.discountAmount > 0 && (
                     <div className="flex justify-between text-amber-700 font-medium">
-                      <span>Existing Discount:</span>
-                      <span>-₹{discountModalBill.discountAmount} ({discountModalBill.discountReason})</span>
+                      <span>{t('billing.discountAmount', null, 'Existing Discount')}:</span>
+                      <span>-₹{formatNumber(discountModalBill.discountAmount)} ({discountModalBill.discountReason})</span>
                     </div>
                   )}
                 </div>
 
                 <div className="grid grid-cols-2 gap-3">
                   <Select
-                    label="Discount Type"
+                    label={t('billing.discountType', null, 'Discount Type')}
                     value={modalDiscType}
                     onChange={(e) => setModalDiscType(e.target.value)}
                     options={[
-                      { value: DISCOUNT_TYPES.PERCENTAGE, label: 'Percentage (%)' },
-                      { value: DISCOUNT_TYPES.FIXED, label: 'Fixed Amount (₹)' }
+                      { value: DISCOUNT_TYPES.PERCENTAGE, label: `${t('common.percentage', null, 'Percentage')} (%)` },
+                      { value: DISCOUNT_TYPES.FIXED, label: `${t('common.fixed', null, 'Fixed Amount')} (₹)` }
                     ]}
                   />
                   <Input
-                    label="Discount Value"
+                    label={t('billing.discountValue', null, 'Discount Value')}
                     type="number"
                     min="0"
                     step="any"
@@ -1683,7 +1685,7 @@ export const BillingPage = () => {
                 </div>
 
                 <Input
-                  label="Discount Reason (Optional)"
+                  label={t('billing.discountReason', null, 'Discount Reason (Optional)')}
                   value={modalDiscReason}
                   onChange={(e) => setModalDiscReason(e.target.value)}
                   placeholder="e.g. Manager courtesy, loyalty discount"
@@ -1691,10 +1693,10 @@ export const BillingPage = () => {
 
                 <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
                   <Button variant="secondary" onClick={() => setDiscountModalBill(null)}>
-                    Cancel
+                    {t('common.cancel', null, 'Cancel')}
                   </Button>
                   <Button type="submit" variant="primary" loading={discountModalLoading}>
-                    Apply &amp; Update Invoice
+                    {t('billing.applyUpdateInvoice', null, 'Apply & Update Invoice')}
                   </Button>
                 </div>
               </>

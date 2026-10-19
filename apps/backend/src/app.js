@@ -27,13 +27,7 @@ export function createApp() {
   app.use(
     cors({
       origin: (origin, callback) => {
-        if (
-          !origin ||
-          env.corsAllowedOrigins.includes(origin) ||
-          env.nodeEnv !== 'production' ||
-          origin.endsWith('.azurestaticapps.net') ||
-          origin.includes('azurestaticapps.net')
-        ) {
+        if (!origin || env.corsAllowedOrigins.includes(origin) || env.nodeEnv !== 'production') {
           return callback(null, true);
         }
         return callback(null, false);
@@ -52,8 +46,8 @@ export function createApp() {
   );
 
   // Body parsers
-  app.use(express.json({ limit: '2mb' }));
-  app.use(express.urlencoded({ extended: true }));
+  app.use(express.json({ limit: '10mb' }));
+  app.use(express.urlencoded({ limit: '10mb', extended: true }));
 
   // Cross-cutting middlewares
   app.use(correlationIdMiddleware);

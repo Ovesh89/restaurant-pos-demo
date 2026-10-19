@@ -62,7 +62,7 @@ export const env = {
   jwtRefreshExpirationDays: Number(process.env.JWT_REFRESH_EXPIRATION_DAYS) || 7,
   corsAllowedOrigins: (
     process.env.CORS_ALLOWED_ORIGINS ||
-    'https://green-moss-06bd6fe00.azurestaticapps.net,https://green-moss-06bd6fe00.2.azurestaticapps.net,http://localhost:3000,http://127.0.0.1:3000,http://localhost:5173,http://127.0.0.1:5173,http://localhost:8081'
+    'http://localhost:3000,http://127.0.0.1:3000,http://localhost:5173,http://127.0.0.1:5173,http://localhost:8081'
   )
     .split(',')
     .map((o) => o.trim())

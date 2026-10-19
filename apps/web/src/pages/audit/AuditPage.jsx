@@ -7,8 +7,10 @@ import { Input } from '../../components/common/Input';
 import { Select } from '../../components/common/Select';
 import { Badge } from '../../components/common/Badge';
 import { DataTable } from '../../components/common/DataTable';
+import { useTranslation } from '../../hooks/useTranslation';
 
 export const AuditPage = () => {
+  const { t, formatNumber } = useTranslation();
   const [logs, setLogs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [purging, setPurging] = useState(false);
@@ -90,7 +92,7 @@ export const AuditPage = () => {
 
   const columns = [
     {
-      header: 'Timestamp',
+      header: t('audit.timestamp', 'Timestamp'),
       accessor: 'timestamp',
       className: 'w-40 font-mono text-xs text-slate-500',
       render: (row) => (
@@ -103,7 +105,7 @@ export const AuditPage = () => {
       )
     },
     {
-      header: 'Actor / User',
+      header: t('audit.actor', 'Actor / User'),
       accessor: 'actorName',
       render: (row) => (
         <span className="font-bold text-slate-800 text-xs">
@@ -112,7 +114,7 @@ export const AuditPage = () => {
       )
     },
     {
-      header: 'Action',
+      header: t('audit.action', 'Action'),
       accessor: 'action',
       render: (row) => (
         <Badge variant={getActionBadgeVariant(row.action)} size="sm">
@@ -121,7 +123,7 @@ export const AuditPage = () => {
       )
     },
     {
-      header: 'Entity',
+      header: t('audit.entity', 'Entity'),
       accessor: 'entityType',
       render: (row) => (
         <span className="text-xs font-semibold text-slate-600 bg-slate-100 px-2 py-0.5 rounded">
@@ -130,7 +132,7 @@ export const AuditPage = () => {
       )
     },
     {
-      header: 'Details & Operational Audit Notes',
+      header: t('audit.details', 'Details & Operational Audit Notes'),
       accessor: 'details',
       render: (row) => (
         <div className="text-xs text-slate-700 max-w-xl">
@@ -148,8 +150,8 @@ export const AuditPage = () => {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Operational Audit Trail"
-        subtitle="Immutable chronological history of all security, pricing, and administrative events"
+        title={t('audit.title', 'Operational Audit Trail')}
+        subtitle={t('audit.subtitle', 'Immutable chronological history of all security, pricing, and administrative events')}
       >
         <div className="flex items-center gap-2">
           <Button
@@ -160,10 +162,10 @@ export const AuditPage = () => {
             title="Purge logs older than 30 days immediately"
             className="text-slate-600 hover:text-rose-600 hover:border-rose-300"
           >
-            Purge &gt; 30 Days
+            {t('audit.purgeOld', 'Purge > 30 Days')}
           </Button>
           <Button variant="secondary" icon={RefreshCw} onClick={loadLogs} loading={loading}>
-            Refresh Trail
+            {t('audit.refreshTrail', 'Refresh Trail')}
           </Button>
         </div>
       </PageHeader>
@@ -204,7 +206,7 @@ export const AuditPage = () => {
         <form onSubmit={handleSearchSubmit} className="w-full sm:w-72 flex gap-2">
           <Input
             icon={Search}
-            placeholder="Search details or actor..."
+            placeholder={t('common.search', 'Search details or actor...')}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
@@ -215,7 +217,7 @@ export const AuditPage = () => {
             value={actionFilter}
             onChange={(e) => setActionFilter(e.target.value)}
             options={[
-              { value: '', label: 'All Event Actions' },
+              { value: '', label: t('common.all', 'All Event Actions') },
               { value: 'USER_LOGIN', label: 'USER_LOGIN' },
               { value: 'PRODUCT_PRICE_CHANGED', label: 'PRODUCT_PRICE_CHANGED' },
               { value: 'PRODUCT_CREATED', label: 'PRODUCT_CREATED' },
@@ -230,7 +232,7 @@ export const AuditPage = () => {
         </div>
 
         <div className="sm:ml-auto text-xs text-slate-500 font-semibold text-right sm:text-left">
-          Total Logs: {pagination?.total ?? logs.length} entries
+          {t('common.total', 'Total Logs')}: {formatNumber(pagination?.total ?? logs.length)}
         </div>
       </div>
 
@@ -239,7 +241,7 @@ export const AuditPage = () => {
         columns={columns}
         data={logs}
         loading={loading}
-        emptyMessage="No audit log entries match your filter."
+        emptyMessage={t('audit.noLogs', 'No audit log entries match your filter.')}
         pagination={pagination}
         onPageChange={(p) => {
           setPage(p);

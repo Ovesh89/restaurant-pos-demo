@@ -3,7 +3,9 @@ node_modules/
 apps/*/node_modules/
 
 # Build output
+dist/
 build/
+apps/*/dist/
 apps/*/build/
 
 # Environment variables & secrets
@@ -13,7 +15,6 @@ apps/*/build/
 apps/*/.env
 apps/*/.env.local
 apps/*/.env.*.local
-!apps/web/.env.production
 
 # Logs & runtime data
 logs/

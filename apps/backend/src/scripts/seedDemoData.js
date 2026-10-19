@@ -12,7 +12,8 @@ export function makePbkdf2Hash(password, salt = 'posmernsalt2026', iterations = 
 }
 
 /**
- * Idempotently seed pure veg restaurant profile & menu catalog data into restaurant_pos_demo.
+ * Idempotently seed live restaurant profile & menu catalog data into restaurant_pos_mern_dev (or test DB).
+ * Populates Green Tandoor Se Garden Restaurant menu (17 categories, 159 products) directly from menu card.
  */
 export async function seedDemoData(db = null) {
   const targetDb = db || (await getDatabase());
@@ -95,15 +96,15 @@ export async function seedDemoData(db = null) {
     );
   }
 
-  // 3. Seed Users with Demo Restaurant Profiles
+  // 3. Seed Users with Updated Restaurant Owner Profile
   const demoUsers = [
-    ['user-owner', 'owner', 'owner123', 'Demo Restaurant Owner', ['role-owner'], restaurantProfile.email, '9876543210'],
-    ['user-admin', 'admin', 'admin123', 'Branch Administrator', ['role-admin'], 'admin@posdemo.local', '9876543211'],
-    ['user-manager', 'manager', 'manager123', 'Floor Manager', ['role-manager'], 'manager@posdemo.local', '9876543212'],
-    ['user-reception', 'reception', 'reception123', 'Reception Desk', ['role-reception'], 'reception@posdemo.local', '9876543210'],
-    ['user-cashier', 'cashier', 'cashier123', 'Main Cashier', ['role-cashier'], 'cashier@posdemo.local', '9876543210'],
-    ['user-captain', 'captain', 'captain123', 'Captain Rahul', ['role-captain'], 'captain@posdemo.local', '9876543210'],
-    ['user-kitchen', 'kitchen', 'kitchen123', 'Head Chef Vikram', ['role-kitchen'], 'kitchen@posdemo.local', '9876543210'],
+    ['user-owner', 'owner', 'owner123', 'Green Tandoor Owner', ['role-owner'], restaurantProfile.email, '9737581238'],
+    ['user-admin', 'admin', 'admin123', 'Branch Admin', ['role-admin'], 'admin@greentandoor.local', '8866515313'],
+    ['user-manager', 'manager', 'manager123', 'Floor Manager', ['role-manager'], 'manager@greentandoor.local', '9825071709'],
+    ['user-reception', 'reception', 'reception123', 'Reception Desk', ['role-reception'], 'reception@greentandoor.local', '9737581238'],
+    ['user-cashier', 'cashier', 'cashier123', 'Main Cashier', ['role-cashier'], 'cashier@greentandoor.local', '9737581238'],
+    ['user-captain', 'captain', 'captain123', 'Captain Rahul', ['role-captain'], 'captain@greentandoor.local', '9737581238'],
+    ['user-kitchen', 'kitchen', 'kitchen123', 'Head Chef Vikram', ['role-kitchen'], 'kitchen@greentandoor.local', '9737581238'],
   ];
 
   for (const [uid, username, pwd, displayName, roleIds, email, mobile] of demoUsers) {
@@ -124,6 +125,7 @@ export async function seedDemoData(db = null) {
           id: uid,
           username,
           passwordHash: makePbkdf2Hash(pwd),
+          language: 'en',
           lastLoginAt: null,
           createdAt: now,
         },
@@ -191,45 +193,7 @@ export async function seedDemoData(db = null) {
     );
   }
 
-  // 6. Seed Sequence Counters
-  const currentYear = new Date().getFullYear();
-  const countersToSeed = [
-    { _id: `ord_MAIN_${currentYear}`, branchId: 'MAIN', seq: 0, year: currentYear },
-    { _id: `kot_MAIN_${currentYear}`, branchId: 'MAIN', seq: 0, year: currentYear },
-    { _id: `bill_MAIN_${currentYear}`, branchId: 'MAIN', seq: 0, year: currentYear },
-  ];
-  for (const counter of countersToSeed) {
-    await targetDb.collection('counters').updateOne(
-      { _id: counter._id },
-      { $setOnInsert: counter },
-      { upsert: true }
-    );
-  }
-
-  // 7. Seed Demo Customer Profile
-  await targetDb.collection('customers').updateOne(
-    { _id: 'cust-demo-1' },
-    {
-      $set: {
-        name: 'Demo Guest',
-        mobile: '9876543210',
-        email: 'guest@posdemo.local',
-        branchId,
-        isActive: true,
-        updatedAt: now,
-      },
-      $setOnInsert: {
-        _id: 'cust-demo-1',
-        id: 'cust-demo-1',
-        visitsCount: 1,
-        totalSpent: '0.00',
-        createdAt: now,
-      },
-    },
-    { upsert: true }
-  );
-
-  // 8. Seed Pure Veg Menu Categories
+  // 6. Seed 17 Menu Categories from Menu Card
   const validCategoryIds = [];
   for (const [cid, code, name, description, sortOrder] of categories) {
     validCategoryIds.push(cid);
@@ -255,24 +219,24 @@ export async function seedDemoData(db = null) {
     );
   }
 
-  // Soft-deactivate any legacy categories not in current pure veg menu
+  // Soft-deactivate any legacy demo categories not present in the live menu
   await targetDb.collection('categories').updateMany(
     { branchId, _id: { $nin: validCategoryIds } },
     { $set: { isActive: false, updatedAt: now } }
   );
 
-  // 9. Seed Pure Veg Menu Catalog + Price History
+  // 7. Seed Full 159-Dish Menu Catalog + Price History
   const validProductIds = [];
   for (const [pid, catId, code, name, price, station, sortOrder] of products) {
     validProductIds.push(pid);
-    await targetDb.collection('products').updateOne(
+    const res = await targetDb.collection('products').updateOne(
       { _id: pid },
       {
         $set: {
           categoryId: catId,
           code,
           name,
-          description: `Freshly prepared pure vegetarian ${name}`,
+          description: `Freshly prepared ${name}`,
           currentPrice: price,
           currency: 'INR',
           taxConfig: { rate: '5.00', mode: 'EXCLUSIVE' },
@@ -306,9 +270,9 @@ export async function seedDemoData(db = null) {
           productId: pid,
           branchId,
           oldPrice: null,
-          reason: 'Initial pure veg demo catalog seed',
+          reason: 'Initial menu card catalog seed',
           changedByUserId: 'user-owner',
-          changedByName: 'Demo Restaurant Owner',
+          changedByName: 'Green Tandoor Owner',
           changedAt: now,
           createdAt: now,
         },
@@ -317,7 +281,7 @@ export async function seedDemoData(db = null) {
     );
   }
 
-  // Soft-deactivate any products not in current pure veg menu
+  // Soft-deactivate legacy demo products not in current live menu card
   await targetDb.collection('products').updateMany(
     { branchId, _id: { $nin: validProductIds } },
     { $set: { available: false, isActive: false, updatedAt: now } }
@@ -332,7 +296,7 @@ if (isMain) {
     .then(async () => {
       const db = await getDatabase();
       console.log(
-        `[seed-demo-data] Successfully seeded pure veg demo catalog into "${db.databaseName}" (7 roles, 7 users, 3 areas, 20 tables, ${categories.length} categories, ${products.length} products).`
+        `[seed-demo-data] Successfully seeded live menu into "${db.databaseName}" (7 roles, 7 users, 3 areas, 20 tables, 17 categories, 159 products).`
       );
       await closeMongoConnection();
       process.exit(0);

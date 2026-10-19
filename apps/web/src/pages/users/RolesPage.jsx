@@ -6,9 +6,11 @@ import { PageHeader } from '../../components/common/PageHeader';
 import { Button } from '../../components/common/Button';
 import { Badge } from '../../components/common/Badge';
 import { PERMISSION_DEFINITIONS, PERMISSIONS } from '../../constants/permissions';
+import { useTranslation } from '../../hooks/useTranslation';
 
 export const RolesPage = () => {
   const { user: currentUser } = useAuth();
+  const { t, formatNumber } = useTranslation();
 
   const [roles, setRoles] = useState([]);
   const [selectedRoleId, setSelectedRoleId] = useState('');
@@ -81,8 +83,8 @@ export const RolesPage = () => {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Roles & Permission Matrix"
-        subtitle="Manage role-based access control (RBAC) and configure granular operation rights"
+        title={t('roles.title', 'Roles & Permission Matrix')}
+        subtitle={t('roles.subtitle', 'Manage role-based access control (RBAC) and configure granular operation rights')}
       />
 
       {message.text && (
@@ -102,7 +104,7 @@ export const RolesPage = () => {
         {/* Roles List */}
         <div className="bg-white rounded-2xl border border-slate-200 p-3 sm:p-4 shadow-sm">
           <h2 className="text-xs font-bold uppercase tracking-wider text-slate-400 px-1 mb-2 sm:mb-3">
-            System Roles
+            {t('auth.systemRole', 'System Roles')}
           </h2>
           <div className="flex lg:flex-col overflow-x-auto lg:overflow-visible gap-1.5 sm:gap-2 no-scrollbar pb-1 lg:pb-0">
             {roles.map((r) => {
@@ -122,7 +124,7 @@ export const RolesPage = () => {
                     <span>{r.label}</span>
                   </div>
                   <span className="text-[10px] font-mono bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded-full ml-2">
-                    {r.permissions?.length || 0}
+                    {formatNumber(r.permissions?.length || 0)}
                   </span>
                 </button>
               );
@@ -137,7 +139,7 @@ export const RolesPage = () => {
               <div>
                 <div className="flex items-center gap-2">
                   <h3 className="text-lg font-black text-slate-800 tracking-tight">
-                    {selectedRole?.label} Permissions
+                    {selectedRole?.label} {t('roles.permissions', 'Permissions')}
                   </h3>
                   {selectedRole?.name === 'owner' && (
                     <Badge variant="danger" size="sm">Universal Master</Badge>
@@ -157,7 +159,7 @@ export const RolesPage = () => {
                   onClick={handleSave}
                   loading={saving}
                 >
-                  Save Matrix Changes
+                  {t('common.save', 'Save Matrix Changes')}
                 </Button>
               )}
             </div>
@@ -169,7 +171,7 @@ export const RolesPage = () => {
                 return (
                   <div key={mod} className="space-y-2">
                     <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400">
-                      {mod} Module
+                      {mod}
                     </h4>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
                       {perms.map((p) => {
@@ -216,7 +218,7 @@ export const RolesPage = () => {
                 onClick={handleSave}
                 loading={saving}
               >
-                Save Matrix Changes
+                {t('common.save', 'Save Matrix Changes')}
               </Button>
             </div>
           )}

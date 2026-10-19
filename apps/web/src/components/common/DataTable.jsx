@@ -1,21 +1,25 @@
 import React from 'react';
 import { Pagination } from './Pagination.jsx';
+import { useTranslation } from '../../hooks/useTranslation';
 
 export const DataTable = ({
   columns = [],
   data = [],
   loading = false,
-  emptyMessage = 'No records found.',
+  emptyMessage = null,
   pagination = null,
   onPageChange = null,
   onPageSizeChange = null,
   pageSizeOptions = [10, 20, 50, 100],
 }) => {
+  const { t } = useTranslation();
+  const defaultEmptyMsg = emptyMessage || t('common.noRecords', null, 'No records found.');
+
   if (loading) {
     return (
       <div className="bg-white rounded-xl border border-slate-200 p-12 text-center">
         <div className="inline-block animate-spin rounded-full h-8 w-8 border-4 border-slate-200 border-t-blue-600 mb-3"></div>
-        <p className="text-sm font-medium text-slate-500">Loading records...</p>
+        <p className="text-sm font-medium text-slate-500">{t('common.loading', null, 'Loading records...')}</p>
       </div>
     );
   }
@@ -23,7 +27,7 @@ export const DataTable = ({
   if (data.length === 0) {
     return (
       <div className="bg-white rounded-xl border border-slate-200 p-12 text-center">
-        <p className="text-sm font-medium text-slate-500">{emptyMessage}</p>
+        <p className="text-sm font-medium text-slate-500">{defaultEmptyMsg}</p>
       </div>
     );
   }

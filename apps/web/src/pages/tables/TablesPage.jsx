@@ -10,12 +10,14 @@ import { Input } from '../../components/common/Input';
 import { Select } from '../../components/common/Select';
 import { Modal } from '../../components/common/Modal';
 import { Badge } from '../../components/common/Badge';
-import { TABLE_STATUS_CONFIG, TABLE_STATUS } from '../../constants/tableStatus';
+import { TABLE_STATUS_CONFIG, TABLE_STATUS, getTableStatusConfig } from '../../constants/tableStatus';
 import { PERMISSIONS } from '../../constants/permissions';
 import { DiningAreaManager } from '../../components/restaurant/DiningAreaManager.jsx';
+import { useTranslation } from '../../hooks/useTranslation';
 
 export const TablesPage = () => {
   const { user, hasPermission, hasAnyPermission } = useAuth();
+  const { t, formatNumber } = useTranslation();
   const navigate = useNavigate();
   const canManage = hasPermission(PERMISSIONS.TABLE_MANAGE);
 
@@ -170,16 +172,16 @@ export const TablesPage = () => {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Restaurant Table Floor"
-        subtitle="Floor layout visualizer, dining sections, table seating capacity, and status overview"
+        title={t('tables.title', 'Restaurant Table Floor')}
+        subtitle={t('tables.subtitle', 'Floor layout visualizer, dining sections, table seating capacity, and status overview')}
       >
         {canManage && (
           <div className="flex items-center gap-2">
             <Button variant="secondary" icon={Layers} onClick={() => setIsAreaModalOpen(true)}>
-              Manage Areas
+              {t('tables.manageAreas', 'Manage Areas')}
             </Button>
             <Button variant="primary" icon={Plus} onClick={handleOpenAdd}>
-              Add Table
+              {t('tables.addTable', 'Add Table')}
             </Button>
           </div>
         )}
@@ -197,7 +199,7 @@ export const TablesPage = () => {
                 : 'bg-white text-slate-600 hover:bg-slate-50 border border-slate-200'
             }`}
           >
-            All Areas ({tables.length})
+            {t('common.all', 'All Areas')} ({formatNumber(tables.length)})
           </button>
           {areas.map((a) => {
             const count = tables.filter((t) => t.areaId === a.id).length;
@@ -211,7 +213,7 @@ export const TablesPage = () => {
                     : 'bg-white text-slate-600 hover:bg-slate-50 border border-slate-200'
                 }`}
               >
-                {a.name} ({count})
+                {a.name} ({formatNumber(count)})
               </button>
             );
           })}
@@ -221,19 +223,19 @@ export const TablesPage = () => {
         <div className="flex items-center gap-2.5 sm:gap-3 text-[10px] sm:text-[11px] font-semibold text-slate-600 flex-wrap">
           <div className="flex items-center gap-1.5">
             <span className="w-2.5 h-2.5 rounded-full bg-emerald-500"></span>
-            <span>Available</span>
+            <span>{t('common.available', 'Available')}</span>
           </div>
           <div className="flex items-center gap-1.5">
             <span className="w-2.5 h-2.5 rounded-full bg-blue-500"></span>
-            <span>Occupied</span>
+            <span>{t('common.occupied', 'Occupied')}</span>
           </div>
           <div className="flex items-center gap-1.5">
             <span className="w-2.5 h-2.5 rounded-full bg-amber-500"></span>
-            <span>KOT Sent</span>
+            <span>{t('orders.kotSent', 'KOT Sent')}</span>
           </div>
           <div className="flex items-center gap-1.5">
             <span className="w-2.5 h-2.5 rounded-full bg-rose-500"></span>
-            <span>Bill Pending</span>
+            <span>{t('common.billed', 'Bill Pending')}</span>
           </div>
         </div>
       </div>
@@ -241,16 +243,16 @@ export const TablesPage = () => {
       {/* Tables Grid */}
       {loading ? (
         <div className="bg-white rounded-2xl border border-slate-200 p-12 text-center text-slate-500 font-medium">
-          Loading restaurant table floor...
+          {t('common.loading', 'Loading restaurant table floor...')}
         </div>
       ) : displayedTables.length === 0 ? (
         <div className="bg-white rounded-2xl border border-slate-200 p-12 text-center text-slate-500 font-medium">
-          No dining tables configured in this area.
+          {t('tables.noTables', 'No dining tables configured in this area.')}
         </div>
       ) : (
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3 sm:gap-4">
           {displayedTables.map((tbl) => {
-            const statusConfig = TABLE_STATUS_CONFIG[tbl.status] || TABLE_STATUS_CONFIG[TABLE_STATUS.AVAILABLE];
+            const statusConfig = getTableStatusConfig(tbl.status, t) || getTableStatusConfig(TABLE_STATUS.AVAILABLE, t);
             const handleCardClick = () => {
               if (!tbl.isActive) return;
               if (tbl.status === TABLE_STATUS.AVAILABLE) {
@@ -295,7 +297,7 @@ export const TablesPage = () => {
                 <div className="my-1.5 sm:my-2">
                   <div className="flex items-center gap-1 text-[11px] sm:text-xs text-slate-600 font-semibold">
                     <Users className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                    <span>{tbl.capacity} Pax</span>
+                    <span>{t('tables.seats', { count: tbl.capacity }, `${formatNumber(tbl.capacity)} Pax`)}</span>
                   </div>
                 </div>
 
@@ -306,7 +308,7 @@ export const TablesPage = () => {
                       onClick={() => navigate(`/orders/new?tableId=${tbl.id}`)}
                       className="text-[11px] font-bold text-blue-600 hover:text-blue-700 bg-blue-50 px-2 py-0.5 rounded-lg border border-blue-200"
                     >
-                      + Take Order
+                      + {t('orders.newOrder', 'Take Order')}
                     </button>
                   ) : tbl.status === TABLE_STATUS.BILL_PENDING && hasAnyPermission([PERMISSIONS.BILLING_GENERATE, PERMISSIONS.PAYMENT_COLLECT]) ? (
                     <button
@@ -314,14 +316,14 @@ export const TablesPage = () => {
                       className="text-[11px] font-bold text-emerald-700 hover:text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded-lg border border-emerald-300 flex items-center gap-1"
                     >
                       <Receipt className="w-3 h-3" />
-                      Collect Bill
+                      {t('billing.recordPayment', 'Collect Bill')}
                     </button>
                   ) : (
                     <button
                       onClick={() => navigate('/orders')}
                       className="text-[11px] font-bold text-amber-700 hover:text-amber-800 bg-amber-50 px-2 py-0.5 rounded-lg border border-amber-200"
                     >
-                      View Order
+                      {t('orders.viewDetails', 'View Order')}
                     </button>
                   )}
 
@@ -348,7 +350,7 @@ export const TablesPage = () => {
                         onClick={(e) => handleToggleActive(tbl, e)}
                         className="text-[10px] font-semibold text-slate-500 hover:text-slate-800 px-1 py-0.5 rounded hover:bg-slate-100"
                       >
-                        {tbl.isActive ? 'Deact.' : 'Act.'}
+                        {tbl.isActive ? t('common.deactivate', 'Deact.') : t('common.activate', 'Act.')}
                       </button>
                     </div>
                   )}
@@ -363,8 +365,8 @@ export const TablesPage = () => {
       <Modal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
-        title={editingTable ? `Edit Table ${editingTable.tableNo}` : 'Add Dining Table'}
-        subtitle="Configure table identification and seating pax"
+        title={editingTable ? `${t('tables.editTable', 'Edit Table')} ${editingTable.tableNo}` : t('tables.addTable', 'Add Dining Table')}
+        subtitle={t('tables.subtitle', 'Configure table identification and seating pax')}
       >
         <form onSubmit={handleSubmit} className="space-y-4">
           {formError && (
@@ -375,7 +377,7 @@ export const TablesPage = () => {
 
           <div className="grid grid-cols-2 gap-4">
             <Input
-              label="Table Number"
+              label={t('tables.tableNumber', 'Table Number')}
               placeholder="e.g. 05, 21, VIP-1"
               value={formData.tableNo}
               onChange={(e) => setFormData({ ...formData, tableNo: e.target.value })}
@@ -383,7 +385,7 @@ export const TablesPage = () => {
             />
 
             <Input
-              label="Seating Capacity (Pax)"
+              label={t('tables.capacity', 'Seating Capacity (Pax)')}
               type="number"
               min="1"
               max="30"
@@ -394,7 +396,7 @@ export const TablesPage = () => {
           </div>
 
           <Select
-            label="Assigned Dining Area"
+            label={t('tables.area', 'Assigned Dining Area')}
             value={formData.areaId}
             onChange={(e) => setFormData({ ...formData, areaId: e.target.value })}
             options={areas.map((a) => ({ value: a.id, label: a.name }))}
@@ -403,10 +405,10 @@ export const TablesPage = () => {
 
           <div className="flex justify-end gap-2 pt-4 border-t border-slate-100">
             <Button variant="secondary" onClick={() => setIsModalOpen(false)}>
-              Cancel
+              {t('common.cancel', 'Cancel')}
             </Button>
             <Button type="submit" loading={formLoading}>
-              {editingTable ? 'Save Table' : 'Create Table'}
+              {editingTable ? t('common.save', 'Save Table') : t('common.create', 'Create Table')}
             </Button>
           </div>
         </form>
@@ -416,8 +418,8 @@ export const TablesPage = () => {
       <Modal
         isOpen={isTransferModalOpen}
         onClose={() => setIsTransferModalOpen(false)}
-        title={`Transfer Table T-${transferSourceTable?.tableNo}`}
-        subtitle="Relocate ongoing active order and kitchen tickets to another available table"
+        title={`${t('tables.transferTable', 'Transfer Table')} T-${transferSourceTable?.tableNo}`}
+        subtitle={t('tables.transferSubtitle', 'Relocate ongoing active order and kitchen tickets to another available table')}
       >
         <form onSubmit={handleConfirmTransfer} className="space-y-4">
           {transferError && (
@@ -434,7 +436,7 @@ export const TablesPage = () => {
           </div>
 
           <Select
-            label="Destination Available Table"
+            label={t('tables.destTable', 'Destination Available Table')}
             value={transferTargetTableId}
             onChange={(e) => setTransferTargetTableId(e.target.value)}
             options={tables
@@ -447,7 +449,7 @@ export const TablesPage = () => {
           />
 
           <Input
-            label="Reason for Transfer"
+            label={t('tables.transferReason', 'Reason for Transfer')}
             placeholder="e.g. Guest requested window booth / AC section"
             value={transferReason}
             onChange={(e) => setTransferReason(e.target.value)}
@@ -455,10 +457,10 @@ export const TablesPage = () => {
 
           <div className="flex justify-end gap-2 pt-4 border-t border-slate-100">
             <Button variant="secondary" onClick={() => setIsTransferModalOpen(false)}>
-              Cancel
+              {t('common.cancel', 'Cancel')}
             </Button>
             <Button type="submit" variant="primary" icon={ArrowRightLeft} loading={transferLoading}>
-              Confirm Transfer
+              {t('tables.confirmTransfer', 'Confirm Transfer')}
             </Button>
           </div>
         </form>
@@ -471,7 +473,7 @@ export const TablesPage = () => {
           setIsAreaModalOpen(false);
           loadFloor();
         }}
-        title="Manage Assigned Dining Areas"
+        title={t('tables.manageAreas', 'Manage Assigned Dining Areas')}
         subtitle="Add, edit, toggle active status, and remove restaurant floor sections"
         maxWidth="max-w-4xl"
       >

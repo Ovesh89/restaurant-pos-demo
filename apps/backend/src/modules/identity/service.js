@@ -241,6 +241,7 @@ export class IdentityService {
       roleIds: data.roleIds.map(String),
       branchIds: Array.isArray(data.branchIds) ? data.branchIds.map(String) : ['branch-main'],
       isActive: data.isActive !== undefined ? Boolean(data.isActive) : true,
+      language: data.language ? String(data.language).trim() : 'en',
       lastLoginAt: null,
     };
 
@@ -286,6 +287,9 @@ export class IdentityService {
     }
     if ('email' in data) updateFields.email = data.email;
     if ('mobile' in data) updateFields.mobile = data.mobile;
+    if ('language' in data || 'preferredLanguage' in data) {
+      updateFields.language = String(data.language || data.preferredLanguage || 'en').trim();
+    }
     if (data.password) {
       if (String(data.password).length < 4) {
         throw new ValidationAppError('Password must be at least 4 characters.');

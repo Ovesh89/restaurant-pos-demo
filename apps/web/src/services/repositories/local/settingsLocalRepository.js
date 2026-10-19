@@ -2,22 +2,31 @@ import { STORAGE_KEYS } from '../../../constants/storageKeys.js';
 import { storageAdapter } from '../../storage/localStorageAdapter.js';
 import { auditRepository } from '../auditRepository.js';
 
+import { DEFAULT_LOGOS } from '../../../utils/logoProcessor.js';
+
 export const DEFAULT_SETTINGS = {
-  restaurantName: 'Green Garden Pure Veg',
-  tagline: 'Pure Vegetarian Dining & Banquet',
+  restaurantName: 'Green Tandoor Se',
+  tagline: 'Garden Restaurant',
   branchName: 'Main Branch (Gandhinagar)',
-  address: '101, City Centre, Near Central Park, Sector 11, Gandhinagar - 382010',
-  phone: '+91 98765 43210',
-  email: 'info@greengardenveg.demo',
-  gstin: '24AABCG1234F1Z8',
+  address: 'Opp. SP Petrol Pump, Gandhinagar, Chiloda Cross Road, Gandhinagar.',
+  phone: '+91 97375 81238',
+  email: 'greentandoorse@gmail.com',
+  gstin: '24ABCDE1234F1Z5',
   fssai: '13320001000123',
   currencySymbol: '₹',
   defaultTaxRate: 5.0,
   maxDiscountPercent: 25.0,
+  upiId: 'q705457761@ybl',
   invoicePrefix: 'INV-',
   kotPrefix: 'KOT-',
   thermalWidth: '80mm',
-  receiptFooter: 'Order once placed will not be cancelled. 100% Pure Vegetarian Kitchen.'
+  receiptFooter: 'Order once placed will not be cancelled. Thank You for Dining With Us!',
+  logo: DEFAULT_LOGOS.logo,
+  logoWhite: DEFAULT_LOGOS.logoWhite,
+  logoBlack: DEFAULT_LOGOS.logoBlack,
+  logoReceipt: DEFAULT_LOGOS.logoReceipt,
+  logoRedReceipt: DEFAULT_LOGOS.logoRedReceipt,
+  favicon: DEFAULT_LOGOS.favicon
 };
 
 class SettingsLocalRepository {

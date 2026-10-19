@@ -23,9 +23,11 @@ import { Input } from '../../components/common/Input';
 import { Modal } from '../../components/common/Modal';
 import { Badge } from '../../components/common/Badge';
 import { DataTable } from '../../components/common/DataTable';
+import { useTranslation } from '../../hooks/useTranslation';
 
 export const ShiftsPage = () => {
   const { user } = useAuth();
+  const { t, formatNumber, formatCurrency } = useTranslation();
 
   const [activeShift, setActiveShift] = useState(null);
   const [shiftSummary, setShiftSummary] = useState(null);
@@ -164,69 +166,70 @@ export const ShiftsPage = () => {
 
   const shiftColumns = [
     {
-      header: 'Shift #',
+      header: t('shifts.currentShift', 'Shift #'),
       accessor: 'shiftNo',
-      className: 'font-mono font-bold text-blue-600'
+      className: 'font-mono font-bold text-blue-600',
+      render: (row) => `#${formatNumber(row.shiftNo)}`
     },
     {
-      header: 'Cashier / Operator',
+      header: t('orders.captain', 'Cashier / Operator'),
       accessor: 'cashierName',
       render: (row) => <span className="font-semibold text-slate-800">{row.cashierName}</span>
     },
     {
-      header: 'Opened At',
+      header: t('shifts.openedAt', 'Opened At'),
       accessor: 'openedAt',
       className: 'text-xs text-slate-500',
       render: (row) => new Date(row.openedAt).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })
     },
     {
-      header: 'Closed At',
+      header: t('shifts.closedAt', 'Closed At'),
       accessor: 'closedAt',
       className: 'text-xs text-slate-500',
-      render: (row) => (row.closedAt ? new Date(row.closedAt).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }) : '— Active —')
+      render: (row) => (row.closedAt ? new Date(row.closedAt).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }) : `— ${t('common.active', 'Active')} —`)
     },
     {
-      header: 'Opening Float',
+      header: t('shifts.openingFloat', 'Opening Float'),
       accessor: 'openingFloat',
-      render: (row) => `₹${(row.openingFloat || 0).toLocaleString()}`
+      render: (row) => formatCurrency(row.openingFloat || 0)
     },
     {
-      header: 'Expected Cash',
+      header: t('shifts.expectedCash', 'Expected Cash'),
       accessor: 'expectedCash',
-      render: (row) => `₹${(row.expectedCash || 0).toLocaleString()}`
+      render: (row) => formatCurrency(row.expectedCash || 0)
     },
     {
-      header: 'Actual Count',
+      header: t('shifts.actualCash', 'Actual Count'),
       accessor: 'actualCash',
-      render: (row) => (row.status === SHIFT_STATUS.CLOSED ? `₹${(row.actualCash || 0).toLocaleString()}` : '—')
+      render: (row) => (row.status === SHIFT_STATUS.CLOSED ? formatCurrency(row.actualCash || 0) : '—')
     },
     {
-      header: 'Variance',
+      header: t('shifts.difference', 'Variance'),
       accessor: 'cashVariance',
       render: (row) => {
         if (row.status !== SHIFT_STATUS.CLOSED) return '—';
         const v = row.cashVariance || 0;
-        if (v === 0) return <span className="font-bold text-emerald-600">₹0 (Matched)</span>;
-        if (v > 0) return <span className="font-bold text-blue-600">+₹{v.toLocaleString()} (Surplus)</span>;
-        return <span className="font-bold text-rose-600">-₹{Math.abs(v).toLocaleString()} (Shortage)</span>;
+        if (v === 0) return <span className="font-bold text-emerald-600">{formatCurrency(0)} (Matched)</span>;
+        if (v > 0) return <span className="font-bold text-blue-600">+{formatCurrency(v)} (Surplus)</span>;
+        return <span className="font-bold text-rose-600">-{formatCurrency(Math.abs(v))} (Shortage)</span>;
       }
     },
     {
-      header: 'Status',
+      header: t('common.status', 'Status'),
       accessor: 'status',
       render: (row) => (
         <Badge variant={row.status === SHIFT_STATUS.OPEN ? 'success' : 'default'} size="sm">
-          {row.status}
+          {row.status === SHIFT_STATUS.OPEN ? t('common.open', 'Open') : t('common.closed', 'Closed')}
         </Badge>
       )
     },
     {
-      header: 'Action',
+      header: t('common.actions', 'Action'),
       accessor: 'id',
       align: 'right',
       render: (row) => (
         <Button size="sm" variant="ghost" onClick={() => setSelectedShift(row)}>
-          Details
+          {t('orders.viewDetails', 'Details')}
         </Button>
       )
     }
@@ -235,12 +238,12 @@ export const ShiftsPage = () => {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Shift & Register Management"
-        subtitle="Cash drawer reconciliation, mid-shift cash drops, expected vs actual cash counts, and Day-End close"
+        title={t('shifts.title', 'Shift & Register Management')}
+        subtitle={t('shifts.subtitle', 'Cash drawer reconciliation, mid-shift cash drops, expected vs actual cash counts, and Day-End close')}
       >
         {!activeShift && (
           <Button variant="primary" icon={Unlock} onClick={() => setIsOpenModalOpen(true)}>
-            Open New Shift
+            {t('shifts.startShift', 'Open New Shift')}
           </Button>
         )}
       </PageHeader>
@@ -255,7 +258,9 @@ export const ShiftsPage = () => {
               </div>
               <div>
                 <div className="flex items-center gap-2">
-                  <h3 className="text-xl font-black text-slate-800 tracking-tight">Active Shift #{activeShift.shiftNo}</h3>
+                  <h3 className="text-xl font-black text-slate-800 tracking-tight">
+                    {t('shifts.currentShift', 'Active Shift')} #{formatNumber(activeShift.shiftNo)}
+                  </h3>
                   <Badge variant="success" size="sm">OPEN REGISTER</Badge>
                 </div>
                 <p className="text-xs text-slate-500 mt-0.5">
@@ -292,7 +297,7 @@ export const ShiftsPage = () => {
                 icon={Lock}
                 onClick={() => setIsCloseModalOpen(true)}
               >
-                Close Shift / Day End
+                {t('shifts.closeShift', 'Close Shift / Day End')}
               </Button>
             </div>
           </div>
@@ -301,29 +306,29 @@ export const ShiftsPage = () => {
           {shiftSummary && (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
               <StatCard
-                title="Expected Cash in Drawer"
-                value={`₹${shiftSummary.expectedCash.toLocaleString()}`}
-                subtitle={`Opening Float ₹${activeShift.openingFloat} + Cash Sales ₹${shiftSummary.cashSales}`}
+                title={t('shifts.expectedCash', 'Expected Cash in Drawer')}
+                value={formatCurrency(shiftSummary.expectedCash)}
+                subtitle={`Opening Float ${formatCurrency(activeShift.openingFloat)} + Cash Sales ${formatCurrency(shiftSummary.cashSales)}`}
                 icon={DollarSign}
                 color="emerald"
               />
               <StatCard
-                title="Total Shift Sales"
-                value={`₹${shiftSummary.totalSales.toLocaleString()}`}
-                subtitle={`${shiftSummary.billCount} invoices settled in this shift`}
+                title={t('reports.totalSales', 'Total Shift Sales')}
+                value={formatCurrency(shiftSummary.totalSales)}
+                subtitle={`${formatNumber(shiftSummary.billCount)} invoices settled in this shift`}
                 icon={TrendingUp}
                 color="blue"
               />
               <StatCard
-                title="UPI Payments"
-                value={`₹${shiftSummary.upiSales.toLocaleString()}`}
+                title={t('payment.upi', 'UPI Payments')}
+                value={formatCurrency(shiftSummary.upiSales)}
                 subtitle="Instant bank transfers"
                 icon={CreditCard}
                 color="purple"
               />
               <StatCard
-                title="Card Payments"
-                value={`₹${shiftSummary.cardSales.toLocaleString()}`}
+                title={t('payment.card', 'Card Payments')}
+                value={formatCurrency(shiftSummary.cardSales)}
                 subtitle="POS card terminal payments"
                 icon={CreditCard}
                 color="amber"
@@ -346,7 +351,7 @@ export const ShiftsPage = () => {
                     </div>
                     <div className="text-right">
                       <span className="font-extrabold text-slate-800">
-                        {m.type === CASH_MOVEMENT_TYPE.IN ? '+' : '-'}₹{m.amount}
+                        {m.type === CASH_MOVEMENT_TYPE.IN ? '+' : '-'}{formatCurrency(m.amount)}
                       </span>
                       <span className="text-[10px] text-slate-400 block">
                         {new Date(m.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
@@ -368,7 +373,7 @@ export const ShiftsPage = () => {
             The register is currently closed. Open a new cashier shift with an opening cash float to begin taking table payments and tracking reconciliation.
           </p>
           <Button variant="primary" icon={Unlock} onClick={() => setIsOpenModalOpen(true)}>
-            Open New Shift
+            {t('shifts.startShift', 'Open New Shift')}
           </Button>
         </div>
       )}
@@ -398,7 +403,7 @@ export const ShiftsPage = () => {
       <Modal
         isOpen={isOpenModalOpen}
         onClose={() => setIsOpenModalOpen(false)}
-        title="Open New Register Shift"
+        title={t('shifts.startShift', 'Open New Register Shift')}
         subtitle="Declare the physical opening float inside the cash drawer"
       >
         <form onSubmit={handleOpenShift} className="space-y-4">
@@ -409,7 +414,7 @@ export const ShiftsPage = () => {
           )}
 
           <Input
-            label="Opening Cash Float (₹)"
+            label={`${t('shifts.openingFloat', 'Opening Cash Float')} (₹)`}
             type="number"
             min="0"
             step="10"
@@ -421,10 +426,10 @@ export const ShiftsPage = () => {
 
           <div className="flex justify-end gap-2 pt-2">
             <Button variant="secondary" onClick={() => setIsOpenModalOpen(false)}>
-              Cancel
+              {t('common.cancel', 'Cancel')}
             </Button>
             <Button type="submit" variant="primary" loading={openLoading}>
-              Open Shift
+              {t('shifts.startShift', 'Open Shift')}
             </Button>
           </div>
         </form>
@@ -445,7 +450,7 @@ export const ShiftsPage = () => {
           )}
 
           <Input
-            label="Amount (₹)"
+            label={`${t('billing.finalPayable', 'Amount')} (₹)`}
             type="number"
             min="1"
             required
@@ -454,7 +459,7 @@ export const ShiftsPage = () => {
           />
 
           <Input
-            label="Reason / Narration"
+            label={t('tables.transferReason', 'Reason / Narration')}
             placeholder="e.g. Petty cash for dairy, safe drop to manager"
             required
             value={cashReason}
@@ -463,10 +468,10 @@ export const ShiftsPage = () => {
 
           <div className="flex justify-end gap-2 pt-2">
             <Button variant="secondary" onClick={() => setIsCashModalOpen(false)}>
-              Cancel
+              {t('common.cancel', 'Cancel')}
             </Button>
             <Button type="submit" variant="primary" loading={cashLoading}>
-              Save Movement
+              {t('common.save', 'Save Movement')}
             </Button>
           </div>
         </form>
@@ -476,7 +481,7 @@ export const ShiftsPage = () => {
       <Modal
         isOpen={isCloseModalOpen}
         onClose={() => setIsCloseModalOpen(false)}
-        title="Close Register Shift (Day End)"
+        title={t('shifts.closeShift', 'Close Register Shift (Day End)')}
         subtitle="Count the physical currency in the cash drawer and reconcile with expected totals"
       >
         <form onSubmit={handleCloseShift} className="space-y-4">
@@ -489,34 +494,34 @@ export const ShiftsPage = () => {
           {shiftSummary && (
             <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-2 text-xs">
               <div className="flex justify-between">
-                <span className="text-slate-500">Opening Float:</span>
-                <span className="font-bold text-slate-800">₹{activeShift?.openingFloat}</span>
+                <span className="text-slate-500">{t('shifts.openingFloat', 'Opening Float')}:</span>
+                <span className="font-bold text-slate-800">{formatCurrency(activeShift?.openingFloat || 0)}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-slate-500">Cash Invoices Collected:</span>
-                <span className="font-bold text-slate-800">+₹{shiftSummary.cashSales}</span>
+                <span className="text-slate-500">{t('shifts.cashCollected', 'Cash Invoices Collected')}:</span>
+                <span className="font-bold text-slate-800">+{formatCurrency(shiftSummary.cashSales)}</span>
               </div>
               {shiftSummary.totalCashIn > 0 && (
                 <div className="flex justify-between">
                   <span className="text-slate-500">Cash In (Drops):</span>
-                  <span className="font-bold text-slate-800">+₹{shiftSummary.totalCashIn}</span>
+                  <span className="font-bold text-slate-800">+{formatCurrency(shiftSummary.totalCashIn)}</span>
                 </div>
               )}
               {shiftSummary.totalCashOut > 0 && (
                 <div className="flex justify-between">
                   <span className="text-slate-500">Cash Out (Petty Expenses):</span>
-                  <span className="font-bold text-slate-800">-₹{shiftSummary.totalCashOut}</span>
+                  <span className="font-bold text-slate-800">-{formatCurrency(shiftSummary.totalCashOut)}</span>
                 </div>
               )}
               <div className="pt-2 border-t border-slate-200 flex justify-between font-extrabold text-sm">
-                <span>System Expected Cash:</span>
-                <span className="text-blue-700">₹{shiftSummary.expectedCash}</span>
+                <span>{t('shifts.expectedCash', 'System Expected Cash')}:</span>
+                <span className="text-blue-700">{formatCurrency(shiftSummary.expectedCash)}</span>
               </div>
             </div>
           )}
 
           <Input
-            label="Actual Physical Cash Count (₹)"
+            label={`${t('shifts.actualCash', 'Actual Physical Cash Count')} (₹)`}
             type="number"
             min="0"
             required
@@ -531,11 +536,11 @@ export const ShiftsPage = () => {
                 <p className="text-emerald-600 font-bold">✓ Cash matches system calculation perfectly.</p>
               ) : Number(actualCashCount) - shiftSummary.expectedCash > 0 ? (
                 <p className="text-blue-600 font-bold">
-                  Surplus: +₹{Number(actualCashCount) - shiftSummary.expectedCash} above system expected.
+                  Surplus: +{formatCurrency(Number(actualCashCount) - shiftSummary.expectedCash)} above system expected.
                 </p>
               ) : (
                 <p className="text-rose-600 font-bold">
-                  Shortage: -₹{Math.abs(Number(actualCashCount) - shiftSummary.expectedCash)} below system expected.
+                  Shortage: -{formatCurrency(Math.abs(Number(actualCashCount) - shiftSummary.expectedCash))} below system expected.
                 </p>
               )}
             </div>
@@ -550,10 +555,10 @@ export const ShiftsPage = () => {
 
           <div className="flex justify-end gap-2 pt-2">
             <Button variant="secondary" onClick={() => setIsCloseModalOpen(false)}>
-              Cancel
+              {t('common.cancel', 'Cancel')}
             </Button>
             <Button type="submit" variant="danger" loading={closeLoading}>
-              Confirm Close & Lock Shift
+              {t('shifts.closeShift', 'Confirm Close & Lock Shift')}
             </Button>
           </div>
         </form>
@@ -563,57 +568,57 @@ export const ShiftsPage = () => {
       <Modal
         isOpen={!!selectedShift}
         onClose={() => setSelectedShift(null)}
-        title={`Shift Summary: #${selectedShift?.shiftNo}`}
+        title={`Shift Summary: #${formatNumber(selectedShift?.shiftNo)}`}
         subtitle={`Cashier: ${selectedShift?.cashierName} • Status: ${selectedShift?.status}`}
       >
         {selectedShift && (
           <div className="space-y-4 text-xs">
             <div className="grid grid-cols-2 gap-3 p-3 bg-slate-50 rounded-xl">
               <div>
-                <span className="text-slate-400 block">Opened</span>
+                <span className="text-slate-400 block">{t('shifts.openedAt', 'Opened')}</span>
                 <span className="font-bold text-slate-800">{new Date(selectedShift.openedAt).toLocaleString()}</span>
               </div>
               <div>
-                <span className="text-slate-400 block">Closed</span>
+                <span className="text-slate-400 block">{t('shifts.closedAt', 'Closed')}</span>
                 <span className="font-bold text-slate-800">
-                  {selectedShift.closedAt ? new Date(selectedShift.closedAt).toLocaleString() : 'Still Open'}
+                  {selectedShift.closedAt ? new Date(selectedShift.closedAt).toLocaleString() : t('common.open', 'Still Open')}
                 </span>
               </div>
             </div>
 
             <div className="space-y-1.5 p-3 border border-slate-200 rounded-xl">
               <div className="flex justify-between">
-                <span className="text-slate-500">Opening Float:</span>
-                <span className="font-bold">₹{selectedShift.openingFloat}</span>
+                <span className="text-slate-500">{t('shifts.openingFloat', 'Opening Float')}:</span>
+                <span className="font-bold">{formatCurrency(selectedShift.openingFloat || 0)}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-slate-500">Total Settled Sales:</span>
-                <span className="font-bold">₹{selectedShift.salesSummary?.totalSales || 0}</span>
+                <span className="text-slate-500">{t('reports.totalSales', 'Total Settled Sales')}:</span>
+                <span className="font-bold">{formatCurrency(selectedShift.salesSummary?.totalSales || 0)}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-slate-500">Cash Sales:</span>
-                <span className="font-bold">₹{selectedShift.salesSummary?.cashSales || 0}</span>
+                <span className="text-slate-500">{t('shifts.cashCollected', 'Cash Sales')}:</span>
+                <span className="font-bold">{formatCurrency(selectedShift.salesSummary?.cashSales || 0)}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-slate-500">UPI Sales:</span>
-                <span className="font-bold">₹{selectedShift.salesSummary?.upiSales || 0}</span>
+                <span className="text-slate-500">{t('shifts.upiCollected', 'UPI Sales')}:</span>
+                <span className="font-bold">{formatCurrency(selectedShift.salesSummary?.upiSales || 0)}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-slate-500">Card Sales:</span>
-                <span className="font-bold">₹{selectedShift.salesSummary?.cardSales || 0}</span>
+                <span className="text-slate-500">{t('shifts.cardCollected', 'Card Sales')}:</span>
+                <span className="font-bold">{formatCurrency(selectedShift.salesSummary?.cardSales || 0)}</span>
               </div>
               <div className="pt-2 border-t border-slate-100 flex justify-between font-extrabold text-sm">
-                <span>Expected Cash:</span>
-                <span>₹{selectedShift.expectedCash}</span>
+                <span>{t('shifts.expectedCash', 'Expected Cash')}:</span>
+                <span>{formatCurrency(selectedShift.expectedCash || 0)}</span>
               </div>
               <div className="flex justify-between font-extrabold text-sm">
-                <span>Actual Counted:</span>
-                <span>₹{selectedShift.actualCash}</span>
+                <span>{t('shifts.actualCash', 'Actual Counted')}:</span>
+                <span>{formatCurrency(selectedShift.actualCash || 0)}</span>
               </div>
               <div className="flex justify-between font-extrabold text-sm">
-                <span>Cash Variance:</span>
+                <span>{t('shifts.difference', 'Cash Variance')}:</span>
                 <span className={selectedShift.cashVariance >= 0 ? 'text-emerald-600' : 'text-rose-600'}>
-                  {selectedShift.cashVariance >= 0 ? '+' : ''}₹{selectedShift.cashVariance}
+                  {selectedShift.cashVariance >= 0 ? '+' : ''}{formatCurrency(selectedShift.cashVariance || 0)}
                 </span>
               </div>
             </div>
@@ -627,7 +632,7 @@ export const ShiftsPage = () => {
 
             <div className="flex justify-end pt-2">
               <Button variant="secondary" onClick={() => setSelectedShift(null)}>
-                Close
+                {t('common.close', 'Close')}
               </Button>
             </div>
           </div>

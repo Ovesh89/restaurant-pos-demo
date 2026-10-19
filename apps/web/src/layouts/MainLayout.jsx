@@ -14,7 +14,7 @@ export const MainLayout = () => {
   const { activeToast, dismissToast } = useOrderNotifications();
 
   return (
-    <div className="h-screen w-screen flex flex-col bg-slate-100 antialiased overflow-hidden">
+    <div className="h-screen h-[100dvh] w-screen flex flex-col bg-slate-100 antialiased overflow-hidden">
       {/* Dev Reset Banner */}
       <DevResetBanner />
       {/* Offline Status Indicator */}
@@ -54,7 +54,7 @@ export const MainLayout = () => {
               }
             }}
           />
-          <main className="flex-1 overflow-y-auto p-3 sm:p-4 md:p-6 lg:p-8 pb-20 lg:pb-8">
+          <main className="flex-1 overflow-y-auto p-3.5 sm:p-4 md:p-6 lg:p-8 pb-24 lg:pb-8">
             <Outlet />
           </main>
         </div>

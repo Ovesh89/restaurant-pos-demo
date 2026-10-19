@@ -62,7 +62,8 @@ export const AuthProvider = ({ children }) => {
         ...prev.user,
         name: updated.name || updated.displayName || prev.user.name,
         username: updated.username || prev.user.username,
-        mobile: updated.mobile !== undefined ? updated.mobile : prev.user.mobile
+        mobile: updated.mobile !== undefined ? updated.mobile : prev.user.mobile,
+        language: updated.language !== undefined ? updated.language : prev.user.language
       }
     }));
     return updated;

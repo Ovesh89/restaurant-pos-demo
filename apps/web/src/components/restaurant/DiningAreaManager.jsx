@@ -6,8 +6,10 @@ import { Input } from '../common/Input.jsx';
 import { Modal } from '../common/Modal.jsx';
 import { Badge } from '../common/Badge.jsx';
 import { DataTable } from '../common/DataTable.jsx';
+import { useTranslation } from '../../hooks/useTranslation.js';
 
 export const DiningAreaManager = ({ onAreasChanged = null }) => {
+  const { t, formatNumber } = useTranslation();
   const [areas, setAreas] = useState([]);
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState('');
@@ -108,13 +110,13 @@ export const DiningAreaManager = ({ onAreasChanged = null }) => {
 
   const columns = [
     {
-      header: 'Order',
+      header: t('common.sortOrder', 'Order'),
       accessor: 'sortOrder',
       width: '80px',
-      render: (row) => <span className="font-mono text-slate-500 font-bold">#{row.sortOrder ?? 1}</span>,
+      render: (row) => <span className="font-mono text-slate-500 font-bold">#{formatNumber(row.sortOrder ?? 1)}</span>,
     },
     {
-      header: 'Dining Area Name',
+      header: t('tables.area', 'Dining Area Name'),
       accessor: 'name',
       render: (row) => (
         <div className="flex items-center gap-2.5">
@@ -128,16 +130,16 @@ export const DiningAreaManager = ({ onAreasChanged = null }) => {
       ),
     },
     {
-      header: 'Status',
+      header: t('common.status', 'Status'),
       accessor: 'isActive',
       render: (row) => (
         <Badge variant={row.isActive ? 'success' : 'default'} size="sm">
-          {row.isActive ? 'Active' : 'Inactive'}
+          {row.isActive ? t('common.active', 'Active') : t('common.inactive', 'Inactive')}
         </Badge>
       ),
     },
     {
-      header: 'Actions',
+      header: t('common.actions', 'Actions'),
       align: 'right',
       render: (row) => (
         <div className="flex items-center justify-end gap-2">
@@ -147,7 +149,7 @@ export const DiningAreaManager = ({ onAreasChanged = null }) => {
             icon={Edit2}
             onClick={() => handleOpenEdit(row)}
           >
-            Edit
+            {t('common.edit', 'Edit')}
           </Button>
           <Button
             variant={row.isActive ? 'ghost' : 'secondary'}
@@ -155,7 +157,7 @@ export const DiningAreaManager = ({ onAreasChanged = null }) => {
             onClick={() => handleToggleStatus(row)}
             className={row.isActive ? 'text-amber-600 hover:text-amber-700' : 'text-emerald-600 hover:text-emerald-700'}
           >
-            {row.isActive ? 'Deactivate' : 'Activate'}
+            {row.isActive ? t('common.deactivate', 'Deactivate') : t('common.activate', 'Activate')}
           </Button>
           <Button
             variant="danger"
@@ -164,7 +166,7 @@ export const DiningAreaManager = ({ onAreasChanged = null }) => {
             onClick={() => handleDelete(row)}
             title="Delete Dining Area"
           >
-            Delete
+            {t('common.delete', 'Delete')}
           </Button>
         </div>
       ),
@@ -176,13 +178,13 @@ export const DiningAreaManager = ({ onAreasChanged = null }) => {
       {/* Header bar */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-slate-50 p-4 rounded-2xl border border-slate-200">
         <div>
-          <h4 className="font-bold text-slate-800 text-sm">Assigned Dining Areas</h4>
+          <h4 className="font-bold text-slate-800 text-sm">{t('tables.manageAreas', 'Assigned Dining Areas')}</h4>
           <p className="text-xs text-slate-500">
             Define seating zones (Indoor Hall, Family Lounge, Rooftop Garden, etc.)
           </p>
         </div>
         <Button variant="primary" icon={Plus} size="sm" onClick={handleOpenAdd}>
-          Add Dining Area
+          + {t('tables.addArea', 'Add Dining Area')}
         </Button>
       </div>
 
@@ -205,14 +207,14 @@ export const DiningAreaManager = ({ onAreasChanged = null }) => {
         columns={columns}
         data={areas}
         loading={loading}
-        emptyMessage="No dining areas configured yet."
+        emptyMessage={t('tables.noAreas', 'No dining areas configured yet.')}
       />
 
       {/* Add / Edit Area Modal */}
       <Modal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
-        title={editingArea ? 'Edit Dining Area' : 'Create Assigned Dining Area'}
+        title={editingArea ? t('tables.editArea', 'Edit Dining Area') : t('tables.addArea', 'Create Assigned Dining Area')}
         subtitle="Floor seating section for tables and service"
       >
         <form onSubmit={handleSubmit} className="space-y-4">
@@ -223,7 +225,7 @@ export const DiningAreaManager = ({ onAreasChanged = null }) => {
           )}
 
           <Input
-            label="Dining Area Name"
+            label={t('tables.area', 'Dining Area Name')}
             placeholder="e.g. Indoor AC Hall, Garden Dining, Rooftop"
             value={formData.name}
             onChange={(e) => setFormData({ ...formData, name: e.target.value })}
@@ -232,7 +234,7 @@ export const DiningAreaManager = ({ onAreasChanged = null }) => {
           />
 
           <Input
-            label="Display Sort Order"
+            label={t('common.sortOrder', 'Display Sort Order')}
             type="number"
             min="1"
             value={formData.sortOrder}
@@ -248,7 +250,7 @@ export const DiningAreaManager = ({ onAreasChanged = null }) => {
                 onChange={(e) => setFormData({ ...formData, isActive: e.target.checked })}
                 className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500"
               />
-              <span className="font-semibold text-xs text-slate-800">Dining Area Active</span>
+              <span className="font-semibold text-xs text-slate-800">{t('common.active', 'Dining Area Active')}</span>
             </label>
             <p className="text-[11px] text-slate-500 ml-6 mt-0.5">
               Inactive dining areas are hidden from order creation and table views.
@@ -257,10 +259,10 @@ export const DiningAreaManager = ({ onAreasChanged = null }) => {
 
           <div className="flex flex-col-reverse sm:flex-row justify-end gap-2 pt-4 border-t border-slate-100">
             <Button variant="secondary" onClick={() => setIsModalOpen(false)} className="w-full sm:w-auto">
-              Cancel
+              {t('common.cancel', 'Cancel')}
             </Button>
             <Button type="submit" loading={formLoading} className="w-full sm:w-auto">
-              {editingArea ? 'Save Changes' : 'Create Area'}
+              {editingArea ? t('common.save', 'Save Changes') : t('common.create', 'Create Area')}
             </Button>
           </div>
         </form>

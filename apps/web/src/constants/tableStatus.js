@@ -45,3 +45,26 @@ export const TABLE_STATUS_CONFIG = {
     dot: 'bg-teal-500'
   }
 };
+
+export const getTableStatusConfig = (status, t = null) => {
+  const base = TABLE_STATUS_CONFIG[status] || TABLE_STATUS_CONFIG[TABLE_STATUS.AVAILABLE];
+  if (!t) return base;
+
+  const keyMap = {
+    [TABLE_STATUS.AVAILABLE]: 'common.available',
+    [TABLE_STATUS.OCCUPIED]: 'common.occupied',
+    [TABLE_STATUS.KOT_SENT]: 'orders.kotSent',
+    [TABLE_STATUS.PREPARING]: 'common.preparing',
+    [TABLE_STATUS.READY]: 'common.ready',
+    [TABLE_STATUS.BILL_PENDING]: 'common.billed',
+    [TABLE_STATUS.PAID]: 'common.paid'
+  };
+
+  const key = keyMap[status];
+  const translated = key ? t(key, null, base.label) : base.label;
+
+  return {
+    ...base,
+    label: translated
+  };
+};

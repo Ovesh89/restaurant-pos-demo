@@ -30,7 +30,8 @@ class AuthLocalRepository {
         username: user.username,
         role: user.role,
         mobile: user.mobile,
-        branchId: user.branchId
+        branchId: user.branchId,
+        language: user.language || 'en'
       },
       permissions
     };
@@ -89,6 +90,7 @@ class AuthLocalRepository {
       ...users[index],
       name: profileData.name || users[index].name,
       mobile: profileData.mobile !== undefined ? profileData.mobile : users[index].mobile,
+      language: profileData.language || users[index].language || 'en',
       updatedAt: new Date().toISOString()
     };
 
@@ -100,6 +102,7 @@ class AuthLocalRepository {
       currentSession.user.name = users[index].name;
       currentSession.user.username = users[index].username;
       currentSession.user.mobile = users[index].mobile;
+      currentSession.user.language = users[index].language;
       storageAdapter.setItem(STORAGE_KEYS.SESSION, currentSession);
     }
 

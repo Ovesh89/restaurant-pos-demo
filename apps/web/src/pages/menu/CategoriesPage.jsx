@@ -9,9 +9,11 @@ import { Modal } from '../../components/common/Modal';
 import { Badge } from '../../components/common/Badge';
 import { DataTable } from '../../components/common/DataTable';
 import { PERMISSIONS } from '../../constants/permissions';
+import { useTranslation } from '../../hooks/useTranslation';
 
 export const CategoriesPage = () => {
   const { user, role, hasPermission } = useAuth();
+  const { t, formatNumber } = useTranslation();
   const canEdit = hasPermission(PERMISSIONS.MENU_EDIT);
   const isAdminOrOwner = user?.role === 'owner' || user?.role === 'admin' || role === 'owner' || role === 'admin';
 
@@ -113,12 +115,13 @@ export const CategoriesPage = () => {
 
   const columns = [
     {
-      header: 'Sort',
+      header: t('common.sortOrder', 'Sort'),
       accessor: 'sortOrder',
-      className: 'w-16 font-mono text-slate-500'
+      className: 'w-16 font-mono text-slate-500',
+      render: (row) => formatNumber(row.sortOrder ?? 1)
     },
     {
-      header: 'Category Name',
+      header: t('menu.categoryName', 'Category Name'),
       accessor: 'name',
       render: (row) => (
         <div className="flex items-center gap-3">
@@ -133,25 +136,25 @@ export const CategoriesPage = () => {
       )
     },
     {
-      header: 'KOT Policy',
+      header: t('menu.kotPolicy', 'KOT Policy'),
       accessor: 'kotRequired',
       render: (row) => (
         <Badge variant={row.kotRequired !== false ? 'info' : 'warning'} size="sm">
-          {row.kotRequired !== false ? 'KOT Required' : 'No KOT'}
+          {row.kotRequired !== false ? t('menu.kotRequired', 'KOT Required') : t('menu.noKot', 'No KOT')}
         </Badge>
       )
     },
     {
-      header: 'Status',
+      header: t('common.status', 'Status'),
       accessor: 'isActive',
       render: (row) => (
         <Badge variant={row.isActive ? 'success' : 'default'} size="sm">
-          {row.isActive ? 'Active' : 'Inactive'}
+          {row.isActive ? t('common.active', 'Active') : t('common.inactive', 'Inactive')}
         </Badge>
       )
     },
     {
-      header: 'Actions',
+      header: t('common.actions', 'Actions'),
       align: 'right',
       render: (row) => {
         if (!canEdit) return null;
@@ -163,7 +166,7 @@ export const CategoriesPage = () => {
               icon={Edit2}
               onClick={() => handleOpenEdit(row)}
             >
-              Edit
+              {t('common.edit', 'Edit')}
             </Button>
             <Button
               variant={row.isActive ? 'ghost' : 'secondary'}
@@ -171,7 +174,7 @@ export const CategoriesPage = () => {
               onClick={() => handleToggleStatus(row)}
               className={row.isActive ? 'text-amber-600 hover:text-amber-700' : 'text-emerald-600 hover:text-emerald-700'}
             >
-              {row.isActive ? 'Deactivate' : 'Activate'}
+              {row.isActive ? t('common.deactivate', 'Deactivate') : t('common.activate', 'Activate')}
             </Button>
             {isAdminOrOwner && (
               <Button
@@ -181,7 +184,7 @@ export const CategoriesPage = () => {
                 onClick={() => handleDeleteCategory(row)}
                 title="Permanently Delete Category"
               >
-                Delete
+                {t('common.delete', 'Delete')}
               </Button>
             )}
           </div>
@@ -193,12 +196,12 @@ export const CategoriesPage = () => {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Menu Categories"
-        subtitle="Manage food and beverage category taxonomy"
+        title={t('menu.categoriesTitle', 'Menu Categories')}
+        subtitle={t('menu.categoriesSubtitle', 'Manage food and beverage category taxonomy')}
       >
         {canEdit && (
           <Button variant="primary" icon={Plus} onClick={handleOpenAdd}>
-            Add Category
+            {t('menu.addCategory', 'Add Category')}
           </Button>
         )}
       </PageHeader>
@@ -208,13 +211,13 @@ export const CategoriesPage = () => {
         <div className="w-full sm:max-w-sm">
           <Input
             icon={Search}
-            placeholder="Search categories by name or code..."
+            placeholder={t('common.search', 'Search categories by name or code...')}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
         </div>
         <div className="sm:ml-auto text-xs text-slate-500 font-semibold text-right sm:text-left">
-          Total: {filteredCategories.length} categories
+          {t('common.total', 'Total')}: {formatNumber(filteredCategories.length)}
         </div>
       </div>
 
@@ -223,15 +226,15 @@ export const CategoriesPage = () => {
         columns={columns}
         data={filteredCategories}
         loading={loading}
-        emptyMessage="No menu categories match your search."
+        emptyMessage={t('menu.noCategories', 'No menu categories match your search.')}
       />
 
       {/* Add / Edit Category Modal */}
       <Modal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
-        title={editingCategory ? 'Edit Menu Category' : 'Create Menu Category'}
-        subtitle="Organize dishes into logical kitchen & menu sections"
+        title={editingCategory ? t('menu.editCategory', 'Edit Menu Category') : t('menu.createCategory', 'Create Menu Category')}
+        subtitle={t('menu.categoryModalSubtitle', 'Organize dishes into logical kitchen & menu sections')}
       >
         <form onSubmit={handleSubmit} className="space-y-4">
           {formError && (
@@ -241,7 +244,7 @@ export const CategoriesPage = () => {
           )}
 
           <Input
-            label="Category Name"
+            label={t('menu.categoryName', 'Category Name')}
             placeholder="e.g. Starter, Chicken, Dessert"
             value={formData.name}
             onChange={(e) => setFormData({ ...formData, name: e.target.value })}
@@ -250,14 +253,14 @@ export const CategoriesPage = () => {
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <Input
-              label="Short Code / SKU"
+              label={t('menu.shortCode', 'Short Code / SKU')}
               placeholder="e.g. STR, CHK"
               value={formData.code}
               onChange={(e) => setFormData({ ...formData, code: e.target.value.toUpperCase() })}
             />
 
             <Input
-              label="Display Order"
+              label={t('common.sortOrder', 'Display Order')}
               type="number"
               min="1"
               value={formData.sortOrder}
@@ -274,7 +277,7 @@ export const CategoriesPage = () => {
                 onChange={(e) => setFormData({ ...formData, kotRequired: e.target.checked })}
                 className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500"
               />
-              <span className="font-semibold text-xs text-slate-800">Kitchen KOT Required</span>
+              <span className="font-semibold text-xs text-slate-800">{t('menu.kotRequired', 'Kitchen KOT Required')}</span>
             </label>
             <p className="text-[11px] text-slate-500 ml-6">
               When enabled, items ordered in this category automatically generate KOT tickets to the kitchen. Uncheck for instant items (drinks, ice creams, pre-made items) where kitchen preparation is not required.
@@ -283,10 +286,10 @@ export const CategoriesPage = () => {
 
           <div className="flex flex-col-reverse sm:flex-row justify-end gap-2 pt-4 border-t border-slate-100">
             <Button variant="secondary" onClick={() => setIsModalOpen(false)} className="w-full sm:w-auto">
-              Cancel
+              {t('common.cancel', 'Cancel')}
             </Button>
             <Button type="submit" loading={formLoading} className="w-full sm:w-auto">
-              {editingCategory ? 'Save Changes' : 'Create Category'}
+              {editingCategory ? t('common.save', 'Save Changes') : t('common.create', 'Create Category')}
             </Button>
           </div>
         </form>

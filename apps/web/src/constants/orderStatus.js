@@ -49,3 +49,52 @@ export const KOT_TYPE = {
   MODIFICATION: 'MODIFICATION',
   CANCELLATION: 'CANCELLATION'
 };
+
+export const getOrderStatusConfig = (status, t = null) => {
+  const base = ORDER_STATUS_CONFIG[status] || { label: status, color: 'bg-slate-100 text-slate-700' };
+  if (!t) return base;
+
+  const keyMap = {
+    [ORDER_STATUS.DRAFT]: 'orders.holdOrder',
+    [ORDER_STATUS.SUBMITTED]: 'common.submitted',
+    [ORDER_STATUS.WAITING_CONFIRMATION]: 'dashboard.waitingApproval',
+    [ORDER_STATUS.CONFIRMED]: 'common.confirmed',
+    [ORDER_STATUS.KOT_SENT]: 'orders.kotSent',
+    [ORDER_STATUS.PREPARING]: 'common.preparing',
+    [ORDER_STATUS.READY]: 'common.ready',
+    [ORDER_STATUS.SERVED]: 'common.served',
+    [ORDER_STATUS.BILLING]: 'common.billed',
+    [ORDER_STATUS.PAYMENT_PENDING]: 'common.pending',
+    [ORDER_STATUS.COMPLETED]: 'common.completed',
+    [ORDER_STATUS.CANCELLED]: 'common.cancelled',
+    [ORDER_STATUS.REJECTED]: 'common.rejected'
+  };
+
+  const key = keyMap[status];
+  const translated = key ? t(key, null, base.label) : base.label;
+
+  return {
+    ...base,
+    label: translated
+  };
+};
+
+export const getKotStatusConfig = (status, t = null) => {
+  const base = KOT_STATUS_CONFIG[status] || { label: status, color: 'bg-slate-100 text-slate-700' };
+  if (!t) return base;
+
+  const keyMap = {
+    [KOT_STATUS.NEW]: 'common.new',
+    [KOT_STATUS.PREPARING]: 'common.preparing',
+    [KOT_STATUS.READY]: 'common.ready',
+    [KOT_STATUS.CANCELLED]: 'common.cancelled'
+  };
+
+  const key = keyMap[status];
+  const translated = key ? t(key, null, base.label) : base.label;
+
+  return {
+    ...base,
+    label: translated
+  };
+};

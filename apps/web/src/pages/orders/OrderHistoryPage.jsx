@@ -25,14 +25,16 @@ import { orderRepository } from '../../services/repositories/orderRepository';
 import { categoryRepository } from '../../services/repositories/categoryRepository';
 import { customerRepository } from '../../services/repositories/customerRepository';
 import { printService } from '../../services/printing/printService';
+import { useTranslation } from '../../hooks/useTranslation';
 import { PageHeader } from '../../components/common/PageHeader';
 import { StatCard } from '../../components/common/StatCard';
 import { Button } from '../../components/common/Button';
 import { DataTable } from '../../components/common/DataTable';
 import { Modal } from '../../components/common/Modal';
-import { ORDER_STATUS_CONFIG } from '../../constants/orderStatus';
+import { ORDER_STATUS_CONFIG, getOrderStatusConfig } from '../../constants/orderStatus';
 
 export const OrderHistoryPage = () => {
+  const { t, formatNumber } = useTranslation();
   // Filter States
   const [datePreset, setDatePreset] = useState('THIS_MONTH'); // TODAY, YESTERDAY, THIS_WEEK, THIS_MONTH, LAST_MONTH, CUSTOM_DATE, MONTH_PICKER
   const [startDate, setStartDate] = useState('');
@@ -231,7 +233,7 @@ export const OrderHistoryPage = () => {
   // Order List Columns
   const orderColumns = [
     {
-      header: 'Order #',
+      header: t('orders.orderId', null, 'Order #'),
       accessor: 'orderNo',
       className: 'w-24 font-mono font-black text-blue-700',
       render: (row) => (
@@ -241,7 +243,7 @@ export const OrderHistoryPage = () => {
       )
     },
     {
-      header: 'Date & Time',
+      header: t('common.time', null, 'Date & Time'),
       accessor: 'createdAt',
       render: (row) => {
         const d = new Date(row.createdAt);
@@ -258,18 +260,18 @@ export const OrderHistoryPage = () => {
       }
     },
     {
-      header: 'Table',
+      header: t('tables.table', null, 'Table'),
       accessor: 'tableNo',
       render: (row) => (
-        <span className="font-extrabold text-slate-800 text-sm">Table {row.tableNo || row.tableNumber}</span>
+        <span className="font-extrabold text-slate-800 text-sm">{t('orders.table', null, 'Table')} {row.tableNo || row.tableNumber}</span>
       )
     },
     {
-      header: 'Guest / Customer',
+      header: t('billing.customerInfo', null, 'Guest / Customer'),
       accessor: 'customer',
       render: (row) => {
         if (!row.customer) {
-          return <span className="text-xs text-slate-400 italic">Walk-in Guest</span>;
+          return <span className="text-xs text-slate-400 italic">{t('orders.walkinGuest', null, 'Walk-in Guest')}</span>;
         }
         return (
           <div className="text-xs">
@@ -282,7 +284,7 @@ export const OrderHistoryPage = () => {
       }
     },
     {
-      header: 'Dishes & Categories',
+      header: t('menu.productsTitle', null, 'Dishes & Categories'),
       accessor: 'items',
       render: (row) => {
         const items = row.items || [];
@@ -301,25 +303,22 @@ export const OrderHistoryPage = () => {
               ))}
               {categoriesSeen.length > 2 && (
                 <span className="text-[10px] text-slate-400 font-semibold">
-                  +{categoriesSeen.length - 2} more
+                  +{formatNumber(categoriesSeen.length - 2)} {t('common.more', null, 'more')}
                 </span>
               )}
             </div>
             <p className="text-xs text-slate-600 truncate max-w-xs">
-              {items.map((i) => `${i.name || i.productName} (x${i.quantity})`).join(', ')}
+              {items.map((i) => `${i.name || i.productName} (x${formatNumber(i.quantity)})`).join(', ')}
             </p>
           </div>
         );
       }
     },
     {
-      header: 'Status',
+      header: t('orders.status', null, 'Status'),
       accessor: 'status',
       render: (row) => {
-        const config = ORDER_STATUS_CONFIG[row.status] || {
-          label: row.status,
-          color: 'bg-slate-100 text-slate-700'
-        };
+        const config = getOrderStatusConfig(row.status, t);
         return (
           <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold border ${config.color}`}>
             {config.label}
@@ -328,17 +327,17 @@ export const OrderHistoryPage = () => {
       }
     },
     {
-      header: 'Total Sales (INR)',
+      header: `${t('reports.totalRevenue', null, 'Total Sales')} (₹)`,
       accessor: 'grandTotal',
       align: 'right',
       render: (row) => (
         <span className="font-extrabold text-slate-900 text-sm">
-          ₹{Number(row.grandTotal || row.subtotal || 0).toLocaleString()}
+          ₹{formatNumber(Number(row.grandTotal || row.subtotal || 0))}
         </span>
       )
     },
     {
-      header: 'Actions',
+      header: t('common.actions', null, 'Actions'),
       align: 'center',
       render: (row) => (
         <Button
@@ -347,7 +346,7 @@ export const OrderHistoryPage = () => {
           icon={Eye}
           onClick={() => setSelectedOrder(row)}
         >
-          Details
+          {t('common.details', null, 'Details')}
         </Button>
       )
     }
@@ -356,12 +355,12 @@ export const OrderHistoryPage = () => {
   // Category Breakdown Columns
   const categoryColumns = [
     {
-      header: 'Rank',
+      header: t('common.rank', null, 'Rank'),
       className: 'w-12 font-bold text-slate-400',
-      render: (_, idx) => `#${idx + 1}`
+      render: (_, idx) => `#${formatNumber(idx + 1)}`
     },
     {
-      header: 'Menu Category',
+      header: t('menu.categoriesTitle', null, 'Menu Category'),
       accessor: 'categoryName',
       render: (row) => (
         <div className="flex items-center gap-2">
@@ -371,13 +370,13 @@ export const OrderHistoryPage = () => {
       )
     },
     {
-      header: 'Portions Sold',
+      header: t('reports.portionsSold', null, 'Portions Sold'),
       accessor: 'quantity',
       className: 'font-mono font-bold text-blue-600',
-      render: (row) => `${row.quantity} portions`
+      render: (row) => `${formatNumber(row.quantity)} ${t('reports.portions', null, 'portions')}`
     },
     {
-      header: '% of Net Sales',
+      header: t('reports.pctNetSales', null, '% of Net Sales'),
       accessor: 'percentage',
       render: (row) => (
         <div className="flex items-center gap-3">
@@ -387,17 +386,17 @@ export const OrderHistoryPage = () => {
               style={{ width: `${Math.min(row.percentage, 100)}%` }}
             />
           </div>
-          <span className="text-xs font-extrabold text-slate-700">{row.percentage}%</span>
+          <span className="text-xs font-extrabold text-slate-700">{formatNumber(row.percentage)}%</span>
         </div>
       )
     },
     {
-      header: 'Total Revenue (INR)',
+      header: `${t('reports.totalRevenue', null, 'Total Revenue')} (₹)`,
       accessor: 'revenue',
       align: 'right',
       render: (row) => (
         <span className="font-extrabold text-slate-900 text-sm">
-          ₹{Number(row.revenue).toLocaleString()}
+          ₹{formatNumber(Number(row.revenue))}
         </span>
       )
     }
@@ -406,7 +405,7 @@ export const OrderHistoryPage = () => {
   // Daily Breakdown Columns
   const dailyColumns = [
     {
-      header: 'Date',
+      header: t('common.date', null, 'Date'),
       accessor: 'date',
       render: (row) => {
         const d = new Date(`${row.date}T00:00:00`);
@@ -418,32 +417,32 @@ export const OrderHistoryPage = () => {
       }
     },
     {
-      header: 'Orders Placed',
+      header: t('reports.ordersPlaced', null, 'Orders Placed'),
       accessor: 'ordersCount',
       className: 'font-mono font-bold text-slate-700',
-      render: (row) => `${row.ordersCount} orders`
+      render: (row) => `${formatNumber(row.ordersCount)} ${t('reports.orders', null, 'orders')}`
     },
     {
-      header: 'Dishes Served',
+      header: t('reports.dishesServed', null, 'Dishes Served'),
       accessor: 'itemsCount',
       className: 'font-mono text-slate-600',
-      render: (row) => `${row.itemsCount || 0} items`
+      render: (row) => `${formatNumber(row.itemsCount || 0)} ${t('reports.items', null, 'items')}`
     },
     {
-      header: 'Average Order (INR)',
+      header: `${t('reports.avgOrderValue', null, 'Average Order')} (₹)`,
       accessor: 'sales',
       render: (row) => {
         const aov = row.ordersCount > 0 ? Math.round(Number(row.sales) / row.ordersCount) : 0;
-        return <span className="font-mono text-xs text-slate-600">₹{aov.toLocaleString()}</span>;
+        return <span className="font-mono text-xs text-slate-600">₹{formatNumber(aov)}</span>;
       }
     },
     {
-      header: 'Net Day Sales (INR)',
+      header: `${t('reports.netSales', null, 'Net Day Sales')} (₹)`,
       accessor: 'sales',
       align: 'right',
       render: (row) => (
         <span className="font-black text-emerald-700 text-sm">
-          ₹{Number(row.sales).toLocaleString()}
+          ₹{formatNumber(Number(row.sales))}
         </span>
       )
     }
@@ -452,15 +451,15 @@ export const OrderHistoryPage = () => {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Order History & Sales Analytics"
-        subtitle="Filter historical orders by Date & Month range, explore category breakdown, filter by customer, and review sales totals"
+        title={t('orders.historyTitle', null, 'Order History & Sales Analytics')}
+        subtitle={t('orders.historySubtitle', null, 'Filter historical orders by Date & Month range, explore category breakdown, filter by customer, and review sales totals')}
       >
         <div className="flex items-center gap-2">
           <Button variant="secondary" icon={FileDown} onClick={handleExportCSV}>
-            Export CSV
+            {t('reports.exportCsv', null, 'Export CSV')}
           </Button>
           <Button variant="secondary" icon={RefreshCw} onClick={loadHistory} loading={loading}>
-            Refresh
+            {t('common.refresh', null, 'Refresh')}
           </Button>
         </div>
       </PageHeader>
@@ -468,33 +467,33 @@ export const OrderHistoryPage = () => {
       {/* Primary KPI Metrics for Date/Month Range */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard
-          title="Total Net Sales"
-          value={loading ? '...' : `₹${(historyData?.summary?.totalSales || 0).toLocaleString()}`}
-          subtitle={`${historyData?.summary?.validOrdersCount || 0} completed orders`}
+          title={t('reports.totalRevenue', null, 'Total Net Sales')}
+          value={loading ? '...' : `₹${formatNumber(historyData?.summary?.totalSales || 0)}`}
+          subtitle={`${formatNumber(historyData?.summary?.validOrdersCount || 0)} ${t('reports.completedOrders', null, 'completed orders')}`}
           icon={TrendingUp}
           color="emerald"
         />
 
         <StatCard
-          title="Total Orders Recorded"
-          value={loading ? '...' : String(historyData?.summary?.totalOrders || 0)}
-          subtitle="Within selected date range"
+          title={t('reports.totalBills', null, 'Total Orders Recorded')}
+          value={loading ? '...' : String(formatNumber(historyData?.summary?.totalOrders || 0))}
+          subtitle={t('reports.withinRange', null, 'Within selected date range')}
           icon={ShoppingBag}
           color="blue"
         />
 
         <StatCard
-          title="Dishes / Items Sold"
-          value={loading ? '...' : `${historyData?.summary?.totalItemsSold || 0} portions`}
-          subtitle="Across all menu categories"
+          title={t('reports.itemsSold', null, 'Dishes / Items Sold')}
+          value={loading ? '...' : `${formatNumber(historyData?.summary?.totalItemsSold || 0)} ${t('reports.portions', null, 'portions')}`}
+          subtitle={t('reports.acrossCategories', null, 'Across all menu categories')}
           icon={UtensilsCrossed}
           color="purple"
         />
 
         <StatCard
-          title="Average Order Value"
-          value={loading ? '...' : `₹${(historyData?.summary?.averageOrderValue || 0).toLocaleString()}`}
-          subtitle="Revenue per valid order"
+          title={t('reports.avgOrderValue', null, 'Average Order Value')}
+          value={loading ? '...' : `₹${formatNumber(historyData?.summary?.averageOrderValue || 0)}`}
+          subtitle={t('reports.revPerOrder', null, 'Revenue per valid order')}
           icon={DollarSign}
           color="amber"
         />
@@ -506,16 +505,16 @@ export const OrderHistoryPage = () => {
         <div className="flex items-center justify-between flex-wrap gap-2 pb-3 border-b border-slate-100">
           <div className="flex items-center gap-1.5 flex-wrap text-xs">
             <span className="font-bold text-slate-500 mr-1 flex items-center gap-1">
-              <Calendar className="w-3.5 h-3.5 text-slate-400" /> Range:
+              <Calendar className="w-3.5 h-3.5 text-slate-400" /> {t('reports.dateRange', null, 'Range')}:
             </span>
             {[
-              { id: 'TODAY', label: 'Today' },
-              { id: 'YESTERDAY', label: 'Yesterday' },
-              { id: 'THIS_WEEK', label: 'This Week' },
-              { id: 'THIS_MONTH', label: 'This Month' },
-              { id: 'LAST_MONTH', label: 'Last Month' },
-              { id: 'MONTH_PICKER', label: 'Pick Month' },
-              { id: 'CUSTOM_DATE', label: 'Custom Dates' }
+              { id: 'TODAY', label: t('reports.today', null, 'Today') },
+              { id: 'YESTERDAY', label: t('reports.yesterday', null, 'Yesterday') },
+              { id: 'THIS_WEEK', label: t('reports.thisWeek', null, 'This Week') },
+              { id: 'THIS_MONTH', label: t('reports.thisMonth', null, 'This Month') },
+              { id: 'LAST_MONTH', label: t('reports.lastMonth', null, 'Last Month') },
+              { id: 'MONTH_PICKER', label: t('reports.pickMonth', null, 'Pick Month') },
+              { id: 'CUSTOM_DATE', label: t('reports.customDates', null, 'Custom Dates') }
             ].map((preset) => (
               <button
                 key={preset.id}
@@ -542,7 +541,7 @@ export const OrderHistoryPage = () => {
           {datePreset === 'MONTH_PICKER' ? (
             <div>
               <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block mb-1">
-                Select Month
+                {t('reports.selectMonth', null, 'Select Month')}
               </label>
               <input
                 type="month"
@@ -555,7 +554,7 @@ export const OrderHistoryPage = () => {
             <>
               <div>
                 <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block mb-1">
-                  Start Date
+                  {t('reports.startDate', null, 'Start Date')}
                 </label>
                 <input
                   type="date"
@@ -570,7 +569,7 @@ export const OrderHistoryPage = () => {
 
               <div>
                 <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block mb-1">
-                  End Date
+                  {t('reports.endDate', null, 'End Date')}
                 </label>
                 <input
                   type="date"
@@ -588,15 +587,15 @@ export const OrderHistoryPage = () => {
           {/* Customer Filter */}
           <div>
             <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block mb-1">
-              Guest / Customer
+              {t('billing.customerInfo', null, 'Guest / Customer')}
             </label>
             <select
               value={selectedCustomer}
               onChange={(e) => setSelectedCustomer(e.target.value)}
               className="w-full text-xs font-bold px-3 py-2 border border-slate-200 rounded-xl bg-slate-50 focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-blue-500"
             >
-              <option value="ALL">All Customers & Walk-ins</option>
-              <option value="WALK_IN">Walk-in Guests Only</option>
+              <option value="ALL">{t('customers.allGuests', null, 'All Customers & Walk-ins')}</option>
+              <option value="WALK_IN">{t('customers.walkInOnly', null, 'Walk-in Guests Only')}</option>
               {customers.map((c) => (
                 <option key={c.id || c._id} value={c.id || c._id}>
                   {c.name} {c.mobile ? `(${c.mobile})` : ''}
@@ -608,14 +607,14 @@ export const OrderHistoryPage = () => {
           {/* Category Filter */}
           <div>
             <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block mb-1">
-              Menu Category
+              {t('menu.categoriesTitle', null, 'Menu Category')}
             </label>
             <select
               value={selectedCategory}
               onChange={(e) => setSelectedCategory(e.target.value)}
               className="w-full text-xs font-bold px-3 py-2 border border-slate-200 rounded-xl bg-slate-50 focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-blue-500"
             >
-              <option value="ALL">All Categories</option>
+              <option value="ALL">{t('menu.allCategories', null, 'All Categories')}</option>
               {categories.map((cat) => (
                 <option key={cat.id || cat._id} value={cat.id || cat._id}>
                   {cat.name}
@@ -627,7 +626,7 @@ export const OrderHistoryPage = () => {
           {/* Search Filter */}
           <div>
             <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block mb-1">
-              Search Orders / Items
+              {t('orders.searchOrdersItems', null, 'Search Orders / Items')}
             </label>
             <form onSubmit={handleSearchSubmit} className="relative">
               <input
@@ -646,9 +645,9 @@ export const OrderHistoryPage = () => {
       {/* Tabs Navigation */}
       <div className="flex items-center gap-1.5 border-b border-slate-200 pb-3 text-xs overflow-x-auto no-scrollbar">
         {[
-          { id: 'ORDERS', label: `Orders List (${historyData?.orders?.length || 0})` },
-          { id: 'CATEGORIES', label: `Category Breakdown (${historyData?.categoryBreakdown?.length || 0})` },
-          { id: 'DAILY', label: `Daily Sales Trend (${historyData?.dailyBreakdown?.length || 0} days)` }
+          { id: 'ORDERS', label: `${t('orders.ordersList', null, 'Orders List')} (${formatNumber(historyData?.orders?.length || 0)})` },
+          { id: 'CATEGORIES', label: `${t('reports.categoryBreakdown', null, 'Category Breakdown')} (${formatNumber(historyData?.categoryBreakdown?.length || 0)})` },
+          { id: 'DAILY', label: `${t('reports.dailySalesTrend', null, 'Daily Sales Trend')} (${formatNumber(historyData?.dailyBreakdown?.length || 0)} ${t('common.days', null, 'days')})` }
         ].map((tab) => (
           <button
             key={tab.id}
@@ -671,7 +670,7 @@ export const OrderHistoryPage = () => {
             columns={orderColumns}
             data={historyData?.orders || []}
             loading={loading}
-            emptyMessage="No orders found matching the selected Date/Month range and filters."
+            emptyMessage={t('orders.noOrdersMatchingRange', null, 'No orders found matching the selected Date/Month range and filters.')}
             pagination={historyData?.pagination}
             onPageChange={handlePageChange}
             onPageSizeChange={handleLimitChange}
@@ -683,7 +682,7 @@ export const OrderHistoryPage = () => {
       {activeTab === 'CATEGORIES' && (
         <div className="space-y-4">
           <div className="bg-white rounded-2xl border border-slate-200 p-4 shadow-xs">
-            <h3 className="text-base font-bold text-slate-800 mb-2">Category Sales Performance</h3>
+            <h3 className="text-base font-bold text-slate-800 mb-2">{t('reports.categoryPerformance', null, 'Category Sales Performance')}</h3>
             <p className="text-xs text-slate-500 mb-4">
               Revenue distribution and quantity of dishes sold per menu category for the period {startDate} to {endDate}.
             </p>
@@ -691,7 +690,7 @@ export const OrderHistoryPage = () => {
               columns={categoryColumns}
               data={historyData?.categoryBreakdown || []}
               loading={loading}
-              emptyMessage="No category sales recorded in this date range."
+              emptyMessage={t('reports.noCategorySales', null, 'No category sales recorded in this date range.')}
             />
           </div>
         </div>
@@ -701,7 +700,7 @@ export const OrderHistoryPage = () => {
       {activeTab === 'DAILY' && (
         <div className="space-y-4">
           <div className="bg-white rounded-2xl border border-slate-200 p-4 shadow-xs">
-            <h3 className="text-base font-bold text-slate-800 mb-2">Day-by-Day Sales Summary</h3>
+            <h3 className="text-base font-bold text-slate-800 mb-2">{t('reports.dailySalesTrend', null, 'Day-by-Day Sales Summary')}</h3>
             <p className="text-xs text-slate-500 mb-4">
               Daily revenue breakdown, order volume, and average order value throughout the selected range.
             </p>
@@ -709,7 +708,7 @@ export const OrderHistoryPage = () => {
               columns={dailyColumns}
               data={historyData?.dailyBreakdown || []}
               loading={loading}
-              emptyMessage="No daily sales records found for this period."
+              emptyMessage={t('reports.noDailySales', null, 'No daily sales records found for this period.')}
             />
           </div>
         </div>
@@ -720,57 +719,57 @@ export const OrderHistoryPage = () => {
         <Modal
           isOpen={Boolean(selectedOrder)}
           onClose={() => setSelectedOrder(null)}
-          title={`Order Details: ${selectedOrder.orderNo || selectedOrder.orderNumber}`}
-          subtitle={`Table ${selectedOrder.tableNo || selectedOrder.tableNumber} • Placed on ${new Date(selectedOrder.createdAt).toLocaleString()}`}
+          title={`${t('orders.viewDetails', null, 'Order Details')}: ${selectedOrder.orderNo || selectedOrder.orderNumber}`}
+          subtitle={`${t('orders.table', null, 'Table')} ${selectedOrder.tableNo || selectedOrder.tableNumber} • Placed on ${new Date(selectedOrder.createdAt).toLocaleString()}`}
           maxWidth="max-w-4xl sm:max-w-5xl"
         >
           <div className="space-y-5">
             {/* Order Overview Header */}
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 bg-slate-50 p-4 rounded-xl border border-slate-200 text-xs">
               <div>
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Status</span>
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">{t('orders.status', null, 'Status')}</span>
                 <span className="font-extrabold text-slate-800 text-sm mt-0.5 block">{selectedOrder.status}</span>
               </div>
               <div>
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Captain / Server</span>
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">{t('orders.captain', null, 'Captain / Server')}</span>
                 <span className="font-extrabold text-slate-800 text-sm mt-0.5 block">{selectedOrder.captainName || 'Staff'}</span>
               </div>
               <div>
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Customer</span>
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">{t('billing.customerInfo', null, 'Customer')}</span>
                 <span className="font-extrabold text-slate-800 text-sm mt-0.5 block">
-                  {selectedOrder.customer?.name || 'Walk-in Guest'}
+                  {selectedOrder.customer?.name || t('orders.walkinGuest', null, 'Walk-in Guest')}
                 </span>
                 {selectedOrder.customer?.mobile && (
                   <span className="text-[11px] text-slate-500 font-mono">{selectedOrder.customer.mobile}</span>
                 )}
               </div>
               <div>
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Grand Total</span>
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">{t('billing.finalPayable', null, 'Grand Total')}</span>
                 <span className="font-black text-blue-700 text-base mt-0.5 block">
-                  ₹{Number(selectedOrder.grandTotal || selectedOrder.subtotal || 0).toLocaleString()}
+                  ₹{formatNumber(Number(selectedOrder.grandTotal || selectedOrder.subtotal || 0))}
                 </span>
               </div>
             </div>
 
             {/* Dishes & Items Table */}
             <div>
-              <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">Ordered Dishes & Items</h4>
+              <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">{t('kitchen.orderedDishes', null, 'Ordered Dishes & Items')}</h4>
               <div className="border border-slate-200 rounded-xl overflow-hidden">
                 <table className="w-full text-xs text-left">
                   <thead className="bg-slate-50 text-slate-500 font-bold border-b border-slate-200">
                     <tr>
                       <th className="py-2.5 px-3">#</th>
-                      <th className="py-2.5 px-3">Dish Name</th>
-                      <th className="py-2.5 px-3">Category</th>
-                      <th className="py-2.5 px-3 text-center">Qty</th>
-                      <th className="py-2.5 px-3 text-right">Unit Price</th>
-                      <th className="py-2.5 px-3 text-right">Line Total</th>
+                      <th className="py-2.5 px-3">{t('menu.productName', null, 'Dish Name')}</th>
+                      <th className="py-2.5 px-3">{t('menu.categoryName', null, 'Category')}</th>
+                      <th className="py-2.5 px-3 text-center">{t('common.qty', null, 'Qty')}</th>
+                      <th className="py-2.5 px-3 text-right">{t('menu.price', null, 'Unit Price')}</th>
+                      <th className="py-2.5 px-3 text-right">{t('common.total', null, 'Line Total')}</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
                     {(selectedOrder.items || []).map((it, idx) => (
                       <tr key={idx} className="hover:bg-slate-50">
-                        <td className="py-2.5 px-3 text-slate-400 font-mono">{idx + 1}</td>
+                        <td className="py-2.5 px-3 text-slate-400 font-mono">{formatNumber(idx + 1)}</td>
                         <td className="py-2.5 px-3 font-bold text-slate-800">
                           {it.name || it.productName}
                           {it.notes && <span className="text-[11px] text-slate-400 font-normal block italic">{it.notes}</span>}
@@ -781,13 +780,13 @@ export const OrderHistoryPage = () => {
                           </span>
                         </td>
                         <td className="py-2.5 px-3 text-center font-mono font-bold text-blue-600">
-                          {it.quantity}
+                          {formatNumber(it.quantity)}
                         </td>
                         <td className="py-2.5 px-3 text-right font-mono text-slate-600">
-                          ₹{Number(it.unitPrice || it.price || 0).toFixed(2)}
+                          ₹{formatNumber(Number(it.unitPrice || it.price || 0).toFixed(2))}
                         </td>
                         <td className="py-2.5 px-3 text-right font-mono font-bold text-slate-900">
-                          ₹{(Number(it.quantity || 1) * Number(it.unitPrice || it.price || 0)).toFixed(2)}
+                          ₹{formatNumber((Number(it.quantity || 1) * Number(it.unitPrice || it.price || 0)).toFixed(2))}
                         </td>
                       </tr>
                     ))}
@@ -799,25 +798,25 @@ export const OrderHistoryPage = () => {
             {/* Financial Summary */}
             <div className="bg-slate-50 rounded-xl p-4 border border-slate-200 space-y-1.5 text-xs">
               <div className="flex justify-between text-slate-600">
-                <span>Food Subtotal:</span>
-                <span className="font-mono font-semibold">₹{Number(selectedOrder.subtotal || 0).toFixed(2)}</span>
+                <span>{t('billing.subtotalAmount', null, 'Food Subtotal:')}</span>
+                <span className="font-mono font-semibold">₹{formatNumber(Number(selectedOrder.subtotal || 0).toFixed(2))}</span>
               </div>
               {Number(selectedOrder.discountAmount || 0) > 0 && (
                 <div className="flex justify-between text-amber-600 font-medium">
-                  <span>Discount Applied:</span>
-                  <span className="font-mono">-₹{Number(selectedOrder.discountAmount).toFixed(2)}</span>
+                  <span>{t('billing.discountAmount', null, 'Discount Applied:')}</span>
+                  <span className="font-mono">-₹{formatNumber(Number(selectedOrder.discountAmount).toFixed(2))}</span>
                 </div>
               )}
               {Number(selectedOrder.taxTotal || 0) > 0 && (
                 <div className="flex justify-between text-slate-600">
-                  <span>Applicable GST:</span>
-                  <span className="font-mono font-semibold">₹{Number(selectedOrder.taxTotal).toFixed(2)}</span>
+                  <span>{t('billing.totalTax', null, 'Applicable GST:')}</span>
+                  <span className="font-mono font-semibold">₹{formatNumber(Number(selectedOrder.taxTotal).toFixed(2))}</span>
                 </div>
               )}
               <div className="flex justify-between text-slate-900 font-black text-sm pt-2 border-t border-slate-200">
-                <span>Grand Total:</span>
+                <span>{t('billing.finalPayable', null, 'Grand Total:')}</span>
                 <span className="font-mono text-blue-700">
-                  ₹{Number(selectedOrder.grandTotal || selectedOrder.subtotal || 0).toFixed(2)}
+                  ₹{formatNumber(Number(selectedOrder.grandTotal || selectedOrder.subtotal || 0).toFixed(2))}
                 </span>
               </div>
             </div>
@@ -844,10 +843,10 @@ export const OrderHistoryPage = () => {
                   }
                 }}
               >
-                Print Invoice
+                {t('billing.reprint', null, 'Print Invoice')}
               </Button>
               <Button variant="primary" onClick={() => setSelectedOrder(null)}>
-                Close
+                {t('common.close', null, 'Close')}
               </Button>
             </div>
           </div>

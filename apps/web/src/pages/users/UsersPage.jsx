@@ -10,9 +10,11 @@ import { Modal } from '../../components/common/Modal';
 import { Badge } from '../../components/common/Badge';
 import { DataTable } from '../../components/common/DataTable';
 import { SYSTEM_ROLES } from '../../constants/roles';
+import { useTranslation } from '../../hooks/useTranslation';
 
 export const UsersPage = () => {
   const { user: currentUser, role: currentRole } = useAuth();
+  const { t, formatNumber } = useTranslation();
   const isAdminOrOwner = currentUser?.role === 'owner' || currentUser?.role === 'admin' || currentRole === 'owner' || currentRole === 'admin';
 
   const [users, setUsers] = useState([]);
@@ -31,7 +33,8 @@ export const UsersPage = () => {
     username: '',
     password: '',
     role: SYSTEM_ROLES.CAPTAIN,
-    mobile: ''
+    mobile: '',
+    language: 'en'
   });
   const [formError, setFormError] = useState('');
   const [formLoading, setFormLoading] = useState(false);
@@ -81,7 +84,8 @@ export const UsersPage = () => {
       username: '',
       password: '',
       role: SYSTEM_ROLES.CAPTAIN,
-      mobile: ''
+      mobile: '',
+      language: 'en'
     });
     setFormError('');
     setIsModalOpen(true);
@@ -94,7 +98,8 @@ export const UsersPage = () => {
       username: u.username,
       password: '', // blank unless changing
       role: u.role,
-      mobile: u.mobile || ''
+      mobile: u.mobile || '',
+      language: u.language || 'en'
     });
     setFormError('');
     setIsModalOpen(true);
@@ -203,7 +208,7 @@ export const UsersPage = () => {
 
   const columns = [
     {
-      header: 'Staff Member',
+      header: t('users.title', 'Staff Member'),
       accessor: 'name',
       render: (row) => (
         <div className="flex items-center gap-3">
@@ -218,7 +223,7 @@ export const UsersPage = () => {
       )
     },
     {
-      header: 'Assigned Role',
+      header: t('users.role', 'Assigned Role'),
       accessor: 'role',
       render: (row) => (
         <Badge variant={roleColors[row.role] || 'default'} size="sm">
@@ -227,23 +232,23 @@ export const UsersPage = () => {
       )
     },
     {
-      header: 'Mobile Phone',
+      header: t('customers.mobileNumber', 'Mobile Phone'),
       accessor: 'mobile',
       render: (row) => (
         <span className="text-xs font-mono text-slate-600">{row.mobile || '—'}</span>
       )
     },
     {
-      header: 'Status',
+      header: t('common.status', 'Status'),
       accessor: 'isActive',
       render: (row) => (
         <Badge variant={row.isActive ? 'success' : 'default'} size="sm">
-          {row.isActive ? 'Active' : 'Disabled'}
+          {row.isActive ? t('common.active', 'Active') : t('common.inactive', 'Disabled')}
         </Badge>
       )
     },
     {
-      header: 'Actions',
+      header: t('common.actions', 'Actions'),
       align: 'right',
       render: (row) => (
         <div className="flex items-center justify-end gap-1.5">
@@ -254,7 +259,7 @@ export const UsersPage = () => {
             onClick={() => handleOpenResetPassword(row)}
             title="Reset Staff Password"
           >
-            Password
+            {t('auth.securityPassword', 'Password')}
           </Button>
           <Button
             variant="secondary"
@@ -262,7 +267,7 @@ export const UsersPage = () => {
             icon={Edit2}
             onClick={() => handleOpenEdit(row)}
           >
-            Edit
+            {t('common.edit', 'Edit')}
           </Button>
           <Button
             variant={row.isActive ? 'ghost' : 'secondary'}
@@ -270,7 +275,7 @@ export const UsersPage = () => {
             onClick={() => handleToggleStatus(row)}
             className={row.isActive ? 'text-amber-600 hover:text-amber-700' : 'text-emerald-600 hover:text-emerald-700'}
           >
-            {row.isActive ? 'Disable' : 'Enable'}
+            {row.isActive ? t('common.deactivate', 'Disable') : t('common.activate', 'Enable')}
           </Button>
           {isAdminOrOwner && row.id !== currentUser?.id && (
             <Button
@@ -280,7 +285,7 @@ export const UsersPage = () => {
               onClick={() => handleDeleteUser(row)}
               title="Permanently Delete Staff Member"
             >
-              Delete
+              {t('common.delete', 'Delete')}
             </Button>
           )}
         </div>
@@ -291,11 +296,11 @@ export const UsersPage = () => {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Staff & User Management"
-        subtitle="Manage employee access accounts, job roles, and terminal credentials"
+        title={t('users.title', 'Staff & User Management')}
+        subtitle={t('users.subtitle', 'Manage employee access accounts, job roles, and terminal credentials')}
       >
         <Button variant="primary" icon={Plus} onClick={handleOpenAdd}>
-          Add Staff Member
+          {t('users.addUser', 'Add Staff Member')}
         </Button>
       </PageHeader>
 
@@ -304,7 +309,7 @@ export const UsersPage = () => {
         <div className="w-full sm:w-64">
           <Input
             icon={Search}
-            placeholder="Search staff by name, @username, or phone..."
+            placeholder={t('common.search', 'Search staff by name, @username, or phone...')}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
@@ -315,7 +320,7 @@ export const UsersPage = () => {
             value={roleFilter}
             onChange={(e) => setRoleFilter(e.target.value)}
             options={[
-              { value: '', label: 'All Roles' },
+              { value: '', label: t('common.all', 'All Roles') },
               ...Object.values(SYSTEM_ROLES).map((r) => ({
                 value: r,
                 label: r.charAt(0).toUpperCase() + r.slice(1)
@@ -325,7 +330,7 @@ export const UsersPage = () => {
         </div>
 
         <div className="sm:ml-auto text-xs text-slate-500 font-semibold text-right sm:text-left">
-          Total: {pagination?.total ?? users.length} staff members
+          {t('common.total', 'Total')}: {formatNumber(pagination?.total ?? users.length)}
         </div>
       </div>
 
@@ -334,7 +339,7 @@ export const UsersPage = () => {
         columns={columns}
         data={users}
         loading={loading}
-        emptyMessage="No staff members match the selected filter."
+        emptyMessage={t('users.noUsers', 'No staff members match the selected filter.')}
         pagination={pagination}
         onPageChange={(newPage) => {
           setPage(newPage);
@@ -351,8 +356,8 @@ export const UsersPage = () => {
       <Modal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
-        title={editingUser ? `Edit Account: ${editingUser.name}` : 'Create Staff Member'}
-        subtitle="Staff credentials for terminal login"
+        title={editingUser ? `${t('users.editUser', 'Edit Account')}: ${editingUser.name}` : t('users.addUser', 'Create Staff Member')}
+        subtitle={t('users.userModalSubtitle', 'Staff credentials for terminal login')}
       >
         <form onSubmit={handleSubmit} className="space-y-4">
           {formError && (
@@ -362,7 +367,7 @@ export const UsersPage = () => {
           )}
 
           <Input
-            label="Full Name"
+            label={t('auth.fullName', 'Full Name')}
             placeholder="e.g. Rahul Sharma"
             value={formData.name}
             onChange={(e) => setFormData({ ...formData, name: e.target.value })}
@@ -371,7 +376,7 @@ export const UsersPage = () => {
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <Input
-              label="Username"
+              label={t('auth.username', 'Username')}
               placeholder="e.g. rahul"
               value={formData.username}
               onChange={(e) => setFormData({ ...formData, username: e.target.value })}
@@ -379,7 +384,7 @@ export const UsersPage = () => {
             />
 
             <Input
-              label="Mobile Phone"
+              label={t('customers.mobileNumber', 'Mobile Phone')}
               placeholder="10-digit phone"
               value={formData.mobile}
               onChange={(e) => setFormData({ ...formData, mobile: e.target.value })}
@@ -388,7 +393,7 @@ export const UsersPage = () => {
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <Select
-              label="System Role"
+              label={t('auth.systemRole', 'System Role')}
               value={formData.role}
               onChange={(e) => setFormData({ ...formData, role: e.target.value })}
               options={Object.values(SYSTEM_ROLES).map((r) => ({
@@ -399,7 +404,7 @@ export const UsersPage = () => {
             />
 
             <Input
-              label={editingUser ? 'New Password (Optional)' : 'Password'}
+              label={editingUser ? t('auth.newPassword', 'New Password (Optional)') : t('auth.password', 'Password')}
               type="password"
               placeholder={editingUser ? 'Leave blank to keep' : 'Min 4 characters'}
               value={formData.password}
@@ -410,10 +415,10 @@ export const UsersPage = () => {
 
           <div className="flex flex-col-reverse sm:flex-row justify-end gap-2 pt-4 border-t border-slate-100">
             <Button variant="secondary" onClick={() => setIsModalOpen(false)} className="w-full sm:w-auto">
-              Cancel
+              {t('common.cancel', 'Cancel')}
             </Button>
             <Button type="submit" loading={formLoading} className="w-full sm:w-auto">
-              {editingUser ? 'Save Changes' : 'Create Account'}
+              {editingUser ? t('common.save', 'Save Changes') : t('common.create', 'Create Account')}
             </Button>
           </div>
         </form>
@@ -423,7 +428,7 @@ export const UsersPage = () => {
       <Modal
         isOpen={!!resetPasswordUser}
         onClose={() => setResetPasswordUser(null)}
-        title={`Reset Staff Password: ${resetPasswordUser?.name}`}
+        title={`${t('auth.securityPassword', 'Reset Staff Password')}: ${resetPasswordUser?.name}`}
         subtitle={`Update credentials for @${resetPasswordUser?.username} (${resetPasswordUser?.role?.toUpperCase()})`}
       >
         {resetPasswordUser && (
@@ -443,21 +448,21 @@ export const UsersPage = () => {
 
             <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs space-y-1">
               <div className="flex justify-between">
-                <span className="text-slate-500">Staff Member:</span>
+                <span className="text-slate-500">{t('users.title', 'Staff Member')}:</span>
                 <span className="font-bold text-slate-800">{resetPasswordUser.name}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-slate-500">Username:</span>
+                <span className="text-slate-500">{t('auth.username', 'Username')}:</span>
                 <span className="font-mono font-bold text-slate-800">@{resetPasswordUser.username}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-slate-500">Role:</span>
+                <span className="text-slate-500">{t('auth.systemRole', 'Role')}:</span>
                 <span className="font-bold text-blue-600 uppercase">{resetPasswordUser.role}</span>
               </div>
             </div>
 
             <Input
-              label="New Password"
+              label={t('auth.newPassword', 'New Password')}
               type="password"
               placeholder="Minimum 4 characters"
               value={newStaffPassword}
@@ -467,7 +472,7 @@ export const UsersPage = () => {
             />
 
             <Input
-              label="Confirm New Password"
+              label={t('auth.confirmNewPassword', 'Confirm New Password')}
               type="password"
               placeholder="Re-type new password"
               value={confirmStaffPassword}
@@ -477,10 +482,10 @@ export const UsersPage = () => {
 
             <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
               <Button variant="secondary" onClick={() => setResetPasswordUser(null)}>
-                Cancel
+                {t('common.cancel', 'Cancel')}
               </Button>
               <Button type="submit" variant="primary" loading={resetPasswordLoading} icon={KeyRound}>
-                Save Password
+                {t('auth.updatePassword', 'Save Password')}
               </Button>
             </div>
           </form>

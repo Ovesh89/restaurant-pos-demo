@@ -7,9 +7,11 @@ import { Button } from '../../components/common/Button';
 import { Input } from '../../components/common/Input';
 import { Modal } from '../../components/common/Modal';
 import { DataTable } from '../../components/common/DataTable';
+import { useTranslation } from '../../hooks/useTranslation';
 
 export const CustomersPage = () => {
   const { user } = useAuth();
+  const { t, formatNumber, formatCurrency } = useTranslation();
 
   const [customers, setCustomers] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -78,7 +80,7 @@ export const CustomersPage = () => {
 
   const columns = [
     {
-      header: 'Guest Name',
+      header: t('customers.customerName', 'Guest Name'),
       accessor: 'name',
       render: (row) => (
         <div className="flex items-center gap-3">
@@ -93,43 +95,43 @@ export const CustomersPage = () => {
       )
     },
     {
-      header: 'Mobile Phone',
+      header: t('customers.mobileNumber', 'Mobile Phone'),
       accessor: 'mobile',
       className: 'font-mono text-xs text-slate-600',
       render: (row) => row.mobile || '—'
     },
     {
-      header: 'Visits',
+      header: t('customers.totalVisits', 'Visits'),
       accessor: 'visitCount',
       className: 'font-bold text-slate-700 text-xs',
-      render: (row) => `${row.visitCount || 0} visits`
+      render: (row) => `${formatNumber(row.visitCount || 0)} ${t('customers.totalVisits', 'visits')}`
     },
     {
-      header: 'Total Spend (INR)',
+      header: t('customers.totalSpent', 'Total Spend'),
       accessor: 'totalSpend',
       align: 'right',
       render: (row) => (
         <span className="font-extrabold text-slate-900 text-sm">
-          ₹{(row.totalSpend || 0).toLocaleString()}
+          {formatCurrency(row.totalSpend || 0)}
         </span>
       )
     },
     {
-      header: 'Last Dining Visit',
+      header: t('customers.lastVisit', 'Last Dining Visit'),
       accessor: 'lastVisitAt',
       className: 'text-xs text-slate-400 font-mono',
-      render: (row) => (row.lastVisitAt ? new Date(row.lastVisitAt).toLocaleDateString() : 'Never')
+      render: (row) => (row.lastVisitAt ? new Date(row.lastVisitAt).toLocaleDateString() : t('common.never', 'Never'))
     }
   ];
 
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Customer CRM Directory"
-        subtitle="Manage regular guests, dining visit history, and cumulative billing spend"
+        title={t('customers.title', 'Customer CRM Directory')}
+        subtitle={t('customers.subtitle', 'Manage regular guests, dining visit history, and cumulative billing spend')}
       >
         <Button variant="primary" icon={Plus} onClick={handleOpenAdd}>
-          Add Customer
+          {t('customers.addCustomer', 'Add Customer')}
         </Button>
       </PageHeader>
 
@@ -138,13 +140,13 @@ export const CustomersPage = () => {
         <div className="w-full sm:max-w-sm">
           <Input
             icon={Search}
-            placeholder="Search by guest name or mobile..."
+            placeholder={t('common.search', 'Search by guest name or mobile...')}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
         </div>
         <div className="sm:ml-auto text-xs text-slate-500 font-semibold text-right sm:text-left">
-          Total: {pagination?.total ?? customers.length} registered guests
+          {t('common.total', 'Total')}: {formatNumber(pagination?.total ?? customers.length)}
         </div>
       </div>
 
@@ -153,7 +155,7 @@ export const CustomersPage = () => {
         columns={columns}
         data={customers}
         loading={loading}
-        emptyMessage="No customer records found."
+        emptyMessage={t('customers.noCustomers', 'No customer records found.')}
         pagination={pagination}
         onPageChange={(p) => {
           setPage(p);
@@ -170,8 +172,8 @@ export const CustomersPage = () => {
       <Modal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
-        title="Register New Customer"
-        subtitle="Save contact details for restaurant invoicing and history tracking"
+        title={t('customers.addCustomer', 'Register New Customer')}
+        subtitle={t('customers.customerModalSubtitle', 'Save contact details for restaurant invoicing and history tracking')}
       >
         <form onSubmit={handleSubmit} className="space-y-4">
           {formError && (
@@ -181,7 +183,7 @@ export const CustomersPage = () => {
           )}
 
           <Input
-            label="Full Name"
+            label={t('auth.fullName', 'Full Name')}
             placeholder="e.g. Vikram Singhania"
             value={formData.name}
             onChange={(e) => setFormData({ ...formData, name: e.target.value })}
@@ -191,14 +193,14 @@ export const CustomersPage = () => {
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <Input
-              label="Mobile Number"
+              label={t('customers.mobileNumber', 'Mobile Number')}
               placeholder="10-digit mobile number"
               value={formData.mobile}
               onChange={(e) => setFormData({ ...formData, mobile: e.target.value })}
             />
 
             <Input
-              label="Email (Optional)"
+              label={t('customers.email', 'Email (Optional)')}
               type="email"
               placeholder="e.g. guest@example.com"
               value={formData.email}
@@ -207,14 +209,14 @@ export const CustomersPage = () => {
           </div>
 
           <Input
-            label="Address (Optional)"
+            label={t('settings.branchAddress', 'Address (Optional)')}
             placeholder="e.g. Sector 11, Gandhinagar"
             value={formData.address}
             onChange={(e) => setFormData({ ...formData, address: e.target.value })}
           />
 
           <Input
-            label="Notes / Dietary Preferences"
+            label={t('customers.notes', 'Notes / Dietary Preferences')}
             placeholder="e.g. Prefers corner tables, Jain food"
             value={formData.notes}
             onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
@@ -222,10 +224,10 @@ export const CustomersPage = () => {
 
           <div className="flex flex-col-reverse sm:flex-row justify-end gap-2 pt-2 border-t border-slate-100">
             <Button variant="secondary" onClick={() => setIsModalOpen(false)} className="w-full sm:w-auto">
-              Cancel
+              {t('common.cancel', 'Cancel')}
             </Button>
             <Button type="submit" loading={formLoading} className="w-full sm:w-auto">
-              Save Customer
+              {t('common.save', 'Save Customer')}
             </Button>
           </div>
         </form>

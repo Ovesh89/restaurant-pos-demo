@@ -6,8 +6,10 @@ import { Input } from '../common/Input.jsx';
 import { Modal } from '../common/Modal.jsx';
 import { Badge } from '../common/Badge.jsx';
 import { DataTable } from '../common/DataTable.jsx';
+import { useTranslation } from '../../hooks/useTranslation.js';
 
 export const KitchenStationManager = () => {
+  const { t, formatNumber } = useTranslation();
   const [stations, setStations] = useState([]);
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState('');
@@ -126,13 +128,13 @@ export const KitchenStationManager = () => {
 
   const columns = [
     {
-      header: 'Order',
+      header: t('common.sortOrder', 'Order'),
       accessor: 'sortOrder',
       width: '80px',
-      render: (row) => <span className="font-mono text-slate-500 font-bold">#{row.sortOrder ?? 1}</span>,
+      render: (row) => <span className="font-mono text-slate-500 font-bold">#{formatNumber(row.sortOrder ?? 1)}</span>,
     },
     {
-      header: 'Station Name',
+      header: t('menu.kitchenStation', 'Station Name'),
       accessor: 'name',
       render: (row) => (
         <div className="flex items-center gap-2.5">
@@ -148,16 +150,16 @@ export const KitchenStationManager = () => {
       ),
     },
     {
-      header: 'Status',
+      header: t('common.status', 'Status'),
       accessor: 'isActive',
       render: (row) => (
         <Badge variant={row.isActive ? 'success' : 'default'} size="sm">
-          {row.isActive ? 'Active' : 'Inactive'}
+          {row.isActive ? t('common.active', 'Active') : t('common.inactive', 'Inactive')}
         </Badge>
       ),
     },
     {
-      header: 'Actions',
+      header: t('common.actions', 'Actions'),
       align: 'right',
       render: (row) => (
         <div className="flex items-center justify-end gap-2">
@@ -167,7 +169,7 @@ export const KitchenStationManager = () => {
             icon={Edit2}
             onClick={() => handleOpenEdit(row)}
           >
-            Edit
+            {t('common.edit', 'Edit')}
           </Button>
           <Button
             variant={row.isActive ? 'ghost' : 'secondary'}
@@ -175,7 +177,7 @@ export const KitchenStationManager = () => {
             onClick={() => handleToggleStatus(row)}
             className={row.isActive ? 'text-amber-600 hover:text-amber-700' : 'text-emerald-600 hover:text-emerald-700'}
           >
-            {row.isActive ? 'Deactivate' : 'Activate'}
+            {row.isActive ? t('common.deactivate', 'Deactivate') : t('common.activate', 'Activate')}
           </Button>
           <Button
             variant="danger"
@@ -184,7 +186,7 @@ export const KitchenStationManager = () => {
             onClick={() => handleDelete(row)}
             title="Delete Kitchen Station"
           >
-            Delete
+            {t('common.delete', 'Delete')}
           </Button>
         </div>
       ),
@@ -196,13 +198,13 @@ export const KitchenStationManager = () => {
       {/* Header bar */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-slate-50 p-4 rounded-2xl border border-slate-200">
         <div>
-          <h4 className="font-bold text-slate-800 text-sm">Kitchen Preparation Stations</h4>
+          <h4 className="font-bold text-slate-800 text-sm">{t('kitchen.allStations', 'Kitchen Preparation Stations')}</h4>
           <p className="text-xs text-slate-500">
             Define kitchen routing (Curry Station, Tandoor & Grill, Chinese, Desserts, Beverages)
           </p>
         </div>
         <Button variant="primary" icon={Plus} size="sm" onClick={handleOpenAdd}>
-          Add Kitchen Station
+          + {t('menu.addStation', 'Add Kitchen Station')}
         </Button>
       </div>
 
@@ -225,14 +227,14 @@ export const KitchenStationManager = () => {
         columns={columns}
         data={stations}
         loading={loading}
-        emptyMessage="No kitchen stations configured yet."
+        emptyMessage={t('kitchen.noActiveTickets', 'No kitchen stations configured yet.')}
       />
 
       {/* Add / Edit Station Modal */}
       <Modal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
-        title={editingStation ? 'Edit Kitchen Station' : 'Create Kitchen Station'}
+        title={editingStation ? t('menu.editStation', 'Edit Kitchen Station') : t('menu.addStation', 'Create Kitchen Station')}
         subtitle="Kitchen section for routing preparation orders and KOTs"
       >
         <form onSubmit={handleSubmit} className="space-y-4">
@@ -243,7 +245,7 @@ export const KitchenStationManager = () => {
           )}
 
           <Input
-            label="Kitchen Station Name"
+            label={t('menu.kitchenStation', 'Kitchen Station Name')}
             placeholder="e.g. Main Curry, Tandoor, Chinese Wok, Mocktail Bar"
             value={formData.name}
             onChange={(e) => setFormData({ ...formData, name: e.target.value })}
@@ -253,14 +255,14 @@ export const KitchenStationManager = () => {
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <Input
-              label="Station Code / Short Tag"
+              label={t('menu.shortCode', 'Station Code / Short Tag')}
               placeholder="e.g. CURRY, TANDOOR, BAR"
               value={formData.code}
               onChange={(e) => setFormData({ ...formData, code: e.target.value.toUpperCase() })}
             />
 
             <Input
-              label="Sort Order"
+              label={t('common.sortOrder', 'Sort Order')}
               type="number"
               min="1"
               value={formData.sortOrder}
@@ -270,7 +272,7 @@ export const KitchenStationManager = () => {
           </div>
 
           <Input
-            label="Description (Optional)"
+            label={t('common.description', 'Description (Optional)')}
             placeholder="e.g. Handles gravy curries, dal, and rice preparations"
             value={formData.description}
             onChange={(e) => setFormData({ ...formData, description: e.target.value })}
@@ -284,7 +286,7 @@ export const KitchenStationManager = () => {
                 onChange={(e) => setFormData({ ...formData, isActive: e.target.checked })}
                 className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500"
               />
-              <span className="font-semibold text-xs text-slate-800">Station Active</span>
+              <span className="font-semibold text-xs text-slate-800">{t('common.active', 'Station Active')}</span>
             </label>
             <p className="text-[11px] text-slate-500 ml-6 mt-0.5">
               Inactive stations will not receive new KOT routing allocations.
@@ -293,10 +295,10 @@ export const KitchenStationManager = () => {
 
           <div className="flex flex-col-reverse sm:flex-row justify-end gap-2 pt-4 border-t border-slate-100">
             <Button variant="secondary" onClick={() => setIsModalOpen(false)} className="w-full sm:w-auto">
-              Cancel
+              {t('common.cancel', 'Cancel')}
             </Button>
             <Button type="submit" loading={formLoading} className="w-full sm:w-auto">
-              {editingStation ? 'Save Changes' : 'Create Station'}
+              {editingStation ? t('common.save', 'Save Changes') : t('common.create', 'Create Station')}
             </Button>
           </div>
         </form>
