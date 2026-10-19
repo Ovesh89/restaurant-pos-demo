@@ -17,6 +17,36 @@ export const formatMoney = (value, fallback = 0) => {
   return num.toFixed(2);
 };
 
+/**
+ * Truncates dish name so it fits on exactly one line and preserves thermal receipt alignment.
+ */
+export const truncateReceiptName = (name, maxChars = 18) => {
+  if (!name) return '';
+  const trimmed = String(name).trim();
+  if (trimmed.length <= maxChars) return trimmed;
+  return trimmed.substring(0, maxChars - 3) + '...';
+};
+
+/**
+ * Formats order, KOT, or bill numbers into clean daily sequence numbers for receipts.
+ * Removes messy GUIDs and prefixes, returning clean sequences like '001', '002'.
+ */
+export const formatReceiptSequence = (code, fallback = '001') => {
+  if (!code) return fallback;
+  const str = String(code).trim();
+  // Strip out standard UUID/GUID if present
+  if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str)) {
+    return fallback;
+  }
+  // If it contains hyphens like ORD-191026-001 or KOT-191026-002 or BILL-191026-001
+  const parts = str.split('-');
+  const lastPart = parts[parts.length - 1];
+  if (/^\d+$/.test(lastPart)) {
+    return lastPart.padStart(3, '0');
+  }
+  return str;
+};
+
 export class PrintService {
   /**
    * Generates formatted plain text for standard 80mm / 48-column thermal printers
