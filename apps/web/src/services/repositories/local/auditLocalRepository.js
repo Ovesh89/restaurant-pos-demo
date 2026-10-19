@@ -3,7 +3,17 @@ import { storageAdapter } from '../../storage/localStorageAdapter.js';
 
 class AuditLocalRepository {
   async getAuditLogs(filters = {}) {
-    const logs = storageAdapter.getItem(STORAGE_KEYS.AUDIT_LOGS) || [];
+    const rawLogs = storageAdapter.getItem(STORAGE_KEYS.AUDIT_LOGS) || [];
+    // 30-day (1 month) retention policy filter
+    const cutoff = Date.now() - 30 * 24 * 60 * 60 * 1000;
+    const logs = rawLogs.filter((log) => {
+      const ts = new Date(log.timestamp || log.createdAt).getTime();
+      return !Number.isNaN(ts) && ts >= cutoff;
+    });
+    if (logs.length !== rawLogs.length) {
+      storageAdapter.setItem(STORAGE_KEYS.AUDIT_LOGS, logs);
+    }
+
     let filtered = [...logs];
 
     if (filters.action) {
@@ -82,6 +92,23 @@ class AuditLocalRepository {
     storageAdapter.setItem(STORAGE_KEYS.AUDIT_LOGS, logs);
     return newLog;
   }
+
+  async cleanupOldLogs(days = 30) {
+    const rawLogs = storageAdapter.getItem(STORAGE_KEYS.AUDIT_LOGS) || [];
+    const cutoff = Date.now() - days * 24 * 60 * 60 * 1000;
+    const kept = rawLogs.filter((log) => {
+      const ts = new Date(log.timestamp || log.createdAt).getTime();
+      return !Number.isNaN(ts) && ts >= cutoff;
+    });
+    const deletedCount = rawLogs.length - kept.length;
+    storageAdapter.setItem(STORAGE_KEYS.AUDIT_LOGS, kept);
+    return {
+      deletedCount,
+      cutoffDate: new Date(cutoff).toISOString(),
+      retentionDays: days
+    };
+  }
 }
 
 export const auditLocalRepository = new AuditLocalRepository();
+

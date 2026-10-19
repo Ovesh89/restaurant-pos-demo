@@ -53,4 +53,20 @@ router.get(
   })
 );
 
+// POST /api/v1/audit/cleanup
+router.post(
+  '/audit/cleanup',
+  authenticate,
+  requirePermissions(['audit.view']),
+  asyncHandler(async (req, res) => {
+    const days = parseInt(req.body?.days || 30, 10) || 30;
+    const result = await auditService.purgeOldLogs(days);
+    return successResponse(res, {
+      message: `Audit logs older than ${result.retentionDays} days cleaned up successfully`,
+      ...result,
+    });
+  })
+);
+
 export default router;
+

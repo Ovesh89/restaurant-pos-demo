@@ -251,13 +251,25 @@ export const TablesPage = () => {
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3 sm:gap-4">
           {displayedTables.map((tbl) => {
             const statusConfig = TABLE_STATUS_CONFIG[tbl.status] || TABLE_STATUS_CONFIG[TABLE_STATUS.AVAILABLE];
+            const handleCardClick = () => {
+              if (!tbl.isActive) return;
+              if (tbl.status === TABLE_STATUS.AVAILABLE) {
+                navigate(`/orders/new?tableId=${tbl.id}`);
+              } else if (tbl.status === TABLE_STATUS.BILL_PENDING && hasAnyPermission([PERMISSIONS.BILLING_GENERATE, PERMISSIONS.PAYMENT_COLLECT])) {
+                navigate(`/billing?tableId=${tbl.id}`);
+              } else {
+                navigate(`/orders`);
+              }
+            };
+
             return (
               <div
                 key={tbl.id}
-                className={`relative rounded-2xl border bg-white p-3.5 sm:p-5 shadow-xs transition-all flex flex-col justify-between min-h-[160px] sm:h-44 ${
+                onClick={handleCardClick}
+                className={`relative rounded-2xl border bg-white p-3.5 sm:p-5 shadow-xs transition-all flex flex-col justify-between min-h-[160px] sm:h-44 cursor-pointer ${
                   !tbl.isActive
-                    ? 'opacity-50 border-dashed border-slate-300'
-                    : 'hover:shadow-md hover:border-blue-400'
+                    ? 'opacity-50 border-dashed border-slate-300 cursor-not-allowed'
+                    : 'hover:shadow-md hover:border-blue-500 hover:scale-[1.01]'
                 }`}
               >
                 {/* Top Info */}

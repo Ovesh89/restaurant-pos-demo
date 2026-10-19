@@ -127,6 +127,7 @@ export async function initIndexes(db = null) {
     { key: { branchId: 1, createdAt: -1 }, name: 'idx_audit_branch_date' },
     { key: { entityType: 1, entityId: 1, createdAt: -1 }, name: 'idx_audit_entity_date' },
     { key: { actorUserId: 1, createdAt: -1 }, name: 'idx_audit_actor_date' },
+    { key: { createdAt: 1 }, name: 'idx_audit_created_at' },
   ]);
 
   // 18. idempotency_keys

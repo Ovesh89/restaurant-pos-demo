@@ -1,6 +1,6 @@
 import crypto from 'node:crypto';
 import { utcNowIso } from '../../repositories/BaseMongoRepository.js';
-import { getNextSequence } from '../../utils/sequence.js';
+import { getNextSequence, getNextDailyKotSequence } from '../../utils/sequence.js';
 import {
   NotFoundAppError,
   ValidationAppError,
@@ -20,7 +20,7 @@ class KOTService {
       resolvedBranchCode = branch?.code || 'MAIN';
     }
 
-    const kotNumber = await getNextSequence('kot', 'KOT', resolvedBranchCode);
+    const kotNumber = await getNextDailyKotSequence(resolvedBranchCode);
     const now = utcNowIso();
 
     const kotItems = (order.items || [])
@@ -104,7 +104,7 @@ class KOTService {
 
     const orderId = order._id || order.id;
     const nextRev = await kotRepository.getNextRevision(orderId);
-    const kotNumber = await getNextSequence('kot', 'KOT', resolvedBranchCode);
+    const kotNumber = await getNextDailyKotSequence(resolvedBranchCode);
     const now = utcNowIso();
 
     const kotDoc = {
@@ -166,7 +166,7 @@ class KOTService {
 
     const orderId = order._id || order.id;
     const nextRev = await kotRepository.getNextRevision(orderId);
-    const kotNumber = await getNextSequence('kot', 'KOT', resolvedBranchCode);
+    const kotNumber = await getNextDailyKotSequence(resolvedBranchCode);
     const now = utcNowIso();
 
     const sourceItems = Array.isArray(cancelledItems)

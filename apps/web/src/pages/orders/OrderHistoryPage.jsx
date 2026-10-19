@@ -722,7 +722,7 @@ export const OrderHistoryPage = () => {
           onClose={() => setSelectedOrder(null)}
           title={`Order Details: ${selectedOrder.orderNo || selectedOrder.orderNumber}`}
           subtitle={`Table ${selectedOrder.tableNo || selectedOrder.tableNumber} • Placed on ${new Date(selectedOrder.createdAt).toLocaleString()}`}
-          size="lg"
+          maxWidth="max-w-4xl sm:max-w-5xl"
         >
           <div className="space-y-5">
             {/* Order Overview Header */}

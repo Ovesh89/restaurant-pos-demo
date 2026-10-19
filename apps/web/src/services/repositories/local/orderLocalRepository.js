@@ -10,7 +10,7 @@ function getDailyOrderNo(orders) {
   const now = new Date();
   const day = String(now.getDate()).padStart(2, '0');
   const month = String(now.getMonth() + 1).padStart(2, '0');
-  const year = String(now.getFullYear());
+  const year = String(now.getFullYear()).slice(-2);
   const dateKey = `${day}${month}${year}`;
   const prefix = `ORD-${dateKey}-`;
 
@@ -23,7 +23,7 @@ function getDailyOrderNo(orders) {
       maxSeq = seq;
     }
   }
-  return `${prefix}${maxSeq + 1}`;
+  return `${prefix}${String(maxSeq + 1).padStart(3, '0')}`;
 }
 
 class OrderLocalRepository {

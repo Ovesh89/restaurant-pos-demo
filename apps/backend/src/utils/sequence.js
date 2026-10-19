@@ -15,10 +15,17 @@ export function getIstDateKey(date = new Date()) {
 
 /**
  * Daily order sequence generator resetting every midnight in Asia/Kolkata timezone.
- * Format: ORD-DDMMYYYY-N (e.g. "ORD-18102026-1", "ORD-18102026-2")
+ * Format: ORD-DDMMYY-001 (e.g. "ORD-191026-001", "ORD-191026-002")
  */
 export async function getNextDailyOrderSequence(branchCode = 'MAIN', date = new Date()) {
   const dateKey = getIstDateKey(date);
+  const istDateStr = new Intl.DateTimeFormat('en-IN', {
+    timeZone: 'Asia/Kolkata',
+    day: '2-digit',
+    month: '2-digit',
+    year: '2-digit',
+  }).format(date).replace(/[^0-9]/g, '');
+
   const counterId = `ord_${branchCode}_${dateKey}`;
   const collection = await getCollection('counters');
 
@@ -40,7 +47,81 @@ export async function getNextDailyOrderSequence(branchCode = 'MAIN', date = new 
 
   const doc = result?.value !== undefined ? result.value : result;
   const seq = Number(doc?.seq || 1);
-  return `ORD-${dateKey}-${seq}`;
+  return `ORD-${istDateStr}-${String(seq).padStart(3, '0')}`;
+}
+
+/**
+ * Daily KOT sequence generator resetting every midnight in Asia/Kolkata timezone.
+ * Format: KOT-DDMMYY-001 (e.g. "KOT-191026-001", "KOT-191026-002")
+ */
+export async function getNextDailyKotSequence(branchCode = 'MAIN', date = new Date()) {
+  const dateKey = getIstDateKey(date);
+  const istDateStr = new Intl.DateTimeFormat('en-IN', {
+    timeZone: 'Asia/Kolkata',
+    day: '2-digit',
+    month: '2-digit',
+    year: '2-digit',
+  }).format(date).replace(/[^0-9]/g, '');
+
+  const counterId = `kot_${branchCode}_${dateKey}`;
+  const collection = await getCollection('counters');
+
+  const result = await collection.findOneAndUpdate(
+    { _id: counterId },
+    {
+      $inc: { seq: 1 },
+      $setOnInsert: {
+        branchId: branchCode,
+        dateKey,
+        type: 'KOT_DAILY',
+      },
+    },
+    {
+      upsert: true,
+      returnDocument: 'after',
+    }
+  );
+
+  const doc = result?.value !== undefined ? result.value : result;
+  const seq = Number(doc?.seq || 1);
+  return `KOT-${istDateStr}-${String(seq).padStart(3, '0')}`;
+}
+
+/**
+ * Daily Bill/Invoice sequence generator resetting every midnight in Asia/Kolkata timezone.
+ * Format: BILL-DDMMYY-001 (e.g. "BILL-191026-001", "BILL-191026-002")
+ */
+export async function getNextDailyBillSequence(branchCode = 'MAIN', date = new Date()) {
+  const dateKey = getIstDateKey(date);
+  const istDateStr = new Intl.DateTimeFormat('en-IN', {
+    timeZone: 'Asia/Kolkata',
+    day: '2-digit',
+    month: '2-digit',
+    year: '2-digit',
+  }).format(date).replace(/[^0-9]/g, '');
+
+  const counterId = `bill_${branchCode}_${dateKey}`;
+  const collection = await getCollection('counters');
+
+  const result = await collection.findOneAndUpdate(
+    { _id: counterId },
+    {
+      $inc: { seq: 1 },
+      $setOnInsert: {
+        branchId: branchCode,
+        dateKey,
+        type: 'BILL_DAILY',
+      },
+    },
+    {
+      upsert: true,
+      returnDocument: 'after',
+    }
+  );
+
+  const doc = result?.value !== undefined ? result.value : result;
+  const seq = Number(doc?.seq || 1);
+  return `BILL-${istDateStr}-${String(seq).padStart(3, '0')}`;
 }
 
 /**

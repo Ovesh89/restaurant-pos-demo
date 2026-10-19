@@ -195,10 +195,6 @@ export const OrdersPage = () => {
 
   const handleConfirmRemoveItem = async (e) => {
     e.preventDefault();
-    if (!removeItemReason.trim()) {
-      setRemoveItemError('Mandatory reason is required to remove this dish.');
-      return;
-    }
     if (!itemToRemove || !selectedOrder) return;
 
     setRemoveItemLoading(true);
@@ -360,10 +356,6 @@ export const OrdersPage = () => {
 
   const handleSubmitModification = async (e) => {
     e.preventDefault();
-    if (!modificationReason.trim()) {
-      setModError('Mandatory reason required for modifying order items.');
-      return;
-    }
     if (modifiedItems.length === 0) {
       setModError('Order cannot have 0 dishes. Cancel order instead.');
       return;
@@ -373,10 +365,11 @@ export const OrdersPage = () => {
     try {
       const actor = { id: user?.id || 'staff', name: user?.name || 'Staff' };
       const orderTargetId = modifyingOrder.id || modifyingOrder._id || modifyingOrder.orderNo || modifyingOrder.orderNumber;
+      const cleanModReason = modificationReason.trim() || 'Dish modification requested by guest';
       await orderRepository.modifyOrderItems(
         orderTargetId,
         modifiedItems,
-        modificationReason,
+        cleanModReason,
         actor
       );
       setModifyingOrder(null);
@@ -794,7 +787,7 @@ export const OrdersPage = () => {
 
           <div>
             <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">
-              Reason for Removal (Mandatory)
+              Reason for Removal (Optional)
             </label>
             <textarea
               rows="3"
@@ -802,7 +795,6 @@ export const OrdersPage = () => {
               placeholder="e.g. Guest changed mind, dish out of stock, incorrect dish added..."
               value={removeItemReason}
               onChange={(e) => setRemoveItemReason(e.target.value)}
-              required
               autoFocus
             />
           </div>
@@ -1184,7 +1176,7 @@ export const OrdersPage = () => {
 
           <div>
             <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">
-              Reason for Dish Modification (Mandatory)
+              Reason for Dish Modification (Optional)
             </label>
             <textarea
               rows="2"
@@ -1192,7 +1184,6 @@ export const OrdersPage = () => {
               placeholder="e.g. Guests requested additional beverages or extra portion..."
               value={modificationReason}
               onChange={(e) => setModificationReason(e.target.value)}
-              required
             ></textarea>
           </div>
 

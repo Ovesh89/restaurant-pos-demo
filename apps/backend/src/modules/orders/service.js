@@ -755,9 +755,7 @@ class OrderService {
     if (!itemId) {
       throw new ValidationAppError('itemId is required.');
     }
-    if (!reason || !String(reason).trim()) {
-      throw new ValidationAppError('A non-empty reason is required to cancel an item.');
-    }
+    const cleanReason = String(reason || 'Item removed by staff').trim();
 
     const order = await orderRepository.findById(orderId);
     if (!order) {
@@ -797,7 +795,7 @@ class OrderService {
     items[targetIdx] = {
       ...targetItem,
       status: 'CANCELLED',
-      cancellationReason: String(reason).trim(),
+      cancellationReason: cleanReason,
       updatedAt: now,
     };
 
@@ -816,7 +814,7 @@ class OrderService {
       cancellationKot = await kotService.createCancellationKot({
         order,
         cancelledItems: [targetItem],
-        reason: String(reason).trim(),
+        reason: cleanReason,
         actorId,
         actorName,
       });
@@ -832,7 +830,7 @@ class OrderService {
       fromStatus: currentStatus,
       toStatus: currentStatus,
       actorId,
-      reason: String(reason).trim(),
+      reason: cleanReason,
       metadata: { itemId: targetItem._id || targetItem.id, productName: targetItem.productName },
     });
 
@@ -843,7 +841,7 @@ class OrderService {
       action: 'ORDER_ITEM_CANCELLED',
       entityType: 'ORDER',
       entityId: canonicalOrderId,
-      reason: String(reason).trim(),
+      reason: cleanReason,
       metadata: { itemId: targetItem._id || targetItem.id, productName: targetItem.productName },
     });
 

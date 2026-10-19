@@ -57,6 +57,11 @@ class AuditApiRepository {
       timestamp: new Date().toISOString()
     };
   }
+
+  async cleanupOldLogs(days = 30) {
+    return apiClient.post('/audit/cleanup', { days });
+  }
 }
 
 export const auditApiRepository = new AuditApiRepository();
+

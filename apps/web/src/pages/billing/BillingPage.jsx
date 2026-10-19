@@ -15,12 +15,20 @@ import {
   Tag,
   RefreshCw,
   Wallet,
-  Clock
+  Clock,
+  Edit3,
+  Layers,
+  Eye,
+  ChevronRight,
+  X
 } from 'lucide-react';
 import { billRepository, BILL_STATUS } from '../../services/repositories/billRepository';
 import { orderRepository } from '../../services/repositories/orderRepository';
 import { customerRepository } from '../../services/repositories/customerRepository';
-import { printService } from '../../services/printing/printService';
+import { productRepository } from '../../services/repositories/productRepository';
+import { categoryRepository } from '../../services/repositories/categoryRepository';
+import { settingsRepository } from '../../services/repositories/settingsRepository';
+import { printService, formatReceiptSequence } from '../../services/printing/printService';
 import { billingCalculator, DISCOUNT_TYPES, PAYMENT_MODES } from '../../services/calculations/billingCalculator';
 import { useAuth } from '../../hooks/useAuth';
 import { PageHeader } from '../../components/common/PageHeader';
@@ -77,6 +85,29 @@ export const BillingPage = () => {
   const [discountModalLoading, setDiscountModalLoading] = useState(false);
   const [discountModalSuccess, setDiscountModalSuccess] = useState(false);
   const [updatedSettledBill, setUpdatedSettledBill] = useState(null);
+
+  // Dish modification modal from Settle Bill popup
+  const [isBillingModifyOpen, setIsBillingModifyOpen] = useState(false);
+  const [billingModifiedItems, setBillingModifiedItems] = useState([]);
+  const [billingModReason, setBillingModReason] = useState('');
+  const [billingAvailableProducts, setBillingAvailableProducts] = useState([]);
+  const [billingCategories, setBillingCategories] = useState([]);
+  const [billingActiveCategory, setBillingActiveCategory] = useState('CATEGORIES');
+  const [billingSearch, setBillingSearch] = useState('');
+  const [billingModLoading, setBillingModLoading] = useState(false);
+  const [billingModError, setBillingModError] = useState('');
+
+  // Inspect Settled Invoice Details Modal
+  const [inspectInvoiceBill, setInspectInvoiceBill] = useState(null);
+  const [isInspectLoading, setIsInspectLoading] = useState(false);
+
+  // Add / Update Payment Sub-Modal for Inspected Invoice
+  const [isExtraPaymentOpen, setIsExtraPaymentOpen] = useState(false);
+  const [extraPaymentMode, setExtraPaymentMode] = useState(PAYMENT_MODES.CASH);
+  const [extraPaymentAmount, setExtraPaymentAmount] = useState('');
+  const [extraPaymentRef, setExtraPaymentRef] = useState('');
+  const [extraPaymentLoading, setExtraPaymentLoading] = useState(false);
+  const [extraPaymentError, setExtraPaymentError] = useState('');
 
   const loadSettledBills = async (overridePage = historyPage, overrideLimit = historyLimit) => {
     try {
@@ -241,13 +272,16 @@ export const BillingPage = () => {
         {
           type: modalDiscType,
           value: Number(modalDiscValue) || 0,
-          reason: modalDiscReason
+          reason: modalDiscReason.trim() || 'Post-settlement discount'
         },
         actor
       );
       setUpdatedSettledBill(updated);
       setDiscountModalSuccess(true);
       await loadBillingData();
+      if (inspectInvoiceBill && inspectInvoiceBill.id === discountModalBill.id) {
+        setInspectInvoiceBill(updated);
+      }
     } catch (err) {
       setDiscountModalError(err.message || 'Failed to update discount on settled bill.');
     } finally {
@@ -255,13 +289,9 @@ export const BillingPage = () => {
     }
   };
 
-  // Recompute bill on discount change
+  // Recompute bill on discount change (Reason is completely optional)
   const handleApplyDiscount = async () => {
     if (!selectedOrder) return;
-    if (Number(discountValue) > 0 && !discountReason.trim()) {
-      setActionError('A mandatory reason is required to apply discount.');
-      return;
-    }
     setActionError('');
 
     try {
@@ -270,14 +300,14 @@ export const BillingPage = () => {
         order: selectedOrder,
         discount: {
           type: discountType,
-          value: Number(discountValue),
-          reason: discountReason.trim()
+          value: Number(discountValue) || 0,
+          reason: discountReason.trim() || 'Discount'
         },
         customer: selectedCustomer,
         actor
       });
       setActiveBill(bill);
-      setPaymentAmount(bill.balance.toString());
+      setPaymentAmount(bill.balance > 0 ? bill.balance.toString() : '');
     } catch (err) {
       setActionError(err.message);
     }
@@ -299,45 +329,71 @@ export const BillingPage = () => {
 
     try {
       const actor = { id: user?.id || 'cashier', name: user?.name || 'Cashier' };
-      const result = await billRepository.addPayment(
+      const res = await billRepository.addPayment(
         activeBill.id,
         {
           mode: paymentMode,
           amount: amt,
-          reference: paymentRef
+          reference: paymentRef.trim()
         },
         actor
       );
 
-      setActiveBill(result.bill);
+      const updatedBill = res.bill;
+      setActiveBill(updatedBill);
       setPaymentRef('');
-      setPaymentAmount(result.bill.balance > 0 ? result.bill.balance.toString() : '');
 
-      if (result.isSettled) {
-        // Automatically print invoice upon full settlement with dynamic UPI QR if applicable!
-        const configuredUpiId = localStorage.getItem('gts_pos_upi_id') || 'q705457761@ybl';
-        printService.printInvoice(result.bill, selectedOrder, selectedCustomer, null, {
-          paymentMode,
-          upiId: configuredUpiId,
-        });
+      // If fully settled, close the bill immediately to release the table and finalize status
+      if (updatedBill.isSettled) {
+        setPaymentAmount('0');
+        try {
+          const closed = await billRepository.closeBill(updatedBill.id, actor);
+          setActiveBill(closed);
+        } catch (closeErr) {
+          console.warn('Auto close bill failed, proceeding with settled state:', closeErr);
+        }
         await loadBillingData();
+      } else {
+        setPaymentAmount(updatedBill.balance > 0 ? updatedBill.balance.toString() : '');
       }
     } catch (err) {
-      setActionError(err.message || 'Payment recording failed.');
+      setActionError(err.message);
     } finally {
       setActionLoading(false);
     }
   };
 
-  // Customer search
+  // Finalize settlement and release dining table
+  const handleCloseBill = async () => {
+    if (!activeBill) return;
+    setActionError('');
+    setActionLoading(true);
+
+    try {
+      const actor = { id: user?.id || 'cashier', name: user?.name || 'Cashier' };
+      await billRepository.closeBill(activeBill.id, actor);
+      handlePrintInvoice();
+      handleCloseDesk();
+    } catch (err) {
+      setActionError(err.message);
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  // Customer search & select
   const handleSearchCustomer = async (q) => {
     setCustomerQuery(q);
     if (!q.trim()) {
       setCustomerResults([]);
       return;
     }
-    const results = await customerRepository.getCustomers(q);
-    setCustomerResults(results);
+    try {
+      const results = await customerRepository.searchCustomers(q);
+      setCustomerResults(results);
+    } catch (err) {
+      console.error(err);
+    }
   };
 
   const handleSelectCustomer = (cust) => {
@@ -346,17 +402,16 @@ export const BillingPage = () => {
     setCustomerResults([]);
   };
 
-  const handleCreateQuickCustomer = async (e) => {
+  const handleCreateCustomer = async (e) => {
     e.preventDefault();
     if (!newCustName.trim() || !newCustPhone.trim()) return;
 
     try {
-      const actor = { id: user?.id || 'cashier', name: user?.name || 'Cashier' };
-      const cust = await customerRepository.createCustomer(
-        { name: newCustName, mobile: newCustPhone },
-        actor
-      );
-      setSelectedCustomer(cust);
+      const created = await customerRepository.createCustomer({
+        name: newCustName.trim(),
+        mobile: newCustPhone.trim()
+      });
+      setSelectedCustomer(created);
       setIsNewCustModalOpen(false);
       setNewCustName('');
       setNewCustPhone('');
@@ -365,18 +420,240 @@ export const BillingPage = () => {
     }
   };
 
-  const handleReprintInvoice = (bill) => {
-    const configuredUpiId = localStorage.getItem('gts_pos_upi_id') || 'q705457761@ybl';
+  // Thermal printing invocation
+  const handlePrintInvoice = async () => {
+    if (!activeBill) return;
+    const sysSettings = await settingsRepository.getSettings().catch(() => ({}));
+    const configuredUpiId = sysSettings.upiId || 'q705457761@ybl';
+
+    printService.printInvoice(activeBill, selectedOrder, selectedCustomer, null, {
+      paymentMode,
+      upiId: configuredUpiId,
+    });
+  };
+
+  const handleReprintInvoice = async (bill) => {
+    const sysSettings = await settingsRepository.getSettings().catch(() => ({}));
+    const configuredUpiId = sysSettings.upiId || 'q705457761@ybl';
+
     printService.printInvoice(bill, null, { name: bill.customerName, mobile: bill.customerMobile }, null, {
       upiId: configuredUpiId,
     });
   };
 
+  // Dish modification handlers
+  const handleOpenBillingModify = async (order) => {
+    if (!order) return;
+    setBillingModifiedItems(JSON.parse(JSON.stringify(order.items || [])));
+    setBillingModReason('');
+    setBillingModError('');
+    setBillingSearch('');
+    setBillingActiveCategory('CATEGORIES');
+    setIsBillingModifyOpen(true);
+
+    try {
+      const [prods, cats] = await Promise.all([
+        productRepository.getProducts({ onlyAvailable: true }),
+        categoryRepository.getCategories(false)
+      ]);
+      setBillingAvailableProducts(prods || []);
+      setBillingCategories(cats || []);
+    } catch (err) {
+      console.error('Failed to load menu products/categories for billing modification:', err);
+    }
+  };
+
+  const handleAddDishToBillingModified = (prod) => {
+    const prodCat = billingCategories.find((c) => (c.id || c._id) === (prod.categoryId || prod.category));
+    const kotRequired = prod.kotRequired !== undefined
+      ? prod.kotRequired
+      : (prodCat?.kotRequired !== undefined ? prodCat.kotRequired : true);
+
+    const targetProductId = prod.id || prod._id;
+
+    setBillingModifiedItems((prev) => {
+      const idx = prev.findIndex((i) => (i.productId || i.id || i._id) === targetProductId);
+      if (idx > -1) {
+        const copy = [...prev];
+        copy[idx].quantity += 1;
+        return copy;
+      } else {
+        return [
+          ...prev,
+          {
+            lineId: `line-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+            productId: targetProductId,
+            categoryId: prod.categoryId || prod.category || null,
+            name: prod.name,
+            code: prod.code,
+            quantity: 1,
+            unitPrice: prod.price,
+            taxRate: prod.taxRate || 5,
+            station: prod.station || 'Main Kitchen',
+            notes: '',
+            kotRequired
+          }
+        ];
+      }
+    });
+  };
+
+  const handleAdjustBillingModQty = (productId, delta) => {
+    setBillingModifiedItems((prev) =>
+      prev
+        .map((item) => {
+          if (item.productId === productId || item.id === productId || item._id === productId) {
+            const n = item.quantity + delta;
+            return n > 0 ? { ...item, quantity: n } : null;
+          }
+          return item;
+        })
+        .filter(Boolean)
+    );
+  };
+
+  const handleRemoveBillingModItem = (productId) => {
+    setBillingModifiedItems((prev) =>
+      prev.filter((i) => i.productId !== productId && i.id !== productId && i._id !== productId)
+    );
+  };
+
+  const handleSaveBillingModification = async (e) => {
+    e.preventDefault();
+    if (!selectedOrder) return;
+    if (billingModifiedItems.length === 0) {
+      setBillingModError('Order cannot have 0 dishes. Cancel order instead.');
+      return;
+    }
+
+    setBillingModLoading(true);
+    setBillingModError('');
+    try {
+      const actor = { id: user?.id || 'cashier', name: user?.name || 'Cashier' };
+      const orderTargetId = selectedOrder.id || selectedOrder._id || selectedOrder.orderNo || selectedOrder.orderNumber;
+      const cleanReason = billingModReason.trim() || 'Dishes modified at billing desk';
+
+      await orderRepository.modifyOrderItems(
+        orderTargetId,
+        billingModifiedItems,
+        cleanReason,
+        actor
+      );
+
+      // Re-fetch fresh order
+      const freshOrder = await orderRepository.getOrder(orderTargetId);
+      setSelectedOrder(freshOrder);
+
+      // Regenerate active bill with latest dishes and prices
+      const freshBill = await billRepository.generateBill({
+        order: freshOrder,
+        discount: {
+          type: discountType,
+          value: Number(discountValue) || 0,
+          reason: discountReason.trim() || 'Discount'
+        },
+        customer: selectedCustomer,
+        actor
+      });
+      setActiveBill(freshBill);
+      setPaymentAmount(freshBill.balance > 0 ? freshBill.balance.toString() : '');
+
+      setIsBillingModifyOpen(false);
+      await loadBillingData();
+    } catch (err) {
+      console.error('Failed to save billing modifications:', err);
+      setBillingModError(err.message || 'Failed to update order dishes.');
+    } finally {
+      setBillingModLoading(false);
+    }
+  };
+
+  // Inspect Settled Invoice Handlers
+  const handleOpenInspectInvoice = async (bill) => {
+    setInspectInvoiceBill(bill);
+    setIsInspectLoading(true);
+    try {
+      const fresh = await billRepository.getBillById(bill.id);
+      if (fresh) setInspectInvoiceBill(fresh);
+    } catch (err) {
+      console.warn('Failed to fetch detailed bill:', err);
+    } finally {
+      setIsInspectLoading(false);
+    }
+  };
+
+  const handleOpenExtraPayment = () => {
+    if (!inspectInvoiceBill) return;
+    setExtraPaymentAmount(inspectInvoiceBill.balance > 0 ? inspectInvoiceBill.balance.toString() : '');
+    setExtraPaymentRef('');
+    setExtraPaymentError('');
+    setIsExtraPaymentOpen(true);
+  };
+
+  const handleSaveExtraPayment = async (e) => {
+    e.preventDefault();
+    if (!inspectInvoiceBill) return;
+    const amt = Number(extraPaymentAmount);
+    if (isNaN(amt) || amt <= 0) {
+      setExtraPaymentError('Enter a valid payment amount.');
+      return;
+    }
+
+    setExtraPaymentLoading(true);
+    setExtraPaymentError('');
+    try {
+      const actor = { id: user?.id || 'cashier', name: user?.name || 'Cashier' };
+      const res = await billRepository.addPayment(
+        inspectInvoiceBill.id,
+        {
+          mode: extraPaymentMode,
+          amount: amt,
+          reference: extraPaymentRef.trim()
+        },
+        actor
+      );
+
+      const updatedBill = res.bill || res;
+      setInspectInvoiceBill(updatedBill);
+      setIsExtraPaymentOpen(false);
+      await loadBillingData();
+    } catch (err) {
+      setExtraPaymentError(err.message || 'Failed to record payment.');
+    } finally {
+      setExtraPaymentLoading(false);
+    }
+  };
+
+  const filteredBillingProducts = billingAvailableProducts.filter((p) => {
+    const matchesSearch =
+      !billingSearch.trim() ||
+      p.name?.toLowerCase().includes(billingSearch.toLowerCase()) ||
+      p.code?.toLowerCase().includes(billingSearch.toLowerCase()) ||
+      p.station?.toLowerCase().includes(billingSearch.toLowerCase());
+
+    const matchesCategory =
+      billingActiveCategory === 'ALL' ||
+      billingActiveCategory === 'CATEGORIES' ||
+      p.categoryId === billingActiveCategory;
+
+    return matchesSearch && matchesCategory;
+  });
+
   const historyColumns = [
     {
       header: 'Invoice #',
       accessor: 'billNo',
-      className: 'w-24 font-mono font-bold text-blue-700'
+      className: 'w-24 font-mono font-bold text-blue-700',
+      render: (row) => (
+        <button
+          type="button"
+          onClick={() => handleOpenInspectInvoice(row)}
+          className="text-blue-600 hover:text-blue-800 font-bold hover:underline font-mono text-left cursor-pointer"
+          title="Click to view invoice details, dishes & payments"
+        >
+          {formatReceiptSequence(row.billNo)}
+        </button>
+      )
     },
     {
       header: 'Table / Source',
@@ -451,6 +728,15 @@ export const BillingPage = () => {
           <Button
             variant="secondary"
             size="sm"
+            icon={Eye}
+            onClick={() => handleOpenInspectInvoice(row)}
+            title="Inspect Invoice Details & Payments"
+          >
+            Details
+          </Button>
+          <Button
+            variant="secondary"
+            size="sm"
             icon={Tag}
             onClick={() => handleOpenDiscountModal(row)}
             title="Update Post-Settlement Discount"
@@ -502,11 +788,14 @@ export const BillingPage = () => {
             {readyOrders.map((ord) => (
               <div
                 key={ord.id}
-                className="bg-white rounded-2xl border border-slate-200 p-4 shadow-xs hover:shadow-md transition-shadow flex flex-col justify-between"
+                onClick={() => handleOpenCheckout(ord)}
+                className="bg-white rounded-2xl border border-slate-200 p-4 shadow-xs hover:shadow-lg hover:border-blue-400 transition-all flex flex-col justify-between cursor-pointer"
               >
                 <div>
                   <div className="flex items-center justify-between pb-2 border-b border-slate-100">
-                    <span className="text-xs font-bold uppercase text-slate-400 font-mono">{ord.orderNo}</span>
+                    <span className="text-xs font-bold uppercase text-slate-400 font-mono">
+                      {formatReceiptSequence(ord.orderNo)}
+                    </span>
                     <Badge variant={ord.status === ORDER_STATUS.SERVED ? 'success' : 'primary'} size="sm">
                       {ord.status}
                     </Badge>
@@ -554,7 +843,10 @@ export const BillingPage = () => {
                     variant="primary"
                     size="sm"
                     icon={Receipt}
-                    onClick={() => handleOpenCheckout(ord)}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleOpenCheckout(ord);
+                    }}
                   >
                     Settle Bill
                   </Button>
@@ -590,8 +882,8 @@ export const BillingPage = () => {
       <Modal
         isOpen={!!selectedOrder && !!activeBill}
         onClose={handleCloseDesk}
-        title={`Settle Bill: ${activeBill?.billNo}`}
-        subtitle={`${selectedOrder?.orderType && selectedOrder.orderType !== 'DINE_IN' ? (selectedOrder.orderType === 'TAKEAWAY' ? 'Take Away' : selectedOrder.orderType) : `Table ${selectedOrder?.tableNo}`} • Order ${selectedOrder?.orderNo}`}
+        title={`Settle Bill: ${formatReceiptSequence(activeBill?.billNo)} (${activeBill?.billNo})`}
+        subtitle={`${selectedOrder?.orderType && selectedOrder.orderType !== 'DINE_IN' ? (selectedOrder.orderType === 'TAKEAWAY' ? 'Take Away' : selectedOrder.orderType) : `Table ${selectedOrder?.tableNo}`} • Order ${formatReceiptSequence(selectedOrder?.orderNo)}`}
         maxWidth="max-w-4xl"
       >
         {activeBill && (
@@ -660,29 +952,39 @@ export const BillingPage = () => {
                   )}
                 </div>
 
-                {/* Items Snapshot */}
+                {/* Items Snapshot with Modify Dishes Button */}
                 <div>
-                  <h4 className="text-xs font-bold uppercase text-slate-400 mb-2">Ordered Dishes</h4>
+                  <div className="flex items-center justify-between mb-2">
+                    <h4 className="text-xs font-bold uppercase text-slate-400">Ordered Dishes</h4>
+                    <button
+                      type="button"
+                      onClick={() => handleOpenBillingModify(selectedOrder)}
+                      className="text-xs font-bold text-blue-600 hover:text-blue-700 bg-white px-2 py-0.5 rounded border border-slate-200 flex items-center gap-1 shadow-2xs hover:bg-blue-50 transition-colors"
+                    >
+                      <Edit3 className="w-3.5 h-3.5" />
+                      Modify Dishes
+                    </button>
+                  </div>
                   <div className="divide-y divide-slate-100 border border-slate-200 rounded-xl overflow-hidden text-xs max-h-48 overflow-y-auto">
                     {activeBill.items.map((i, idx) => (
                       <div key={idx} className="p-2.5 bg-white flex items-center justify-between">
                         <div>
-                          <span className="font-bold text-slate-800">{i.name}</span>
+                          <span className="font-bold text-slate-800">{i.name || i.productName}</span>
                           <span className="text-slate-400 ml-1.5 font-mono">
                             {i.quantity}x @ ₹{i.unitPrice}
                           </span>
                         </div>
-                        <span className="font-extrabold text-slate-900">₹{i.quantity * i.unitPrice}</span>
+                        <span className="font-extrabold text-slate-900">₹{Number(i.quantity * i.unitPrice).toFixed(2)}</span>
                       </div>
                     ))}
                   </div>
                 </div>
 
-                {/* Discount Section */}
+                {/* Discount Section (Optional Reason) */}
                 <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200 space-y-2.5">
                   <div className="flex items-center justify-between">
                     <span className="font-bold text-slate-700 uppercase tracking-wider text-[11px] flex items-center gap-1">
-                      <Tag className="w-3.5 h-3.5 text-blue-600" /> Apply Discount
+                      <Tag className="w-3.5 h-3.5 text-blue-600" /> Apply Discount (Optional)
                     </span>
                     <button
                       type="button"
@@ -712,7 +1014,7 @@ export const BillingPage = () => {
                   </div>
 
                   <Input
-                    placeholder="Reason for discount (Required if value > 0)..."
+                    placeholder="Reason for discount (Optional)..."
                     value={discountReason}
                     onChange={(e) => setDiscountReason(e.target.value)}
                   />
@@ -758,163 +1060,551 @@ export const BillingPage = () => {
                   </div>
 
                   <div className="pt-2 border-t border-slate-800 flex justify-between items-center text-xs">
-                    <span>Total Paid:</span>
-                    <span className="font-bold text-emerald-400">₹{activeBill.paidAmount?.toFixed(2)}</span>
+                    <span className="text-slate-400">Paid Amount:</span>
+                    <span className="font-mono font-bold text-emerald-400">₹{activeBill.paidAmount?.toFixed(2)}</span>
                   </div>
 
-                  <div className="flex justify-between items-center text-sm font-black">
-                    <span className={activeBill.balance <= 0 ? 'text-emerald-400' : 'text-rose-400'}>
-                      Balance Due:
-                    </span>
-                    <span className={activeBill.balance <= 0 ? 'text-emerald-400' : 'text-rose-400'}>
+                  <div className="flex justify-between items-center text-sm font-bold">
+                    <span className="text-slate-300">Balance Due:</span>
+                    <span className={`font-mono text-base ${activeBill.balance > 0 ? 'text-red-400 font-extrabold' : 'text-emerald-400'}`}>
                       ₹{activeBill.balance?.toFixed(2)}
                     </span>
                   </div>
                 </div>
 
-                {/* Captured Payments List */}
+                {/* Recorded Payments List */}
                 {activeBill.payments && activeBill.payments.length > 0 && (
-                  <div className="space-y-1.5">
-                    <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
-                      Recorded Split Payments
+                  <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 text-xs">
+                    <span className="font-bold text-slate-700 uppercase tracking-wider text-[11px] block mb-2">
+                      Recorded Payments ({activeBill.payments.length})
                     </span>
-                    <div className="space-y-1">
-                      {activeBill.payments.map((p, idx) => (
-                        <div key={idx} className="p-2 bg-slate-50 rounded-lg border border-slate-200 text-xs flex justify-between items-center">
+                    <div className="space-y-1.5">
+                      {activeBill.payments.map((p, pIdx) => (
+                        <div key={pIdx} className="flex justify-between items-center bg-white p-2 rounded-lg border border-slate-200">
                           <div>
                             <span className="font-bold text-slate-800">{p.mode}</span>
-                            {p.reference && <span className="text-slate-400 ml-1.5 font-mono">({p.reference})</span>}
+                            {p.reference && <span className="text-slate-400 text-[10px] ml-1.5 font-mono">Ref: {p.reference}</span>}
                           </div>
-                          <span className="font-extrabold text-emerald-600">₹{p.amount}</span>
+                          <span className="font-mono font-extrabold text-emerald-600">₹{p.amount}</span>
                         </div>
                       ))}
                     </div>
                   </div>
                 )}
 
-                {/* Split Payment Collector Form */}
+                {/* Collect Payment Form (if balance remains) */}
                 {activeBill.balance > 0 ? (
-                  <form onSubmit={handleAddPayment} className="p-3.5 bg-blue-50/60 rounded-xl border border-blue-200 text-xs space-y-3">
-                    <div className="flex items-center justify-between">
-                      <span className="font-bold text-blue-900 uppercase tracking-wider text-[11px] flex items-center gap-1">
-                        <Wallet className="w-3.5 h-3.5 text-blue-600" /> Collect Payment Entry
-                      </span>
-                      <span className="text-[10px] text-blue-600 font-semibold">Supports Split Payments</span>
-                    </div>
+                  <form onSubmit={handleAddPayment} className="bg-blue-50/50 p-3.5 rounded-xl border border-blue-200 space-y-3">
+                    <span className="font-bold text-blue-900 uppercase tracking-wider text-[11px] block">
+                      Collect Payment Entry
+                    </span>
 
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    <div className="grid grid-cols-2 gap-2">
                       <Select
                         label="Payment Mode"
                         value={paymentMode}
                         onChange={(e) => setPaymentMode(e.target.value)}
                         options={[
                           { value: PAYMENT_MODES.UPI, label: 'UPI / QR Code' },
-                          { value: PAYMENT_MODES.CASH, label: 'Cash Currency' },
-                          { value: PAYMENT_MODES.CARD, label: 'Credit / Debit Card' },
-                          { value: PAYMENT_MODES.OTHER, label: 'Other' }
+                          { value: PAYMENT_MODES.CASH, label: 'Cash' },
+                          { value: PAYMENT_MODES.CARD, label: 'Card' },
+                          { value: PAYMENT_MODES.OTHER, label: 'Other' },
                         ]}
                       />
                       <Input
-                        label="Amount (₹)"
+                        label="Amount to Pay (INR)"
                         type="number"
-                        min="1"
+                        step="any"
+                        min="0"
                         max={activeBill.balance}
                         value={paymentAmount}
                         onChange={(e) => setPaymentAmount(e.target.value)}
+                        placeholder={`Balance: ₹${activeBill.balance}`}
                         required
                       />
                     </div>
 
                     <Input
                       label="Transaction Ref / Auth Code (Optional)"
-                      placeholder="e.g. UPI Ref / Last 4 Card digits"
+                      placeholder="e.g. UPI Ref / Card Last 4 digits"
                       value={paymentRef}
                       onChange={(e) => setPaymentRef(e.target.value)}
                     />
 
-                    <Button type="submit" variant="primary" className="w-full" loading={actionLoading}>
-                      Record Payment Entry
+                    <Button
+                      type="submit"
+                      variant="primary"
+                      className="w-full bg-blue-600 hover:bg-blue-700"
+                      loading={actionLoading}
+                    >
+                      Record ₹{paymentAmount || activeBill.balance} via {paymentMode}
                     </Button>
                   </form>
                 ) : (
-                  <div className="p-4 bg-emerald-50 rounded-xl border border-emerald-200 text-center text-emerald-800 space-y-2">
+                  <div className="bg-emerald-50 p-4 rounded-xl border border-emerald-200 text-center space-y-2">
                     <CheckCircle2 className="w-8 h-8 text-emerald-600 mx-auto" />
-                    <p className="font-black text-sm">Bill is Fully Settled!</p>
-                    <p className="text-xs text-emerald-700">
-                      {selectedOrder?.orderType && selectedOrder.orderType !== 'DINE_IN'
-                        ? 'Order is completed and tax invoice is generated.'
-                        : `Table ${selectedOrder?.tableNo} is released to AVAILABLE and tax invoice is generated.`}
-                    </p>
-                    <Button
-                      variant="primary"
-                      icon={Printer}
-                      className="w-full sm:w-auto"
-                      onClick={() => {
-                        const configuredUpiId = localStorage.getItem('gts_pos_upi_id') || 'q705457761@ybl';
-                        printService.printInvoice(activeBill, selectedOrder, selectedCustomer, null, {
-                          paymentMode: activeBill.payments?.find((p) => p.mode === 'UPI') ? 'UPI' : paymentMode,
-                          upiId: configuredUpiId,
-                        });
-                      }}
-                    >
-                      Print Tax Invoice
-                    </Button>
+                    <p className="font-bold text-sm text-emerald-900">Bill is Fully Settled!</p>
+                    <p className="text-xs text-emerald-700">All balances cleared. You can now close the table and print invoice.</p>
                   </div>
                 )}
-              </div>
-            </div>
 
-            <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
-              <Button
-                variant="secondary"
-                className="w-full sm:w-auto"
-                onClick={handleCloseDesk}
-              >
-                Close Desk
-              </Button>
+                {/* Finalize & Print Actions */}
+                <div className="flex items-center gap-2 pt-2">
+                  <Button
+                    variant="secondary"
+                    className="flex-1"
+                    icon={Printer}
+                    onClick={handlePrintInvoice}
+                  >
+                    Print Bill
+                  </Button>
+                  <Button
+                    variant="success"
+                    className="flex-1"
+                    icon={CheckCircle2}
+                    disabled={activeBill.balance > 0}
+                    loading={actionLoading}
+                    onClick={handleCloseBill}
+                  >
+                    Complete &amp; Release Table
+                  </Button>
+                </div>
+              </div>
             </div>
           </div>
         )}
       </Modal>
 
-      {/* Quick Add Customer Modal */}
+      {/* Dish Modification Modal from Billing */}
+      {isBillingModifyOpen && selectedOrder && (
+        <Modal
+          isOpen={isBillingModifyOpen}
+          onClose={() => setIsBillingModifyOpen(false)}
+          title={`Modify Order Dishes: ${selectedOrder.orderNo}`}
+          subtitle={`Adjust quantities, add extra dishes, or remove items. Price and pending settlement will update automatically.`}
+          maxWidth="max-w-4xl"
+        >
+          <form onSubmit={handleSaveBillingModification} className="space-y-4">
+            {billingModError && (
+              <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-xs text-red-700 font-semibold flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 shrink-0" />
+                <span>{billingModError}</span>
+              </div>
+            )}
+
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-start">
+              {/* Left Column: Current Items in Order (5 of 12 cols) */}
+              <div className="lg:col-span-5 border border-slate-200 rounded-2xl p-3.5 bg-slate-50 space-y-3">
+                <div className="flex items-center justify-between pb-2 border-b border-slate-200">
+                  <span className="text-xs font-black uppercase text-slate-700">Order Dishes</span>
+                  <span className="text-xs font-extrabold text-blue-700">
+                    ₹{billingModifiedItems.reduce((acc, i) => acc + (i.quantity * i.unitPrice), 0)}
+                  </span>
+                </div>
+
+                <div className="divide-y divide-slate-200 text-xs max-h-64 overflow-y-auto pr-1">
+                  {billingModifiedItems.map((itm) => (
+                    <div key={itm.productId || itm.id} className="py-2 flex items-center justify-between gap-2">
+                      <div className="min-w-0 flex-1">
+                        <p className="font-bold text-slate-800 truncate">{itm.name || itm.productName}</p>
+                        <p className="text-[11px] text-slate-400">
+                          ₹{itm.unitPrice} each • <span className="font-bold text-slate-600">₹{itm.quantity * itm.unitPrice}</span>
+                        </p>
+                      </div>
+
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => handleAdjustBillingModQty(itm.productId || itm.id, -1)}
+                          className="w-6 h-6 rounded bg-white border border-slate-300 flex items-center justify-center font-bold text-slate-700 hover:bg-slate-100"
+                        >
+                          -
+                        </button>
+                        <span className="w-6 text-center font-black text-slate-900">{itm.quantity}</span>
+                        <button
+                          type="button"
+                          onClick={() => handleAdjustBillingModQty(itm.productId || itm.id, 1)}
+                          className="w-6 h-6 rounded bg-white border border-slate-300 flex items-center justify-center font-bold text-slate-700 hover:bg-slate-100"
+                        >
+                          +
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveBillingModItem(itm.productId || itm.id)}
+                          className="p-1 text-red-500 hover:bg-red-50 rounded"
+                          title="Remove dish"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Right Column: Quick Add Dish (7 of 12 cols) */}
+              <div className="lg:col-span-7 border border-slate-200 rounded-2xl p-3.5 bg-white space-y-3">
+                <div className="relative">
+                  <Input
+                    icon={Search}
+                    placeholder="Search dishes to add to this order..."
+                    value={billingSearch}
+                    onChange={(e) => setBillingSearch(e.target.value)}
+                  />
+                  {billingSearch && (
+                    <button
+                      type="button"
+                      onClick={() => setBillingSearch('')}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 text-xs font-bold px-1.5 py-0.5 rounded bg-slate-100"
+                    >
+                      Clear
+                    </button>
+                  )}
+                </div>
+
+                {/* Categories Pills */}
+                <div className="flex flex-wrap items-center gap-1.5 text-xs max-h-24 overflow-y-auto">
+                  <button
+                    type="button"
+                    onClick={() => setBillingActiveCategory('ALL')}
+                    className={`px-2.5 py-1 rounded-lg font-bold text-xs transition-colors ${
+                      billingActiveCategory === 'ALL'
+                        ? 'bg-blue-600 text-white'
+                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                    }`}
+                  >
+                    All Dishes
+                  </button>
+                  {billingCategories.map((c) => (
+                    <button
+                      key={c.id || c._id}
+                      type="button"
+                      onClick={() => setBillingActiveCategory(c.id || c._id)}
+                      className={`px-2.5 py-1 rounded-lg font-bold text-xs transition-colors ${
+                        billingActiveCategory === (c.id || c._id)
+                          ? 'bg-blue-600 text-white'
+                          : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                      }`}
+                    >
+                      {c.name}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Dishes list */}
+                <div className="divide-y divide-slate-100 border border-slate-100 rounded-xl max-h-56 overflow-y-auto p-1 text-xs">
+                  {filteredBillingProducts.map((p) => (
+                    <div key={p.id || p._id} className="p-2 flex items-center justify-between hover:bg-slate-50 rounded-lg">
+                      <div>
+                        <p className="font-bold text-slate-800">{p.name}</p>
+                        <p className="text-[11px] text-slate-400">₹{p.price} • {p.station || 'Main'}</p>
+                      </div>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="secondary"
+                        icon={Plus}
+                        onClick={() => handleAddDishToBillingModified(p)}
+                      >
+                        Add
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <div>
+              <Input
+                label="Reason for Modification (Optional)"
+                placeholder="e.g. Added extra portion at checkout..."
+                value={billingModReason}
+                onChange={(e) => setBillingModReason(e.target.value)}
+              />
+            </div>
+
+            <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
+              <Button variant="secondary" onClick={() => setIsBillingModifyOpen(false)}>
+                Cancel
+              </Button>
+              <Button type="submit" variant="primary" loading={billingModLoading}>
+                Save Dishes &amp; Update Bill Total
+              </Button>
+            </div>
+          </form>
+        </Modal>
+      )}
+
+      {/* Inspect Settled Invoice Details Modal */}
+      {inspectInvoiceBill && (
+        <Modal
+          isOpen={Boolean(inspectInvoiceBill)}
+          onClose={() => setInspectInvoiceBill(null)}
+          title={`Settled Invoice: ${formatReceiptSequence(inspectInvoiceBill.billNo)}`}
+          subtitle={`${inspectInvoiceBill.tableNo ? `Table ${inspectInvoiceBill.tableNo}` : 'Direct Order'} • Order ${formatReceiptSequence(inspectInvoiceBill.orderNo || inspectInvoiceBill.orderNumber)} • Settled on ${new Date(inspectInvoiceBill.createdAt).toLocaleString()}`}
+          maxWidth="max-w-4xl"
+        >
+          <div className="space-y-5">
+            {/* Top Snapshot */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 bg-slate-50 p-4 rounded-xl border border-slate-200 text-xs">
+              <div>
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Status</span>
+                <span className="font-extrabold text-emerald-700 text-sm mt-0.5 block">{inspectInvoiceBill.status}</span>
+              </div>
+              <div>
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Cashier / Staff</span>
+                <span className="font-extrabold text-slate-800 text-sm mt-0.5 block">{inspectInvoiceBill.generatedByName || inspectInvoiceBill.generatedBy || 'Staff'}</span>
+              </div>
+              <div>
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Guest</span>
+                <span className="font-extrabold text-slate-800 text-sm mt-0.5 block">
+                  {inspectInvoiceBill.customerName || 'Walk-in Guest'}
+                </span>
+                {inspectInvoiceBill.customerMobile && (
+                  <span className="text-[11px] text-slate-400 font-mono">{inspectInvoiceBill.customerMobile}</span>
+                )}
+              </div>
+              <div>
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Grand Total</span>
+                <span className="font-black text-blue-700 text-base mt-0.5 block">
+                  ₹{Number(inspectInvoiceBill.grandTotal || 0).toLocaleString()}
+                </span>
+              </div>
+            </div>
+
+            {/* Ordered Dishes Table */}
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider">
+                  Ordered Dishes &amp; Quantities ({inspectInvoiceBill.items?.length || 0})
+                </h4>
+              </div>
+
+              <div className="border border-slate-200 rounded-xl overflow-hidden">
+                <table className="w-full text-xs text-left">
+                  <thead className="bg-slate-50 text-slate-500 font-bold border-b border-slate-200">
+                    <tr>
+                      <th className="py-2.5 px-3">Item / Dish</th>
+                      <th className="py-2.5 px-3 text-center">Qty</th>
+                      <th className="py-2.5 px-3 text-right">Unit Price</th>
+                      <th className="py-2.5 px-3 text-right">Total Amount</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {(inspectInvoiceBill.items || []).map((itm, iIdx) => (
+                      <tr key={iIdx} className="hover:bg-slate-50/60">
+                        <td className="py-2 px-3 font-bold text-slate-800">{itm.name || itm.productName}</td>
+                        <td className="py-2 px-3 text-center font-mono font-bold text-blue-700">{itm.quantity}x</td>
+                        <td className="py-2 px-3 text-right font-mono text-slate-600">₹{itm.unitPrice}</td>
+                        <td className="py-2 px-3 text-right font-mono font-bold text-slate-900">
+                          ₹{Number(itm.quantity * itm.unitPrice).toFixed(2)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {/* Financials & Recorded Payments Grid */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Financial Breakdown */}
+              <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 text-xs space-y-2">
+                <span className="font-bold text-slate-700 uppercase tracking-wider text-[11px] block mb-1">
+                  Financial Breakdown
+                </span>
+                <div className="flex justify-between text-slate-600">
+                  <span>Subtotal:</span>
+                  <span className="font-mono font-bold">₹{inspectInvoiceBill.subtotal}</span>
+                </div>
+                {inspectInvoiceBill.discountAmount > 0 && (
+                  <div className="flex justify-between text-emerald-700 font-bold">
+                    <span>Discount ({inspectInvoiceBill.discountReason || 'Discount'}):</span>
+                    <span className="font-mono">-₹{inspectInvoiceBill.discountAmount}</span>
+                  </div>
+                )}
+                <div className="flex justify-between text-slate-600">
+                  <span>Taxable Base:</span>
+                  <span className="font-mono">₹{inspectInvoiceBill.taxableValue || inspectInvoiceBill.taxableAmount}</span>
+                </div>
+                <div className="flex justify-between text-slate-600">
+                  <span>CGST + SGST:</span>
+                  <span className="font-mono">₹{inspectInvoiceBill.taxAmount || inspectInvoiceBill.tax}</span>
+                </div>
+                <div className="pt-2 border-t border-slate-200 flex justify-between items-center text-sm font-black text-slate-900">
+                  <span>Grand Total:</span>
+                  <span className="text-blue-700">₹{inspectInvoiceBill.grandTotal}</span>
+                </div>
+                <div className="flex justify-between items-center text-xs font-bold text-emerald-700">
+                  <span>Total Paid:</span>
+                  <span className="font-mono">₹{inspectInvoiceBill.paidAmount}</span>
+                </div>
+                {Number(inspectInvoiceBill.balance) > 0 && (
+                  <div className="flex justify-between items-center text-xs font-bold text-red-600">
+                    <span>Balance Due:</span>
+                    <span className="font-mono">₹{inspectInvoiceBill.balance}</span>
+                  </div>
+                )}
+              </div>
+
+              {/* Recorded Payment Entries */}
+              <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 text-xs space-y-2">
+                <div className="flex items-center justify-between mb-1">
+                  <span className="font-bold text-slate-700 uppercase tracking-wider text-[11px]">
+                    Recorded Payments ({inspectInvoiceBill.payments?.length || 0})
+                  </span>
+                  <button
+                    type="button"
+                    onClick={handleOpenExtraPayment}
+                    className="text-xs font-bold text-blue-600 hover:text-blue-700 bg-white px-2 py-0.5 rounded border border-slate-200 shadow-2xs"
+                  >
+                    + Add Payment
+                  </button>
+                </div>
+
+                <div className="space-y-1.5 max-h-40 overflow-y-auto">
+                  {(inspectInvoiceBill.payments || []).map((p, pIdx) => (
+                    <div key={pIdx} className="bg-white p-2.5 rounded-lg border border-slate-200 flex justify-between items-center">
+                      <div>
+                        <span className="font-bold text-slate-800">{p.mode}</span>
+                        {p.reference && <span className="text-[10px] text-slate-400 font-mono ml-1.5">Ref: {p.reference}</span>}
+                        <p className="text-[10px] text-slate-400 mt-0.5">{new Date(p.collectedAt || inspectInvoiceBill.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
+                      </div>
+                      <span className="font-mono font-black text-emerald-700 text-sm">₹{p.amount}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* Actions Footer */}
+            <div className="pt-3 border-t border-slate-100 flex flex-wrap items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  icon={Printer}
+                  onClick={() => handleReprintInvoice(inspectInvoiceBill)}
+                >
+                  Reprint Tax Invoice
+                </Button>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  icon={Tag}
+                  onClick={() => handleOpenDiscountModal(inspectInvoiceBill)}
+                >
+                  Adjust Discount
+                </Button>
+              </div>
+
+              <Button variant="secondary" size="sm" onClick={() => setInspectInvoiceBill(null)}>
+                Close
+              </Button>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {/* Add / Update Payment Sub-Modal */}
+      {isExtraPaymentOpen && inspectInvoiceBill && (
+        <Modal
+          isOpen={isExtraPaymentOpen}
+          onClose={() => setIsExtraPaymentOpen(false)}
+          title={`Record Payment for ${inspectInvoiceBill.billNo}`}
+          subtitle="Add split payment entry or settle outstanding balance"
+          maxWidth="max-w-md"
+        >
+          <form onSubmit={handleSaveExtraPayment} className="space-y-4">
+            {extraPaymentError && (
+              <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-xs text-red-700 font-semibold flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 shrink-0" />
+                <span>{extraPaymentError}</span>
+              </div>
+            )}
+
+            <Select
+              label="Payment Mode"
+              value={extraPaymentMode}
+              onChange={(e) => setExtraPaymentMode(e.target.value)}
+              options={[
+                { value: PAYMENT_MODES.CASH, label: 'Cash' },
+                { value: PAYMENT_MODES.UPI, label: 'UPI / QR Code' },
+                { value: PAYMENT_MODES.CARD, label: 'Card' },
+                { value: PAYMENT_MODES.OTHER, label: 'Other' },
+              ]}
+            />
+
+            <Input
+              label="Payment Amount (INR)"
+              type="number"
+              step="any"
+              min="0"
+              value={extraPaymentAmount}
+              onChange={(e) => setExtraPaymentAmount(e.target.value)}
+              placeholder="e.g. 500"
+              required
+            />
+
+            <Input
+              label="Transaction / Reference Code (Optional)"
+              value={extraPaymentRef}
+              onChange={(e) => setExtraPaymentRef(e.target.value)}
+              placeholder="e.g. UPI Ref / Receipt No"
+            />
+
+            <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
+              <Button variant="secondary" onClick={() => setIsExtraPaymentOpen(false)}>
+                Cancel
+              </Button>
+              <Button type="submit" variant="primary" loading={extraPaymentLoading}>
+                Save Payment Entry
+              </Button>
+            </div>
+          </form>
+        </Modal>
+      )}
+
+      {/* Add New Customer Quick Modal */}
       <Modal
         isOpen={isNewCustModalOpen}
         onClose={() => setIsNewCustModalOpen(false)}
-        title="Quick Register Guest"
-        subtitle="Add guest phone and name for invoice records"
+        title="Register Guest Profile"
+        subtitle="Quick save guest contact for tax invoice and visit CRM"
+        maxWidth="max-w-sm"
       >
-        <form onSubmit={handleCreateQuickCustomer} className="space-y-4">
+        <form onSubmit={handleCreateCustomer} className="space-y-3">
           <Input
             label="Guest Full Name"
-            placeholder="e.g. Priya Sharma"
             value={newCustName}
             onChange={(e) => setNewCustName(e.target.value)}
+            placeholder="e.g. Rahul Sharma"
             required
-            autoFocus
           />
           <Input
-            label="Mobile Phone"
-            placeholder="10-digit mobile number"
+            label="Mobile Number"
             value={newCustPhone}
             onChange={(e) => setNewCustPhone(e.target.value)}
+            placeholder="e.g. 9876543210"
             required
           />
-          <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
+          <div className="flex justify-end gap-2 pt-2">
             <Button variant="secondary" onClick={() => setIsNewCustModalOpen(false)}>
               Cancel
             </Button>
-            <Button type="submit">Register & Attach</Button>
+            <Button type="submit" variant="primary">
+              Save Guest
+            </Button>
           </div>
         </form>
       </Modal>
 
-      {/* Post-Settlement Discount Adjustment Modal */}
+      {/* Post-Settlement Discount Modal */}
       <Modal
-        isOpen={!!discountModalBill}
+        isOpen={Boolean(discountModalBill)}
         onClose={() => setDiscountModalBill(null)}
         title={`Adjust Discount: ${discountModalBill?.billNo}`}
-        subtitle={`Table ${discountModalBill?.tableNo} • Settled Grand Total: ₹${discountModalBill?.grandTotal}`}
+        subtitle="Apply or modify manager-approved discount after invoice settlement"
       >
         {discountModalBill && (
           <form onSubmit={handleApplyPostSettlementDiscount} className="space-y-4">
@@ -926,7 +1616,7 @@ export const BillingPage = () => {
             )}
 
             {discountModalSuccess ? (
-              <div className="p-4 bg-emerald-50 rounded-xl border border-emerald-200 text-center text-emerald-800 space-y-3">
+              <div className="bg-emerald-50 p-4 rounded-xl border border-emerald-200 text-center space-y-2">
                 <CheckCircle2 className="w-8 h-8 text-emerald-600 mx-auto" />
                 <p className="font-bold text-sm">Discount Updated Successfully!</p>
                 <p className="text-xs text-emerald-700">
@@ -993,11 +1683,10 @@ export const BillingPage = () => {
                 </div>
 
                 <Input
-                  label="Mandatory Reason"
+                  label="Discount Reason (Optional)"
                   value={modalDiscReason}
                   onChange={(e) => setModalDiscReason(e.target.value)}
                   placeholder="e.g. Manager courtesy, loyalty discount"
-                  required
                 />
 
                 <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
@@ -1005,7 +1694,7 @@ export const BillingPage = () => {
                     Cancel
                   </Button>
                   <Button type="submit" variant="primary" loading={discountModalLoading}>
-                    Apply & Update Invoice
+                    Apply &amp; Update Invoice
                   </Button>
                 </div>
               </>

@@ -1,6 +1,6 @@
 import crypto from 'node:crypto';
 import { utcNowIso } from '../../repositories/BaseMongoRepository.js';
-import { getNextSequence } from '../../utils/sequence.js';
+import { getNextSequence, getNextDailyBillSequence } from '../../utils/sequence.js';
 import { Decimal, toDecimal, formatMoney } from '../../utils/decimal.js';
 import {
   NotFoundAppError,
@@ -69,7 +69,7 @@ class BillingService {
       paidAmountInput: '0.00',
     });
 
-    const billNumber = await getNextSequence('bill', 'BILL', branch?.code || 'MAIN');
+    const billNumber = await getNextDailyBillSequence(branch?.code || 'MAIN');
     const now = utcNowIso();
 
     const billDoc = {
@@ -171,9 +171,7 @@ class BillingService {
     actorId,
     actorName,
   }) {
-    if (!reason || !String(reason).trim()) {
-      throw new ValidationAppError('A mandatory reason is required to apply a discount.');
-    }
+    const trimmedReason = String(reason || 'Discount').trim() || 'Discount';
 
     const dType = String(discountType || '').toUpperCase();
     if (!['PERCENTAGE', 'FIXED'].includes(dType)) {
@@ -194,7 +192,6 @@ class BillingService {
     const branch = await branchRepository.findById(bill.branchId);
     const branchTaxConfig = branch?.taxConfig || null;
 
-    const trimmedReason = String(reason).trim();
     const calcResult = BillingCalculator.calculateBill({
       items: bill.items || [],
       discountInput: {

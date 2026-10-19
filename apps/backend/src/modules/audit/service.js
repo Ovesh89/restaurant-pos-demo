@@ -116,6 +116,14 @@ export class AuditService {
       sort: { createdAt: -1 },
     });
   }
+
+  async purgeOldLogs(days = 30) {
+    const parsedDays = parseInt(days, 10);
+    const retentionDays = Number.isInteger(parsedDays) && parsedDays > 0 ? parsedDays : 30;
+    const result = await this.repo.purgeOlderThanDays(retentionDays);
+    return result;
+  }
 }
 
 export const auditService = new AuditService();
+
