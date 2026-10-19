@@ -27,7 +27,13 @@ export function createApp() {
   app.use(
     cors({
       origin: (origin, callback) => {
-        if (!origin || env.corsAllowedOrigins.includes(origin) || env.nodeEnv !== 'production') {
+        if (
+          !origin ||
+          env.corsAllowedOrigins.includes(origin) ||
+          env.nodeEnv !== 'production' ||
+          origin.endsWith('.azurestaticapps.net') ||
+          origin.includes('azurestaticapps.net')
+        ) {
           return callback(null, true);
         }
         return callback(null, false);

@@ -8,7 +8,7 @@ export const APP_CONFIG = {
   APP_NAME: 'Green Garden Pure Veg POS',
   APP_VERSION: '1.0.0',
   DATA_PROVIDER: env.VITE_DATA_PROVIDER || 'api',
-  API_BASE_URL: env.VITE_API_BASE_URL || '/api/v1',
+  API_BASE_URL: env.VITE_API_BASE_URL || 'https://restaurant-pos-api-demo-b6chhafhbaf2a3av.centralindia-01.azurewebsites.net/api/v1',
   DEFAULT_BRANCH_ID: env.VITE_DEFAULT_BRANCH_ID || 'branch-main',
   DEFAULT_CURRENCY: '₹',
   DEFAULT_TAX_RATE: 5.0, // 5% GST

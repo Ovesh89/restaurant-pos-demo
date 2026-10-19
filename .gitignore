@@ -13,6 +13,7 @@ apps/*/build/
 apps/*/.env
 apps/*/.env.local
 apps/*/.env.*.local
+!apps/web/.env.production
 
 # Logs & runtime data
 logs/
