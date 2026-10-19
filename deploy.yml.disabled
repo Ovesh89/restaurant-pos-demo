@@ -1,0 +1,69 @@
+name: Production Docker Deployment
+
+on:
+  push:
+    branches:
+      - master
+  workflow_dispatch:
+
+jobs:
+  validate-and-test:
+    name: Build & Validate
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+          cache-dependency-path: 'apps/web/package-lock.json'
+
+      - name: Validate Backend Code Syntax
+        run: |
+          cd apps/backend
+          node --check src/server.js
+          node --check src/app.js
+
+      - name: Install Frontend Dependencies
+        run: |
+          cd apps/web
+          npm ci
+
+      - name: Test Frontend Production Build
+        run: |
+          cd apps/web
+          npm run build
+
+  deploy-to-ec2:
+    name: Deploy to Ubuntu EC2
+    needs: validate-and-test
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/master'
+    steps:
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          port: ${{ secrets.EC2_SSH_PORT || 22 }}
+          script_stop: true
+          script: |
+            TARGET_DIR="${{ secrets.APP_DIR || '~/restaurant-pos-demo' }}"
+            eval TARGET_DIR="$TARGET_DIR"
+            echo "=== [1/4] Entering deployment directory: ${TARGET_DIR} ==="
+            cd "$TARGET_DIR"
+
+            echo "=== [2/4] Pulling latest changes from master ==="
+            git fetch origin master
+            git checkout master
+            git pull --ff-only origin master
+
+            echo "=== [3/4] Running production deployment script ==="
+            bash scripts/deploy.sh
+
+            echo "=== [4/4] Verifying live health endpoint ==="
+            bash scripts/health-check.sh
