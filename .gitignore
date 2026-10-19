@@ -3,9 +3,7 @@ node_modules/
 apps/*/node_modules/
 
 # Build output
-dist/
 build/
-apps/*/dist/
 apps/*/build/
 
 # Environment variables & secrets
