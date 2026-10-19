@@ -104,20 +104,20 @@ export const DashboardPage = () => {
   return (
     <div className="space-y-5 sm:space-y-8">
       {/* Welcome Banner */}
-      <div className="bg-gradient-to-r from-blue-700 via-blue-800 to-indigo-900 rounded-2xl sm:rounded-3xl p-5 sm:p-6 lg:p-8 text-white shadow-xl flex flex-col md:flex-row md:items-center justify-between gap-4 sm:gap-6">
-        <div className="flex items-start sm:items-center gap-4">
-          <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl bg-white/95 p-1.5 shadow-lg shadow-black/20 shrink-0 flex items-center justify-center border border-white/20">
+      <div className="bg-gradient-to-r from-blue-700 via-blue-800 to-indigo-900 rounded-2xl sm:rounded-3xl p-4 sm:p-6 lg:p-8 text-white shadow-xl flex flex-col md:flex-row md:items-center justify-between gap-4 sm:gap-6 overflow-hidden">
+        <div className="flex items-start sm:items-center gap-3.5 sm:gap-4 min-w-0">
+          <div className="w-14 h-14 sm:w-20 sm:h-20 rounded-2xl bg-white/95 p-1.5 shadow-lg shadow-black/20 shrink-0 flex items-center justify-center border border-white/20">
             <img src={logo} alt={restaurantName} className="w-full h-full object-contain" />
           </div>
-          <div>
-            <div className="inline-flex items-center gap-2 bg-blue-500/30 border border-blue-400/30 px-3 py-1 rounded-full text-xs font-semibold text-blue-100 mb-1.5 sm:mb-2 backdrop-blur-xs">
-              <Sparkles className="w-3.5 h-3.5 text-amber-300" />
+          <div className="min-w-0">
+            <div className="hidden sm:inline-flex items-center gap-2 bg-blue-500/30 border border-blue-400/30 px-3 py-1 rounded-full text-xs font-semibold text-blue-100 mb-1.5 sm:mb-2 backdrop-blur-xs max-w-full">
+              <Sparkles className="w-3.5 h-3.5 text-amber-300 shrink-0" />
               <span className="truncate">{restaurantName} • {t('dashboard.subtitle', null, 'Operations Live')}</span>
             </div>
-            <h1 className="text-xl sm:text-2xl lg:text-3xl font-black tracking-tight">
-              {user?.name}!
+            <h1 className="text-lg sm:text-2xl lg:text-3xl font-black tracking-tight truncate">
+              {t('dashboard.welcomeBack', null, 'Welcome back')}, {user?.name}!
             </h1>
-            <p className="text-blue-100 text-xs sm:text-sm mt-1 max-w-xl">
+            <p className="text-blue-100 text-xs sm:text-sm mt-1 max-w-xl truncate sm:overflow-visible sm:whitespace-normal">
               <span className="font-semibold text-white">{branchName}</span> •{' '}
               <span className="font-bold underline capitalize">{role}</span>
             </p>
