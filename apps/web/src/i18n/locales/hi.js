@@ -46,6 +46,7 @@ export const hi = {
     balanceDue: 'शेष राशि',
     date: 'दिनांक',
     time: 'समय',
+    dateTime: 'दिनांक और समय',
     notes: 'टिप्पणी',
     reason: 'कारण',
     optional: 'वैकल्पिक',

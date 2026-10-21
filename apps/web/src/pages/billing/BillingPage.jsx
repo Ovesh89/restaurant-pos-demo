@@ -833,10 +833,25 @@ export const BillingPage = () => {
       )
     },
     {
-      header: t('common.time', null, 'Time'),
+      header: t('common.dateTime', null, 'Date & Time'),
       accessor: 'createdAt',
-      className: 'text-xs text-slate-400 font-mono',
-      render: (row) => new Date(row.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      className: 'whitespace-nowrap',
+      render: (row) => {
+        const timestamp = row.completedAt || row.createdAt;
+        if (!timestamp) return <span className="text-slate-400 text-xs font-mono">—</span>;
+        const d = new Date(timestamp);
+        if (isNaN(d.getTime())) return <span className="text-slate-400 text-xs font-mono">—</span>;
+        return (
+          <div className="flex flex-col text-xs leading-tight">
+            <span className="font-bold text-slate-800">
+              {d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
+            </span>
+            <span className="text-[11px] text-slate-500 font-mono">
+              {d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
+            </span>
+          </div>
+        );
+      }
     },
     {
       header: t('common.actions', null, 'Actions'),

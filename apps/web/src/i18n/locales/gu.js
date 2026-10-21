@@ -46,6 +46,7 @@ export const gu = {
     balanceDue: 'બાકી રકમ',
     date: 'તારીખ',
     time: 'સમય',
+    dateTime: 'તારીખ અને સમય',
     notes: 'નોંધ',
     reason: 'કારણ',
     optional: 'વૈકલ્પિક',

@@ -46,6 +46,7 @@ export const en = {
     balanceDue: 'Balance Due',
     date: 'Date',
     time: 'Time',
+    dateTime: 'Date & Time',
     notes: 'Notes',
     reason: 'Reason',
     optional: 'Optional',

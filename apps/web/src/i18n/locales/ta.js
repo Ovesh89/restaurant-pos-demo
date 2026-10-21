@@ -46,6 +46,7 @@ export const ta = {
     balanceDue: 'நிலுவைத் தொகை',
     date: 'தேதி',
     time: 'நேரம்',
+    dateTime: 'தேதி மற்றும் நேரம்',
     notes: 'குறிப்புகள்',
     reason: 'காரணம்',
     optional: 'விருப்பமானது',

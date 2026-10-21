@@ -46,6 +46,7 @@ export const ur = {
     balanceDue: 'بقایا رقم',
     date: 'تاریخ',
     time: 'وقت',
+    dateTime: 'تاریخ اور وقت',
     notes: 'نوٹس',
     reason: 'وجہ',
     optional: 'اختیاری',

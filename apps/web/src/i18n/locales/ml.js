@@ -46,6 +46,7 @@ export const ml = {
     balanceDue: 'കുടിശ്ശിക തുക',
     date: 'തീയതി',
     time: 'സമയം',
+    dateTime: 'തീയതിയും സമയവും',
     notes: 'കുറിപ്പുകൾ',
     reason: 'കാരണം',
     optional: 'ഐച്ഛികം',

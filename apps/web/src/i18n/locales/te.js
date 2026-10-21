@@ -46,6 +46,7 @@ export const te = {
     balanceDue: 'బకాయి మొత్తం',
     date: 'తేదీ',
     time: 'సమయం',
+    dateTime: 'తేదీ మరియు సమయం',
     notes: 'గమనికలు',
     reason: 'కారణం',
     optional: 'ఐచ్ఛికం',

@@ -46,6 +46,7 @@ export const kn = {
     balanceDue: 'ಬಾಕಿ ಮೊತ್ತ',
     date: 'ದಿನಾಂಕ',
     time: 'ಸಮಯ',
+    dateTime: 'ದಿನಾಂಕ ಮತ್ತು ಸಮಯ',
     notes: 'ಟಿಪ್ಪಣಿಗಳು',
     reason: 'ಕಾರಣ',
     optional: 'ಐಚ್ಛಿಕ',
