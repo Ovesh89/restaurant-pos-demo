@@ -59,6 +59,24 @@ export class TableRepository extends BaseMongoRepository {
     return serializeMongoDoc(doc);
   }
 
+  async updateById(docId, updateFields, extraOperators = null) {
+    if (!docId) return null;
+    const strId = String(docId);
+    let updated = await super.updateById(strId, updateFields, extraOperators);
+    if (!updated) {
+      let altId = null;
+      if (strId.startsWith('table-')) {
+        altId = `tbl-${strId.slice('table-'.length)}`;
+      } else if (strId.startsWith('tbl-')) {
+        altId = `table-${strId.slice('tbl-'.length)}`;
+      }
+      if (altId) {
+        updated = await super.updateById(altId, updateFields, extraOperators);
+      }
+    }
+    return updated;
+  }
+
   async findByBranch(branchId, { areaId = null, status = null, isActive = null } = {}) {
     const query = { branchId };
     if (areaId) query.areaId = areaId;

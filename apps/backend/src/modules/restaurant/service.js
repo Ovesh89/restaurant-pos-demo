@@ -5,6 +5,7 @@ import {
 } from '../../middleware/errorHandler.js';
 import { ensureBranchAccess } from '../../middleware/permissions.js';
 import { auditService } from '../audit/service.js';
+import { orderRepository } from '../orders/repositories.js';
 import {
   areaRepository,
   branchRepository,
@@ -16,11 +17,15 @@ export const VALID_TABLE_STATUSES = [
   'AVAILABLE',
   'OCCUPIED',
   'ORDER_IN_PROGRESS',
+  'WAITING_CONFIRMATION',
+  'CONFIRMED',
   'KOT_SENT',
   'PREPARING',
   'READY',
   'SERVED',
   'BILL_PENDING',
+  'BILLING',
+  'PAID',
 ];
 
 export class RestaurantService {
@@ -400,7 +405,60 @@ export class RestaurantService {
 
   async listTables(branchId, user, { areaId = null, status = null, isActive = null } = {}) {
     ensureBranchAccess(user, branchId);
-    return this.tableRepo.findByBranch(branchId, { areaId, status, isActive });
+    const tables = await this.tableRepo.findByBranch(branchId, { areaId, status, isActive });
+
+    try {
+      const activeOrders = await orderRepository.findMany({
+        branchId,
+        status: { $nin: ['COMPLETED', 'CANCELLED', 'REJECTED'] },
+      });
+      if (activeOrders && activeOrders.length > 0) {
+        const orderMap = new Map();
+        for (const ord of activeOrders) {
+          if (ord.tableId) orderMap.set(String(ord.tableId), ord);
+          if (ord.tableNumber) {
+            orderMap.set(String(ord.tableNumber), ord);
+            const cleanNo = String(ord.tableNumber).replace(/^T-?/i, '');
+            orderMap.set(cleanNo, ord);
+            orderMap.set(`T-${cleanNo}`, ord);
+          }
+        }
+        for (const tbl of tables) {
+          const cleanNo = String(tbl.tableNumber || '').replace(/^T-?/i, '');
+          const ord =
+            orderMap.get(String(tbl.id)) ||
+            orderMap.get(String(tbl._id)) ||
+            orderMap.get(String(tbl.tableNumber)) ||
+            orderMap.get(cleanNo) ||
+            orderMap.get(`T-${cleanNo}`);
+
+          if (ord) {
+            tbl.activeOrderId = ord.id || ord._id;
+            if (!tbl.status || tbl.status === 'AVAILABLE') {
+              if (['DRAFT', 'HOLD', 'WAITING_CONFIRMATION'].includes(ord.status)) {
+                tbl.status = 'OCCUPIED';
+              } else if (['CONFIRMED', 'KOT_SENT'].includes(ord.status)) {
+                tbl.status = 'KOT_SENT';
+              } else if (ord.status === 'PREPARING') {
+                tbl.status = 'PREPARING';
+              } else if (ord.status === 'READY') {
+                tbl.status = 'READY';
+              } else if (ord.status === 'SERVED') {
+                tbl.status = 'SERVED';
+              } else if (['BILLING', 'BILL_PENDING', 'PAYMENT_PENDING'].includes(ord.status)) {
+                tbl.status = 'BILL_PENDING';
+              } else {
+                tbl.status = 'OCCUPIED';
+              }
+            }
+          }
+        }
+      }
+    } catch {
+      // Return raw tables if active orders lookup encounters issues
+    }
+
+    return tables;
   }
 
   async getTable(tableId, user) {
@@ -409,6 +467,33 @@ export class RestaurantService {
       throw new NotFoundAppError(`Table '${tableId}' not found.`);
     }
     ensureBranchAccess(user, table.branchId);
+
+    try {
+      const activeOrder = await orderRepository.findActiveByTable(table.branchId, table._id || table.id);
+      if (activeOrder) {
+        table.activeOrderId = activeOrder.id || activeOrder._id;
+        if (!table.status || table.status === 'AVAILABLE') {
+          if (['DRAFT', 'HOLD', 'WAITING_CONFIRMATION'].includes(activeOrder.status)) {
+            table.status = 'OCCUPIED';
+          } else if (['CONFIRMED', 'KOT_SENT'].includes(activeOrder.status)) {
+            table.status = 'KOT_SENT';
+          } else if (activeOrder.status === 'PREPARING') {
+            table.status = 'PREPARING';
+          } else if (activeOrder.status === 'READY') {
+            table.status = 'READY';
+          } else if (activeOrder.status === 'SERVED') {
+            table.status = 'SERVED';
+          } else if (['BILLING', 'BILL_PENDING', 'PAYMENT_PENDING'].includes(activeOrder.status)) {
+            table.status = 'BILL_PENDING';
+          } else {
+            table.status = 'OCCUPIED';
+          }
+        }
+      }
+    } catch {
+      // Return raw table if active order lookup encounters issues
+    }
+
     return table;
   }
 

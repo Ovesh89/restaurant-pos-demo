@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Plus, Coffee, Edit2, Users, Layers, AlertCircle, Receipt, ArrowRightLeft } from 'lucide-react';
 import { tableRepository } from '../../services/repositories/tableRepository';
 import { branchRepository } from '../../services/repositories/branchRepository';
+import { orderRepository } from '../../services/repositories/orderRepository';
 import { useAuth } from '../../hooks/useAuth';
 import { PageHeader } from '../../components/common/PageHeader';
 import { Button } from '../../components/common/Button';
@@ -47,13 +48,90 @@ export const TablesPage = () => {
   const loadFloor = async () => {
     try {
       setLoading(true);
-      const [tList, aList] = await Promise.all([
+      const [tList, aList, oList] = await Promise.all([
         tableRepository.getTables(),
-        branchRepository.getAreas()
+        branchRepository.getAreas(),
+        orderRepository.getOrders({ limit: 200 }).catch(() => [])
       ]);
-      setTables(tList);
-      setAreas(aList);
-      if (aList.length > 0 && selectedAreaId === 'ALL') {
+
+      const activeOrdersList = Array.isArray(oList?.items)
+        ? oList.items
+        : Array.isArray(oList)
+        ? oList
+        : [];
+
+      const activeOrderByTable = new Map();
+      activeOrdersList.forEach((ord) => {
+        const isTerminal =
+          ord.status === 'COMPLETED' ||
+          ord.status === 'CANCELLED' ||
+          ord.status === 'REJECTED';
+        if (!isTerminal) {
+          if (ord.tableId) activeOrderByTable.set(String(ord.tableId), ord);
+          if (ord.tableNo) {
+            activeOrderByTable.set(String(ord.tableNo), ord);
+            const cleanNo = String(ord.tableNo).replace(/^T-?/i, '');
+            activeOrderByTable.set(cleanNo, ord);
+            activeOrderByTable.set(`T-${cleanNo}`, ord);
+          }
+        }
+      });
+
+      const mergedTables = (tList || []).map((tbl) => {
+        const cleanNo = String(tbl.tableNo || '').replace(/^T-?/i, '');
+        const activeOrder =
+          activeOrderByTable.get(String(tbl.id)) ||
+          activeOrderByTable.get(String(tbl.tableNo)) ||
+          activeOrderByTable.get(cleanNo) ||
+          activeOrderByTable.get(`T-${cleanNo}`);
+
+        let effectiveStatus = tbl.status;
+        const activeOrderId = tbl.activeOrderId || activeOrder?.id || null;
+
+        if (activeOrder) {
+          if (!effectiveStatus || effectiveStatus === TABLE_STATUS.AVAILABLE) {
+            switch (activeOrder.status) {
+              case 'WAITING_CONFIRMATION':
+              case 'DRAFT':
+              case 'HOLD':
+                effectiveStatus = TABLE_STATUS.ORDER_IN_PROGRESS;
+                break;
+              case 'CONFIRMED':
+              case 'KOT_SENT':
+                effectiveStatus = TABLE_STATUS.KOT_SENT;
+                break;
+              case 'PREPARING':
+                effectiveStatus = TABLE_STATUS.PREPARING;
+                break;
+              case 'READY':
+                effectiveStatus = TABLE_STATUS.READY;
+                break;
+              case 'SERVED':
+                effectiveStatus = TABLE_STATUS.SERVED;
+                break;
+              case 'BILLING':
+              case 'BILL_PENDING':
+              case 'PAYMENT_PENDING':
+                effectiveStatus = TABLE_STATUS.BILL_PENDING;
+                break;
+              default:
+                effectiveStatus = TABLE_STATUS.OCCUPIED;
+                break;
+            }
+          }
+        }
+
+        return {
+          ...tbl,
+          status: effectiveStatus,
+          activeOrderId,
+          activeOrder: activeOrder || null,
+        };
+      });
+
+      setTables(mergedTables);
+      setAreas(aList || []);
+      if (aList && aList.length > 0 && selectedAreaId === 'ALL') {
         // default can be ALL or first area
       }
     } catch (err) {
@@ -234,6 +312,18 @@ export const TablesPage = () => {
             <span>{t('orders.kotSent', 'KOT Sent')}</span>
           </div>
           <div className="flex items-center gap-1.5">
+            <span className="w-2.5 h-2.5 rounded-full bg-orange-500"></span>
+            <span>{t('common.preparing', 'Preparing')}</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <span className="w-2.5 h-2.5 rounded-full bg-purple-500"></span>
+            <span>{t('common.ready', 'Ready')}</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <span className="w-2.5 h-2.5 rounded-full bg-teal-500"></span>
+            <span>{t('common.served', 'Served')}</span>
+          </div>
+          <div className="flex items-center gap-1.5">
             <span className="w-2.5 h-2.5 rounded-full bg-rose-500"></span>
             <span>{t('common.billed', 'Bill Pending')}</span>
           </div>
@@ -253,14 +343,17 @@ export const TablesPage = () => {
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3 sm:gap-4">
           {displayedTables.map((tbl) => {
             const statusConfig = getTableStatusConfig(tbl.status, t) || getTableStatusConfig(TABLE_STATUS.AVAILABLE, t);
+            const isBillPending = tbl.status === TABLE_STATUS.BILL_PENDING || tbl.status === 'BILLING' || tbl.status === 'PAYMENT_PENDING';
+            const cleanTableNo = String(tbl.tableNo || '').trim().replace(/^T-?/i, '');
+
             const handleCardClick = () => {
               if (!tbl.isActive) return;
               if (tbl.status === TABLE_STATUS.AVAILABLE) {
                 navigate(`/orders/new?tableId=${tbl.id}`);
-              } else if (tbl.status === TABLE_STATUS.BILL_PENDING && hasAnyPermission([PERMISSIONS.BILLING_GENERATE, PERMISSIONS.PAYMENT_COLLECT])) {
+              } else if (isBillPending && hasAnyPermission([PERMISSIONS.BILLING_GENERATE, PERMISSIONS.PAYMENT_COLLECT])) {
                 navigate(`/billing?tableId=${tbl.id}`);
               } else {
-                navigate(`/orders`);
+                navigate(tbl.activeOrderId ? `/orders?orderId=${tbl.activeOrderId}` : '/orders');
               }
             };
 
@@ -281,7 +374,7 @@ export const TablesPage = () => {
                       {getAreaName(tbl.areaId)}
                     </span>
                     <h3 className="text-xl sm:text-2xl font-black text-slate-800 tracking-tight mt-0.5">
-                      T-{tbl.tableNo}
+                      T-{cleanTableNo}
                     </h3>
                   </div>
 
@@ -310,7 +403,7 @@ export const TablesPage = () => {
                     >
                       + {t('orders.newOrder', 'Take Order')}
                     </button>
-                  ) : tbl.status === TABLE_STATUS.BILL_PENDING && hasAnyPermission([PERMISSIONS.BILLING_GENERATE, PERMISSIONS.PAYMENT_COLLECT]) ? (
+                  ) : isBillPending && hasAnyPermission([PERMISSIONS.BILLING_GENERATE, PERMISSIONS.PAYMENT_COLLECT]) ? (
                     <button
                       onClick={() => navigate(`/billing?tableId=${tbl.id}`)}
                       className="text-[11px] font-bold text-emerald-700 hover:text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded-lg border border-emerald-300 flex items-center gap-1"
@@ -320,7 +413,7 @@ export const TablesPage = () => {
                     </button>
                   ) : (
                     <button
-                      onClick={() => navigate('/orders')}
+                      onClick={() => navigate(tbl.activeOrderId ? `/orders?orderId=${tbl.activeOrderId}` : '/orders')}
                       className="text-[11px] font-bold text-amber-700 hover:text-amber-800 bg-amber-50 px-2 py-0.5 rounded-lg border border-amber-200"
                     >
                       {t('orders.viewDetails', 'View Order')}

@@ -15,7 +15,11 @@
     "db:setup": "node scripts/init-indexes.js && node scripts/seed-demo-data.js",
     "db:backup": "node scripts/backup-mongodb.js",
     "db:restore": "node scripts/restore-mongodb.js",
-    "sync:demo": "node scripts/sync-to-demo.js"
+    "sync:demo": "node scripts/sync-to-demo.js",
+    "sync:demo:push": "node scripts/sync-to-demo.js --push",
+    "sync:demo:watch": "node scripts/sync-to-demo.js --watch",
+    "sync:demo:dry": "node scripts/sync-to-demo.js --dry-run",
+    "setup:hooks": "node scripts/setup-hooks.js"
   },
   "engines": {
     "node": ">=20.0.0"
