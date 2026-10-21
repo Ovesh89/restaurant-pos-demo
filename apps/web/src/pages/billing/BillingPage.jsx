@@ -20,7 +20,8 @@ import {
   Layers,
   Eye,
   ChevronRight,
-  X
+  X,
+  Calendar
 } from 'lucide-react';
 import { billRepository, BILL_STATUS } from '../../services/repositories/billRepository';
 import { orderRepository } from '../../services/repositories/orderRepository';
@@ -41,6 +42,68 @@ import { Badge } from '../../components/common/Badge';
 import { DataTable } from '../../components/common/DataTable';
 import { ORDER_STATUS } from '../../constants/orderStatus';
 
+function getLocalDateString(d = new Date()) {
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+function getDateRange(filterType, customFrom, customTo) {
+  const now = new Date();
+  const todayStr = getLocalDateString(now);
+
+  if (filterType === 'TODAY') {
+    return { dateFrom: todayStr, dateTo: todayStr };
+  }
+
+  if (filterType === 'YESTERDAY') {
+    const yest = new Date(now);
+    yest.setDate(yest.getDate() - 1);
+    const yestStr = getLocalDateString(yest);
+    return { dateFrom: yestStr, dateTo: yestStr };
+  }
+
+  if (filterType === 'THIS_WEEK') {
+    const start = new Date(now);
+    const day = start.getDay();
+    const diff = start.getDate() - day + (day === 0 ? -6 : 1); // Monday
+    start.setDate(diff);
+    return { dateFrom: getLocalDateString(start), dateTo: todayStr };
+  }
+
+  if (filterType === 'THIS_MONTH') {
+    const start = new Date(now.getFullYear(), now.getMonth(), 1);
+    return { dateFrom: getLocalDateString(start), dateTo: todayStr };
+  }
+
+  if (filterType === 'CUSTOM') {
+    return {
+      dateFrom: customFrom || todayStr,
+      dateTo: customTo || todayStr,
+    };
+  }
+
+  return { dateFrom: todayStr, dateTo: todayStr };
+}
+
+function getDateRangeLabel(filterType, customFrom, customTo) {
+  const { dateFrom, dateTo } = getDateRange(filterType, customFrom, customTo);
+  if (filterType === 'TODAY') {
+    return `Today (${dateFrom})`;
+  }
+  if (filterType === 'YESTERDAY') {
+    return `Yesterday (${dateFrom})`;
+  }
+  if (filterType === 'THIS_WEEK') {
+    return `This Week (${dateFrom} to ${dateTo})`;
+  }
+  if (filterType === 'THIS_MONTH') {
+    return `This Month (${dateFrom} to ${dateTo})`;
+  }
+  return `${dateFrom} to ${dateTo}`;
+}
+
 export const BillingPage = () => {
   const { user } = useAuth();
   const { t, formatCurrency, formatNumber } = useTranslation();
@@ -53,6 +116,12 @@ export const BillingPage = () => {
   const [historyLimit, setHistoryLimit] = useState(10);
   const [historyPagination, setHistoryPagination] = useState(null);
   const [historyLoading, setHistoryLoading] = useState(false);
+
+  // Settled Invoices Filter State (Today by default)
+  const [dateFilter, setDateFilter] = useState('TODAY'); // 'TODAY' | 'YESTERDAY' | 'THIS_WEEK' | 'THIS_MONTH' | 'CUSTOM'
+  const [customFromDate, setCustomFromDate] = useState(() => getLocalDateString());
+  const [customToDate, setCustomToDate] = useState(() => getLocalDateString());
+  const [historySearch, setHistorySearch] = useState('');
 
   // Settlement Checkout Modal State
   const [selectedOrder, setSelectedOrder] = useState(null);
@@ -111,11 +180,22 @@ export const BillingPage = () => {
   const [extraPaymentLoading, setExtraPaymentLoading] = useState(false);
   const [extraPaymentError, setExtraPaymentError] = useState('');
 
-  const loadSettledBills = async (overridePage = historyPage, overrideLimit = historyLimit) => {
+  const loadSettledBills = async (
+    overridePage = historyPage,
+    overrideLimit = historyLimit,
+    overrideFilter = dateFilter,
+    overrideFrom = customFromDate,
+    overrideTo = customToDate,
+    overrideSearch = historySearch
+  ) => {
     try {
       setHistoryLoading(true);
+      const { dateFrom, dateTo } = getDateRange(overrideFilter, overrideFrom, overrideTo);
       const bills = await billRepository.getBills({
         status: BILL_STATUS.PAID,
+        dateFrom,
+        dateTo,
+        search: overrideSearch?.trim() || undefined,
         page: overridePage,
         limit: overrideLimit,
       });
@@ -135,10 +215,16 @@ export const BillingPage = () => {
     }
   };
 
-  const loadBillingData = async () => {
+  const loadBillingData = async (
+    overrideFilter = dateFilter,
+    overrideFrom = customFromDate,
+    overrideTo = customToDate,
+    overrideSearch = historySearch
+  ) => {
     try {
       setLoading(true);
-      const [orders, bills] = await Promise.all([
+      const { dateFrom, dateTo } = getDateRange(overrideFilter, overrideFrom, overrideTo);
+      const [orders, bills, allSettledBills] = await Promise.all([
         orderRepository.getOrders({
           status: [
             ORDER_STATUS.SERVED,
@@ -150,18 +236,31 @@ export const BillingPage = () => {
         }),
         billRepository.getBills({
           status: BILL_STATUS.PAID,
+          dateFrom,
+          dateTo,
+          search: overrideSearch?.trim() || undefined,
           page: 1,
           limit: historyLimit,
         }),
+        billRepository.getBills({
+          status: BILL_STATUS.PAID,
+          limit: 200,
+        }),
       ]);
 
-      // Rule 12: Pending Settlement must exclude completed/paid records
+      // Rule 12: Pending Settlement must exclude completed/paid/rejected/cancelled records
       const settledOrderIds = new Set(
-        bills
+        allSettledBills
           .filter((b) => b.isSettled || b.status === BILL_STATUS.PAID || b.rawStatus === 'COMPLETED')
           .map((b) => b.orderId)
       );
-      const pendingOrders = orders.filter((o) => !settledOrderIds.has(o.id));
+      const pendingOrders = orders.filter(
+        (o) =>
+          !settledOrderIds.has(o.id) &&
+          o.status !== ORDER_STATUS.COMPLETED &&
+          o.status !== ORDER_STATUS.CANCELLED &&
+          o.status !== ORDER_STATUS.REJECTED
+      );
 
       setReadyOrders(pendingOrders);
       setBillsHistory(bills);
@@ -192,6 +291,23 @@ export const BillingPage = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleDateFilterChange = (filterKey) => {
+    setDateFilter(filterKey);
+    setHistoryPage(1);
+    loadSettledBills(1, historyLimit, filterKey, customFromDate, customToDate, historySearch);
+  };
+
+  const handleApplyCustomDate = () => {
+    setHistoryPage(1);
+    loadSettledBills(1, historyLimit, 'CUSTOM', customFromDate, customToDate, historySearch);
+  };
+
+  const handleApplySearch = (e) => {
+    if (e && e.preventDefault) e.preventDefault();
+    setHistoryPage(1);
+    loadSettledBills(1, historyLimit, dateFilter, customFromDate, customToDate, historySearch);
   };
 
   useEffect(() => {
@@ -861,12 +977,126 @@ export const BillingPage = () => {
 
       {/* Bottom Section: Invoices & Receipts History */}
       <div className="space-y-3">
-        <h2 className="text-base font-bold text-slate-800">{t('billing.settledInvoices', null, 'Recent Settled Invoices')}</h2>
+        <div className="bg-white rounded-2xl border border-slate-200 p-4 shadow-xs space-y-3">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="flex items-center gap-2.5">
+              <div className="w-9 h-9 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center">
+                <Receipt className="w-5 h-5" />
+              </div>
+              <div>
+                <h2 className="text-base font-bold text-slate-800 flex items-center gap-2">
+                  <span>{t('billing.settledInvoices', null, 'Settled Invoices')}</span>
+                  <span className="text-xs px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 font-mono font-bold">
+                    {formatNumber(historyPagination?.total ?? billsHistory.length)}
+                  </span>
+                </h2>
+                <p className="text-xs text-slate-500">
+                  {getDateRangeLabel(dateFilter, customFromDate, customToDate)}
+                </p>
+              </div>
+            </div>
+
+            {/* Quick Search */}
+            <form onSubmit={handleApplySearch} className="relative w-full sm:w-64">
+              <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+              <input
+                type="text"
+                value={historySearch}
+                onChange={(e) => setHistorySearch(e.target.value)}
+                placeholder={t('common.search', null, 'Search invoice, table, guest...')}
+                className="w-full text-xs pl-9 pr-8 py-2 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+              />
+              {historySearch && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setHistorySearch('');
+                    setHistoryPage(1);
+                    loadSettledBills(1, historyLimit, dateFilter, customFromDate, customToDate, '');
+                  }}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </form>
+          </div>
+
+          {/* Filter Pills / Tabs */}
+          <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-100">
+            <div className="flex flex-wrap items-center gap-1.5">
+              {[
+                { key: 'TODAY', label: t('reports.today', null, 'Today') },
+                { key: 'YESTERDAY', label: t('reports.yesterday', null, 'Yesterday') },
+                { key: 'THIS_WEEK', label: t('reports.thisWeek', null, 'This Week') },
+                { key: 'THIS_MONTH', label: t('reports.thisMonth', null, 'This Month') },
+                { key: 'CUSTOM', label: t('reports.customDate', null, 'Custom Date') },
+              ].map((tab) => (
+                <button
+                  key={tab.key}
+                  type="button"
+                  onClick={() => handleDateFilterChange(tab.key)}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
+                    dateFilter === tab.key
+                      ? 'bg-blue-600 text-white shadow-xs'
+                      : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
+                  }`}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+
+            <Button
+              variant="ghost"
+              size="sm"
+              loading={historyLoading}
+              onClick={() => loadSettledBills(1, historyLimit)}
+              className="text-slate-500 hover:text-slate-700 text-xs"
+            >
+              <RefreshCw className="w-3.5 h-3.5 mr-1" />
+              {t('common.refresh', null, 'Refresh')}
+            </Button>
+          </div>
+
+          {/* Custom Date Inputs (when CUSTOM is active) */}
+          {dateFilter === 'CUSTOM' && (
+            <div className="flex flex-wrap items-center gap-3 pt-2 bg-slate-50 p-3 rounded-xl border border-slate-200">
+              <div className="flex items-center gap-2 text-xs">
+                <span className="font-bold text-slate-600">{t('reports.from', null, 'From')}:</span>
+                <input
+                  type="date"
+                  value={customFromDate}
+                  onChange={(e) => setCustomFromDate(e.target.value)}
+                  className="text-xs p-1.5 rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                />
+              </div>
+              <div className="flex items-center gap-2 text-xs">
+                <span className="font-bold text-slate-600">{t('reports.to', null, 'To')}:</span>
+                <input
+                  type="date"
+                  value={customToDate}
+                  onChange={(e) => setCustomToDate(e.target.value)}
+                  className="text-xs p-1.5 rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                />
+              </div>
+              <Button
+                variant="primary"
+                size="sm"
+                onClick={handleApplyCustomDate}
+                className="text-xs py-1 px-3 bg-blue-600 text-white font-bold"
+              >
+                {t('common.apply', null, 'Apply')}
+              </Button>
+            </div>
+          )}
+        </div>
+
         <DataTable
           columns={historyColumns}
           data={billsHistory}
           loading={historyLoading}
-          emptyMessage={t('billing.noSettledInvoices', null, 'No historical bills settled yet.')}
+          emptyMessage={`${t('billing.noSettledInvoices', null, 'No historical bills settled yet for')} ${getDateRangeLabel(dateFilter, customFromDate, customToDate)}.`}
           pagination={historyPagination}
           onPageChange={(p) => {
             setHistoryPage(p);

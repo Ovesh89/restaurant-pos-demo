@@ -31,6 +31,16 @@ class BillLocalRepository {
       list = list.filter((b) => b.orderId === filters.orderId);
     }
 
+    if (filters.dateFrom) {
+      const fromStr = filters.dateFrom.length === 10 ? `${filters.dateFrom}T00:00:00.000Z` : filters.dateFrom;
+      list = list.filter((b) => (b.createdAt || b.generatedAt || '') >= fromStr);
+    }
+
+    if (filters.dateTo) {
+      const toStr = filters.dateTo.length === 10 ? `${filters.dateTo}T23:59:59.999Z` : filters.dateTo;
+      list = list.filter((b) => (b.createdAt || b.generatedAt || '') <= toStr);
+    }
+
     if (filters.search) {
       const q = filters.search.toLowerCase();
       list = list.filter(

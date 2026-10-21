@@ -60,7 +60,11 @@ export class BillRepository extends BaseMongoRepository {
     }
     if (dateFrom || dateTo) {
       filterQuery.generatedAt = {};
-      if (dateFrom) filterQuery.generatedAt.$gte = dateFrom;
+      if (dateFrom) {
+        filterQuery.generatedAt.$gte = /^\d{4}-\d{2}-\d{2}$/.test(dateFrom)
+          ? `${dateFrom}T00:00:00.000Z`
+          : dateFrom;
+      }
       if (dateTo) {
         filterQuery.generatedAt.$lte = /^\d{4}-\d{2}-\d{2}$/.test(dateTo)
           ? `${dateTo}T23:59:59.999Z`

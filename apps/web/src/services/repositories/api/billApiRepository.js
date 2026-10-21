@@ -179,6 +179,14 @@ class BillApiRepository {
       params.orderId = filters.orderId;
     }
 
+    if (filters.dateFrom) {
+      params.dateFrom = filters.dateFrom;
+    }
+
+    if (filters.dateTo) {
+      params.dateTo = filters.dateTo;
+    }
+
     if (filters.search && String(filters.search).trim()) {
       params.search = String(filters.search).trim();
     }

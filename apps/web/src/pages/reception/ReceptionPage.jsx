@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import { orderRepository } from '../../services/repositories/orderRepository';
 import { kotRepository } from '../../services/repositories/kotRepository';
+import { billRepository, BILL_STATUS } from '../../services/repositories/billRepository';
 import { printService } from '../../services/printing/printService';
 import { useAuth } from '../../hooks/useAuth';
 import { useTranslation } from '../../hooks/useTranslation';
@@ -39,12 +40,58 @@ export const ReceptionPage = () => {
   const loadData = async () => {
     try {
       setLoading(true);
-      const [pending, kots] = await Promise.all([
+      const [pending, kots, orders, bills] = await Promise.all([
         orderRepository.getOrders({ status: ORDER_STATUS.WAITING_CONFIRMATION }),
-        kotRepository.getKOTs()
+        kotRepository.getKOTs(),
+        orderRepository.getOrders({ limit: 200 }),
+        billRepository.getBills({ limit: 200 })
       ]);
-      setPendingOrders(pending);
-      setActiveKOTs(kots.slice(0, 8)); // recent KOTs
+
+      // Set of completed/cancelled/rejected orders and settled bills
+      const settledOrClosedOrderIds = new Set();
+      (orders || []).forEach((o) => {
+        if (
+          o.status === ORDER_STATUS.COMPLETED ||
+          o.status === ORDER_STATUS.CANCELLED ||
+          o.status === ORDER_STATUS.REJECTED
+        ) {
+          settledOrClosedOrderIds.add(o.id || o._id);
+        }
+      });
+      (bills || []).forEach((b) => {
+        if (b.isSettled || b.status === BILL_STATUS.PAID || b.rawStatus === 'COMPLETED') {
+          if (b.orderId) settledOrClosedOrderIds.add(b.orderId);
+        }
+      });
+
+      // Filter pending approval orders: only show orders not settled/completed/rejected
+      const filteredPending = (pending || []).filter((ord) => {
+        if (settledOrClosedOrderIds.has(ord.id || ord._id)) return false;
+        if (
+          ord.status === ORDER_STATUS.COMPLETED ||
+          ord.status === ORDER_STATUS.CANCELLED ||
+          ord.status === ORDER_STATUS.REJECTED
+        ) {
+          return false;
+        }
+        return true;
+      });
+
+      // Live Kitchen Queue: only show orders/KOTs which are NOT served AND NOT settled with complete
+      const filteredKOTs = (kots || []).filter((kot) => {
+        // Exclude served or cancelled
+        if (kot.status === 'SERVED' || kot.status === 'CANCELLED') return false;
+
+        // Exclude if order is settled with complete
+        if (kot.orderId && settledOrClosedOrderIds.has(kot.orderId)) {
+          return false;
+        }
+
+        return true;
+      });
+
+      setPendingOrders(filteredPending);
+      setActiveKOTs(filteredKOTs);
     } catch (err) {
       console.error('Failed to load reception queue:', err);
     } finally {
@@ -253,13 +300,15 @@ export const ReceptionPage = () => {
 
           <div className="bg-white rounded-2xl border border-slate-200 p-4 divide-y divide-slate-100 shadow-xs max-h-[600px] overflow-y-auto">
             {activeKOTs.length === 0 ? (
-              <p className="text-xs text-slate-400 py-4 text-center">{t('kitchen.noActiveTickets', null, 'No recent KOTs generated.')}</p>
+              <p className="text-xs text-slate-400 py-6 text-center">
+                {t('kitchen.noActiveTickets', null, 'No active KOTs in queue. All orders are served & settled.')}
+              </p>
             ) : (
               activeKOTs.map((kot) => (
                 <div key={kot.id} className="py-3 first:pt-0 last:pb-0 space-y-1.5">
                   <div className="flex items-center justify-between">
                     <span className="font-mono font-black text-xs text-blue-700">{kot.kotNo}</span>
-                    <Badge variant={kot.status === 'READY' ? 'success' : 'default'} size="sm">
+                    <Badge variant={kot.status === 'READY' ? 'success' : kot.status === 'PREPARING' ? 'primary' : 'warning'} size="sm">
                       {kot.status}
                     </Badge>
                   </div>
