@@ -221,13 +221,103 @@ export const CategoriesPage = () => {
         </div>
       </div>
 
-      {/* Data Table */}
-      <DataTable
-        columns={columns}
-        data={filteredCategories}
-        loading={loading}
-        emptyMessage={t('menu.noCategories', 'No menu categories match your search.')}
-      />
+      {/* Desktop / Tablet Data Table */}
+      <div className="hidden md:block">
+        <DataTable
+          columns={columns}
+          data={filteredCategories}
+          loading={loading}
+          emptyMessage={t('menu.noCategories', 'No menu categories match your search.')}
+        />
+      </div>
+
+      {/* Mobile-Only Grid/Card View (Optimized for Mobile Screens & Web-View App) */}
+      <div className="block md:hidden">
+        {loading ? (
+          <div className="bg-white rounded-2xl border border-slate-200 p-8 text-center shadow-xs">
+            <div className="inline-block animate-spin rounded-full h-8 w-8 border-4 border-slate-200 border-t-blue-600 mb-3"></div>
+            <p className="text-sm font-medium text-slate-500">{t('common.loading', null, 'Loading categories...')}</p>
+          </div>
+        ) : filteredCategories.length === 0 ? (
+          <div className="bg-white rounded-2xl border border-dashed border-slate-300 p-8 text-center text-slate-500 text-sm font-medium">
+            {t('menu.noCategories', 'No menu categories match your search.')}
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {filteredCategories.map((row) => (
+              <div
+                key={row.id}
+                className="bg-white rounded-2xl border border-slate-200 p-3.5 shadow-xs flex flex-col justify-between transition-all hover:border-blue-400 hover:shadow-md"
+              >
+                <div>
+                  {/* Top Bar: Sort Order + Name & Code */}
+                  <div className="flex items-center justify-between gap-2 pb-2.5 border-b border-slate-100">
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <div className="w-8 h-8 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center font-bold text-xs shrink-0">
+                        <Layers className="w-4 h-4" />
+                      </div>
+                      <div className="truncate">
+                        <h3 className="font-bold text-slate-800 text-sm truncate">{row.name}</h3>
+                        {row.code && <span className="text-[11px] font-mono text-slate-400">Code: {row.code}</span>}
+                      </div>
+                    </div>
+
+                    <span className="font-mono text-xs font-bold text-slate-400 bg-slate-50 px-2 py-0.5 rounded border border-slate-200 shrink-0">
+                      #{formatNumber(row.sortOrder ?? 1)}
+                    </span>
+                  </div>
+
+                  {/* Badges: KOT Policy & Status */}
+                  <div className="my-2.5 flex items-center justify-between">
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <Badge variant={row.kotRequired !== false ? 'info' : 'warning'} size="sm">
+                        {row.kotRequired !== false ? t('menu.kotRequired', 'KOT Required') : t('menu.noKot', 'No KOT')}
+                      </Badge>
+                      <Badge variant={row.isActive ? 'success' : 'default'} size="sm">
+                        {row.isActive ? t('common.active', 'Active') : t('common.inactive', 'Inactive')}
+                      </Badge>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Actions Toolbar */}
+                {canEdit && (
+                  <div className="pt-2 border-t border-slate-100 flex items-center justify-between gap-1.5">
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      icon={Edit2}
+                      onClick={() => handleOpenEdit(row)}
+                      className="flex-1 text-xs justify-center"
+                    >
+                      {t('common.edit', 'Edit')}
+                    </Button>
+                    <Button
+                      variant={row.isActive ? 'ghost' : 'secondary'}
+                      size="sm"
+                      onClick={() => handleToggleStatus(row)}
+                      className={`flex-1 text-xs justify-center ${
+                        row.isActive ? 'text-amber-600 hover:text-amber-700' : 'text-emerald-600 hover:text-emerald-700'
+                      }`}
+                    >
+                      {row.isActive ? t('common.deactivate', 'Deactivate') : t('common.activate', 'Activate')}
+                    </Button>
+                    {isAdminOrOwner && (
+                      <button
+                        onClick={() => handleDeleteCategory(row)}
+                        title="Delete Category"
+                        className="p-2 text-slate-400 hover:text-rose-600 rounded-lg hover:bg-rose-50 transition-colors border border-slate-200 shrink-0"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
 
       {/* Add / Edit Category Modal */}
       <Modal

@@ -9,6 +9,7 @@ import { Select } from '../../components/common/Select';
 import { Modal } from '../../components/common/Modal';
 import { Badge } from '../../components/common/Badge';
 import { DataTable } from '../../components/common/DataTable';
+import { Pagination } from '../../components/common/Pagination';
 import { SYSTEM_ROLES } from '../../constants/roles';
 import { useTranslation } from '../../hooks/useTranslation';
 
@@ -334,23 +335,148 @@ export const UsersPage = () => {
         </div>
       </div>
 
-      {/* Table */}
-      <DataTable
-        columns={columns}
-        data={users}
-        loading={loading}
-        emptyMessage={t('users.noUsers', 'No staff members match the selected filter.')}
-        pagination={pagination}
-        onPageChange={(newPage) => {
-          setPage(newPage);
-          loadUsers(newPage, limit);
-        }}
-        onPageSizeChange={(newLimit) => {
-          setLimit(newLimit);
-          setPage(1);
-          loadUsers(1, newLimit);
-        }}
-      />
+      {/* Desktop / Tablet Table */}
+      <div className="hidden md:block">
+        <DataTable
+          columns={columns}
+          data={users}
+          loading={loading}
+          emptyMessage={t('users.noUsers', 'No staff members match the selected filter.')}
+          pagination={pagination}
+          onPageChange={(newPage) => {
+            setPage(newPage);
+            loadUsers(newPage, limit);
+          }}
+          onPageSizeChange={(newLimit) => {
+            setLimit(newLimit);
+            setPage(1);
+            loadUsers(1, newLimit);
+          }}
+        />
+      </div>
+
+      {/* Mobile-Only Grid/Card View (Optimized for Mobile Screens & Web-View App) */}
+      <div className="block md:hidden">
+        {loading ? (
+          <div className="bg-white rounded-2xl border border-slate-200 p-8 text-center shadow-xs">
+            <div className="inline-block animate-spin rounded-full h-8 w-8 border-4 border-slate-200 border-t-blue-600 mb-3"></div>
+            <p className="text-sm font-medium text-slate-500">{t('common.loading', null, 'Loading staff members...')}</p>
+          </div>
+        ) : users.length === 0 ? (
+          <div className="bg-white rounded-2xl border border-dashed border-slate-300 p-8 text-center text-slate-500 text-sm font-medium">
+            {t('users.noUsers', 'No staff members match the selected filter.')}
+          </div>
+        ) : (
+          <div className="space-y-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {users.map((row) => (
+                <div
+                  key={row.id}
+                  className="bg-white rounded-2xl border border-slate-200 p-3.5 shadow-xs flex flex-col justify-between transition-all hover:border-blue-400 hover:shadow-md"
+                >
+                  <div>
+                    {/* Header: Avatar + Name + Role Badge */}
+                    <div className="flex items-center justify-between gap-2 pb-2.5 border-b border-slate-100">
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <div className="w-9 h-9 rounded-full bg-slate-100 border border-slate-200 flex items-center justify-center font-bold text-xs text-slate-700 shrink-0">
+                          {row.name ? row.name.charAt(0) : '?'}
+                        </div>
+                        <div className="truncate">
+                          <h3 className="font-bold text-slate-800 text-sm truncate">{row.name}</h3>
+                          <span className="block text-xs font-mono text-slate-400">@{row.username}</span>
+                        </div>
+                      </div>
+
+                      <Badge variant={roleColors[row.role] || 'default'} size="sm">
+                        {row.role.toUpperCase()}
+                      </Badge>
+                    </div>
+
+                    {/* Contact & Status */}
+                    <div className="my-2.5 flex items-center justify-between text-xs">
+                      {row.mobile ? (
+                        <a
+                          href={`tel:${row.mobile}`}
+                          className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-slate-50 hover:bg-slate-100 text-slate-700 font-mono text-xs border border-slate-200"
+                        >
+                          <Phone className="w-3 h-3 text-slate-400" />
+                          <span>{row.mobile}</span>
+                        </a>
+                      ) : (
+                        <span className="text-slate-400 italic">No phone</span>
+                      )}
+
+                      <Badge variant={row.isActive ? 'success' : 'default'} size="sm">
+                        {row.isActive ? t('common.active', 'Active') : t('common.inactive', 'Disabled')}
+                      </Badge>
+                    </div>
+                  </div>
+
+                  {/* Actions Toolbar */}
+                  <div className="pt-2 border-t border-slate-100 flex items-center justify-between gap-1.5">
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      icon={KeyRound}
+                      onClick={() => handleOpenResetPassword(row)}
+                      className="flex-1 text-xs justify-center"
+                    >
+                      {t('auth.securityPassword', 'Password')}
+                    </Button>
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      icon={Edit2}
+                      onClick={() => handleOpenEdit(row)}
+                      className="flex-1 text-xs justify-center"
+                    >
+                      {t('common.edit', 'Edit')}
+                    </Button>
+                    <Button
+                      variant={row.isActive ? 'ghost' : 'secondary'}
+                      size="sm"
+                      onClick={() => handleToggleStatus(row)}
+                      className={`flex-1 text-xs justify-center ${
+                        row.isActive ? 'text-amber-600 hover:text-amber-700' : 'text-emerald-600 hover:text-emerald-700'
+                      }`}
+                    >
+                      {row.isActive ? t('common.deactivate', 'Disable') : t('common.activate', 'Enable')}
+                    </Button>
+                    {isAdminOrOwner && row.id !== currentUser?.id && (
+                      <button
+                        onClick={() => handleDeleteUser(row)}
+                        title="Delete User"
+                        className="p-2 text-slate-400 hover:text-rose-600 rounded-lg hover:bg-rose-50 transition-colors border border-slate-200 shrink-0"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Mobile Pagination */}
+            <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-xs">
+              <Pagination
+                currentPage={pagination?.page || page}
+                totalPages={pagination?.totalPages || 1}
+                totalItems={pagination?.total || users.length}
+                pageSize={pagination?.limit || limit}
+                onPageChange={(newPage) => {
+                  setPage(newPage);
+                  loadUsers(newPage, limit);
+                }}
+                onPageSizeChange={(newLimit) => {
+                  setLimit(newLimit);
+                  setPage(1);
+                  loadUsers(1, newLimit);
+                }}
+              />
+            </div>
+          </div>
+        )}
+      </div>
 
       {/* Add / Edit User Modal */}
       <Modal

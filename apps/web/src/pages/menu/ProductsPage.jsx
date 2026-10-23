@@ -22,6 +22,7 @@ import { Select } from '../../components/common/Select';
 import { Modal } from '../../components/common/Modal';
 import { Badge } from '../../components/common/Badge';
 import { DataTable } from '../../components/common/DataTable';
+import { Pagination } from '../../components/common/Pagination';
 import { APP_CONFIG } from '../../config/appConfig';
 import { PERMISSIONS } from '../../constants/permissions';
 import { useTranslation } from '../../hooks/useTranslation';
@@ -458,23 +459,162 @@ export const ProductsPage = () => {
         </div>
       </div>
 
-      {/* Data Table */}
-      <DataTable
-        columns={columns}
-        data={products}
-        loading={loading}
-        emptyMessage={t('menu.noProducts', 'No products match your filter criteria.')}
-        pagination={pagination}
-        onPageChange={(newPage) => {
-          setPage(newPage);
-          loadData(newPage, limit);
-        }}
-        onPageSizeChange={(newLimit) => {
-          setLimit(newLimit);
-          setPage(1);
-          loadData(1, newLimit);
-        }}
-      />
+      {/* Desktop / Tablet Data Table */}
+      <div className="hidden md:block">
+        <DataTable
+          columns={columns}
+          data={products}
+          loading={loading}
+          emptyMessage={t('menu.noProducts', 'No products match your filter criteria.')}
+          pagination={pagination}
+          onPageChange={(newPage) => {
+            setPage(newPage);
+            loadData(newPage, limit);
+          }}
+          onPageSizeChange={(newLimit) => {
+            setLimit(newLimit);
+            setPage(1);
+            loadData(1, newLimit);
+          }}
+        />
+      </div>
+
+      {/* Mobile-Only Grid/Card View (Optimized for Mobile Screens & Web-View App) */}
+      <div className="block md:hidden">
+        {loading ? (
+          <div className="bg-white rounded-2xl border border-slate-200 p-8 text-center shadow-xs">
+            <div className="inline-block animate-spin rounded-full h-8 w-8 border-4 border-slate-200 border-t-blue-600 mb-3"></div>
+            <p className="text-sm font-medium text-slate-500">{t('common.loading', null, 'Loading menu products...')}</p>
+          </div>
+        ) : products.length === 0 ? (
+          <div className="bg-white rounded-2xl border border-dashed border-slate-300 p-8 text-center text-slate-500 text-sm font-medium">
+            {t('menu.noProducts', 'No products match your filter criteria.')}
+          </div>
+        ) : (
+          <div className="space-y-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {products.map((row) => (
+                <div
+                  key={row.id}
+                  className="bg-white rounded-2xl border border-slate-200 p-3.5 shadow-xs flex flex-col justify-between transition-all hover:border-blue-400 hover:shadow-md"
+                >
+                  <div>
+                    {/* Top Bar: Dish Name, SKU, Category Badge */}
+                    <div className="flex items-start justify-between gap-2 pb-2.5 border-b border-slate-100">
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <h3 className="font-bold text-slate-900 text-sm truncate">{row.name}</h3>
+                          {row.code && (
+                            <span className="font-mono text-[10px] text-slate-400">({row.code})</span>
+                          )}
+                        </div>
+                        {row.description && (
+                          <p className="text-[11px] text-slate-500 line-clamp-1 mt-0.5">{row.description}</p>
+                        )}
+                      </div>
+
+                      <Badge variant="primary" size="sm">
+                        {getCategoryName(row.categoryId)}
+                      </Badge>
+                    </div>
+
+                    {/* Pricing, Station, and Stock Availability */}
+                    <div className="my-2.5 flex items-center justify-between gap-2">
+                      <div>
+                        <span className="text-base font-black text-slate-900">
+                          {formatCurrency(row.price)}
+                        </span>
+                        <span className="text-[10px] text-slate-400 font-mono block">
+                          +{formatNumber(row.taxRate)}% GST
+                        </span>
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        <span className="text-[11px] font-semibold text-slate-600 bg-slate-100 px-2 py-0.5 rounded-md">
+                          {row.station || 'Main Curry'}
+                        </span>
+
+                        <button
+                          disabled={!canEdit}
+                          onClick={() => handleToggleAvailability(row)}
+                          title="Toggle instant item availability"
+                          className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold transition-all ${
+                            row.isAvailable
+                              ? 'bg-emerald-100 text-emerald-800'
+                              : 'bg-rose-100 text-rose-800'
+                          }`}
+                        >
+                          <span className={`w-1.5 h-1.5 rounded-full ${row.isAvailable ? 'bg-emerald-500' : 'bg-rose-500'}`} />
+                          {row.isAvailable ? t('menu.inStock', 'In Stock') : t('menu.outOfStock', 'Sold Out')}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Actions Toolbar */}
+                  {canEdit && (
+                    <div className="pt-2 border-t border-slate-100 flex items-center justify-between gap-1.5">
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        icon={TrendingUp}
+                        onClick={() => handleOpenPriceChange(row)}
+                        className="flex-1 text-xs justify-center"
+                      >
+                        {t('menu.price', 'Price')}
+                      </Button>
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        icon={Edit2}
+                        onClick={() => handleOpenEdit(row)}
+                        className="flex-1 text-xs justify-center"
+                      >
+                        {t('common.edit', 'Edit')}
+                      </Button>
+                      <button
+                        onClick={() => handleOpenHistory(row)}
+                        title="View Price Change History"
+                        className="p-2 text-slate-400 hover:text-blue-600 rounded-lg hover:bg-slate-100 transition-colors border border-slate-200 shrink-0"
+                      >
+                        <History className="w-4 h-4" />
+                      </button>
+                      {isAdminOrOwner && (
+                        <button
+                          onClick={() => handleDeleteProduct(row)}
+                          title="Permanently Delete Dish"
+                          className="p-2 text-slate-400 hover:text-rose-600 rounded-lg hover:bg-rose-50 transition-colors border border-slate-200 shrink-0"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+
+            {/* Mobile Pagination */}
+            <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-xs">
+              <Pagination
+                currentPage={pagination?.page || page}
+                totalPages={pagination?.totalPages || 1}
+                totalItems={pagination?.total || products.length}
+                pageSize={pagination?.limit || limit}
+                onPageChange={(newPage) => {
+                  setPage(newPage);
+                  loadData(newPage, limit);
+                }}
+                onPageSizeChange={(newLimit) => {
+                  setLimit(newLimit);
+                  setPage(1);
+                  loadData(1, newLimit);
+                }}
+              />
+            </div>
+          </div>
+        )}
+      </div>
 
       {/* Add / Edit General Product Modal */}
       <Modal

@@ -7,6 +7,7 @@ import { Input } from '../../components/common/Input';
 import { Select } from '../../components/common/Select';
 import { Badge } from '../../components/common/Badge';
 import { DataTable } from '../../components/common/DataTable';
+import { Pagination } from '../../components/common/Pagination';
 import { useTranslation } from '../../hooks/useTranslation';
 
 export const AuditPage = () => {
@@ -236,23 +237,108 @@ export const AuditPage = () => {
         </div>
       </div>
 
-      {/* Table */}
-      <DataTable
-        columns={columns}
-        data={logs}
-        loading={loading}
-        emptyMessage={t('audit.noLogs', 'No audit log entries match your filter.')}
-        pagination={pagination}
-        onPageChange={(p) => {
-          setPage(p);
-          loadLogs(p, limit);
-        }}
-        onPageSizeChange={(l) => {
-          setLimit(l);
-          setPage(1);
-          loadLogs(1, l);
-        }}
-      />
+      {/* Desktop / Tablet Table */}
+      <div className="hidden md:block">
+        <DataTable
+          columns={columns}
+          data={logs}
+          loading={loading}
+          emptyMessage={t('audit.noLogs', 'No audit log entries match your filter.')}
+          pagination={pagination}
+          onPageChange={(p) => {
+            setPage(p);
+            loadLogs(p, limit);
+          }}
+          onPageSizeChange={(l) => {
+            setLimit(l);
+            setPage(1);
+            loadLogs(1, l);
+          }}
+        />
+      </div>
+
+      {/* Mobile-Only Grid/Card View (Optimized for Mobile Screens & Web-View App) */}
+      <div className="block md:hidden">
+        {loading ? (
+          <div className="bg-white rounded-2xl border border-slate-200 p-8 text-center shadow-xs">
+            <div className="inline-block animate-spin rounded-full h-8 w-8 border-4 border-slate-200 border-t-blue-600 mb-3"></div>
+            <p className="text-sm font-medium text-slate-500">{t('common.loading', null, 'Loading audit logs...')}</p>
+          </div>
+        ) : logs.length === 0 ? (
+          <div className="bg-white rounded-2xl border border-dashed border-slate-300 p-8 text-center text-slate-500 text-sm font-medium">
+            {t('audit.noLogs', 'No audit log entries match your filter.')}
+          </div>
+        ) : (
+          <div className="space-y-3">
+            <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 sm:gap-3">
+              {logs.map((row) => {
+                const d = new Date(row.timestamp);
+                const dateStr = d.toLocaleDateString();
+                const timeStr = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+
+                return (
+                  <div
+                    key={row.id || row._id || `${row.timestamp}-${row.action}`}
+                    className="bg-white rounded-2xl border border-slate-200 p-3.5 shadow-xs flex flex-col justify-between transition-all hover:border-blue-400 hover:shadow-md"
+                  >
+                    <div>
+                      {/* Header: Action badge & Timestamp */}
+                      <div className="flex items-center justify-between gap-2 pb-2.5 border-b border-slate-100">
+                        <Badge variant={getActionBadgeVariant(row.action)} size="sm">
+                          {row.action}
+                        </Badge>
+
+                        <div className="text-right text-[11px] text-slate-400 font-mono">
+                          <span>{dateStr}</span> <span className="text-slate-600 font-semibold">{timeStr}</span>
+                        </div>
+                      </div>
+
+                      {/* Actor & Entity row */}
+                      <div className="my-2 flex items-center justify-between text-xs">
+                        <span className="font-bold text-slate-800">
+                          Actor: {row.actorName}
+                        </span>
+                        <span className="text-[11px] font-semibold text-slate-600 bg-slate-100 px-2 py-0.5 rounded">
+                          {row.entityType}
+                        </span>
+                      </div>
+
+                      {/* Details & Reason */}
+                      <div className="bg-slate-50/80 rounded-xl p-2.5 border border-slate-100 text-xs text-slate-700 space-y-1">
+                        <p className="leading-relaxed">{row.details}</p>
+                        {row.reason && (
+                          <div className="text-[11px] text-amber-800 bg-amber-50 px-2 py-1 rounded-lg border border-amber-200 font-medium">
+                            Reason: {row.reason}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Mobile Pagination */}
+            <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-xs">
+              <Pagination
+                currentPage={pagination?.page || page}
+                totalPages={pagination?.totalPages || 1}
+                totalItems={pagination?.total || logs.length}
+                pageSize={pagination?.limit || limit}
+                onPageChange={(p) => {
+                  setPage(p);
+                  loadLogs(p, limit);
+                }}
+                onPageSizeChange={(l) => {
+                  setLimit(l);
+                  setPage(1);
+                  loadLogs(1, l);
+                }}
+              />
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 };

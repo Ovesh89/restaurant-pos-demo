@@ -30,6 +30,7 @@ import { PageHeader } from '../../components/common/PageHeader';
 import { StatCard } from '../../components/common/StatCard';
 import { Button } from '../../components/common/Button';
 import { DataTable } from '../../components/common/DataTable';
+import { Pagination } from '../../components/common/Pagination';
 import { Modal } from '../../components/common/Modal';
 import { ORDER_STATUS, ORDER_STATUS_CONFIG, getOrderStatusConfig } from '../../constants/orderStatus';
 
@@ -706,17 +707,156 @@ export const OrderHistoryPage = () => {
       {/* Tab 1: Orders History Table */}
       {activeTab === 'ORDERS' && (
         <div className="space-y-3">
-          <DataTable
-            columns={orderColumns}
-            data={historyData?.orders || []}
-            loading={loading}
-            emptyMessage={t('orders.noOrdersMatchingRange', null, 'No orders found matching the selected Date/Month range and filters.')}
-            pagination={historyData?.pagination}
-            onPageChange={handlePageChange}
-            onPageSizeChange={handleLimitChange}
-            defaultSortKey="createdAt"
-            defaultSortDirection="desc"
-          />
+          {/* Desktop / Tablet Table View */}
+          <div className="hidden md:block">
+            <DataTable
+              columns={orderColumns}
+              data={historyData?.orders || []}
+              loading={loading}
+              emptyMessage={t('orders.noOrdersMatchingRange', null, 'No orders found matching the selected Date/Month range and filters.')}
+              pagination={historyData?.pagination}
+              onPageChange={handlePageChange}
+              onPageSizeChange={handleLimitChange}
+              defaultSortKey="createdAt"
+              defaultSortDirection="desc"
+            />
+          </div>
+
+          {/* Mobile Grid/Card View (Optimized for Mobile Screens & Web-View App) */}
+          <div className="block md:hidden">
+            {loading ? (
+              <div className="bg-white rounded-2xl border border-slate-200 p-8 text-center shadow-xs">
+                <div className="inline-block animate-spin rounded-full h-8 w-8 border-4 border-slate-200 border-t-blue-600 mb-3"></div>
+                <p className="text-sm font-medium text-slate-500">{t('common.loading', null, 'Loading order history...')}</p>
+              </div>
+            ) : (historyData?.orders || []).length === 0 ? (
+              <div className="bg-white rounded-2xl border border-dashed border-slate-300 p-8 text-center text-slate-500 text-sm font-medium">
+                {t('orders.noOrdersMatchingRange', null, 'No orders found matching the selected Date/Month range and filters.')}
+              </div>
+            ) : (
+              <div className="space-y-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {(historyData?.orders || []).map((row) => {
+                    const d = new Date(row.createdAt);
+                    const statusConfig = getOrderStatusConfig(row.status, t);
+                    const items = row.items || [];
+                    const categoriesSeen = [...new Set(items.map((i) => i.categoryName).filter(Boolean))];
+                    const dishesText = items.map((i) => `${i.name || i.productName} (x${i.quantity || 1})`).join(', ');
+
+                    return (
+                      <div
+                        key={row.id || row.orderNo}
+                        className="bg-white rounded-2xl border border-slate-200 p-3.5 shadow-xs flex flex-col justify-between transition-all hover:border-blue-400 hover:shadow-md"
+                      >
+                        <div>
+                          {/* Header: Order No, Table, Date/Time */}
+                          <div className="flex items-center justify-between gap-2 pb-2.5 border-b border-slate-100">
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <span
+                                className="font-mono font-black text-xs px-2 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200 cursor-pointer"
+                                onClick={() => setSelectedOrder(row)}
+                              >
+                                {row.orderNo || row.orderNumber}
+                              </span>
+                              <span className="text-xs font-bold px-2 py-0.5 rounded bg-slate-100 text-slate-700">
+                                {t('orders.table', null, 'Table')} {row.tableNo || row.tableNumber}
+                              </span>
+                            </div>
+
+                            <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold border ${statusConfig.color}`}>
+                              {statusConfig.label}
+                            </span>
+                          </div>
+
+                          {/* Customer & Timestamp */}
+                          <div className="my-2 flex items-center justify-between text-xs">
+                            <div className="truncate">
+                              <span className="font-bold text-slate-800 block truncate">
+                                {row.customer?.name || t('orders.walkinGuest', null, 'Walk-in Guest')}
+                              </span>
+                              {row.customer?.mobile && (
+                                <span className="text-[11px] font-mono text-slate-400">{row.customer.mobile}</span>
+                              )}
+                            </div>
+
+                            <div className="text-right text-[11px] text-slate-500 shrink-0 font-mono">
+                              <span className="block font-semibold">
+                                {d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })}
+                              </span>
+                              <span className="text-slate-400">
+                                {d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
+                              </span>
+                            </div>
+                          </div>
+
+                          {/* Dishes & Categories preview */}
+                          <div className="bg-slate-50/80 rounded-xl p-2.5 border border-slate-100 text-xs text-slate-600 mb-3 space-y-1.5">
+                            {categoriesSeen.length > 0 && (
+                              <div className="flex items-center gap-1 flex-wrap">
+                                {categoriesSeen.slice(0, 2).map((cat, idx) => (
+                                  <span
+                                    key={idx}
+                                    className="px-1.5 py-0.2 rounded text-[10px] font-bold bg-white text-slate-600 border border-slate-200"
+                                  >
+                                    {cat}
+                                  </span>
+                                ))}
+                                {categoriesSeen.length > 2 && (
+                                  <span className="text-[10px] text-slate-400 font-semibold">
+                                    +{categoriesSeen.length - 2}
+                                  </span>
+                                )}
+                              </div>
+                            )}
+
+                            {dishesText && (
+                              <p className="text-[11px] text-slate-500 line-clamp-2 leading-relaxed">
+                                {dishesText}
+                              </p>
+                            )}
+
+                            <div className="flex items-center justify-between pt-1 border-t border-slate-200/60">
+                              <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">
+                                {t('reports.totalRevenue', null, 'Total Sales')}
+                              </span>
+                              <span className="text-sm font-black text-slate-900">
+                                ₹{formatNumber(Number(row.grandTotal || row.subtotal || 0))}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Action Toolbar */}
+                        <div className="pt-2 border-t border-slate-100">
+                          <Button
+                            variant="secondary"
+                            size="sm"
+                            icon={Eye}
+                            onClick={() => setSelectedOrder(row)}
+                            className="w-full text-xs justify-center"
+                          >
+                            {t('common.details', null, 'View Order Details')}
+                          </Button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* Mobile Pagination */}
+                <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-xs">
+                  <Pagination
+                    currentPage={historyData?.pagination?.page || page}
+                    totalPages={historyData?.pagination?.totalPages || 1}
+                    totalItems={historyData?.pagination?.total || (historyData?.orders || []).length}
+                    pageSize={historyData?.pagination?.limit || limit}
+                    onPageChange={handlePageChange}
+                    onPageSizeChange={handleLimitChange}
+                  />
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       )}
 
@@ -728,14 +868,50 @@ export const OrderHistoryPage = () => {
             <p className="text-xs text-slate-500 mb-4">
               Revenue distribution and quantity of dishes sold per menu category for the period {startDate} to {endDate}.
             </p>
-            <DataTable
-              columns={categoryColumns}
-              data={historyData?.categoryBreakdown || []}
-              loading={loading}
-              emptyMessage={t('reports.noCategorySales', null, 'No category sales recorded in this date range.')}
-              defaultSortKey="revenue"
-              defaultSortDirection="desc"
-            />
+
+            {/* Desktop / Tablet Table View */}
+            <div className="hidden md:block">
+              <DataTable
+                columns={categoryColumns}
+                data={historyData?.categoryBreakdown || []}
+                loading={loading}
+                emptyMessage={t('reports.noCategorySales', null, 'No category sales recorded in this date range.')}
+                defaultSortKey="revenue"
+                defaultSortDirection="desc"
+              />
+            </div>
+
+            {/* Mobile Cards */}
+            <div className="block md:hidden">
+              {loading ? (
+                <div className="text-center py-8 text-slate-400 text-xs">{t('common.loading', null, 'Loading breakdown...')}</div>
+              ) : (historyData?.categoryBreakdown || []).length === 0 ? (
+                <div className="text-center py-8 text-slate-400 text-xs font-medium">{t('reports.noCategorySales', null, 'No category sales recorded in this date range.')}</div>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {(historyData?.categoryBreakdown || []).map((cat, idx) => (
+                    <div key={idx} className="bg-slate-50/80 rounded-2xl border border-slate-200 p-3.5 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <span className="font-mono text-xs font-bold text-slate-400">#{idx + 1}</span>
+                          <span className="font-bold text-slate-800 text-sm">{cat.categoryName}</span>
+                        </div>
+                        <span className="font-extrabold text-slate-900 text-sm">
+                          ₹{formatNumber(Number(cat.revenue || 0))}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between text-xs text-slate-600">
+                        <span>{formatNumber(cat.quantity)} {t('reports.portions', null, 'portions')}</span>
+                        <span className="font-extrabold text-blue-600">{formatNumber(cat.percentage)}% of sales</span>
+                      </div>
+                      <div className="w-full bg-slate-200 rounded-full h-1.5 overflow-hidden">
+                        <div className="bg-blue-600 h-1.5 rounded-full" style={{ width: `${Math.min(cat.percentage, 100)}%` }} />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
         </div>
       )}
@@ -748,14 +924,61 @@ export const OrderHistoryPage = () => {
             <p className="text-xs text-slate-500 mb-4">
               Daily revenue breakdown, order volume, and average order value throughout the selected range.
             </p>
-            <DataTable
-              columns={dailyColumns}
-              data={historyData?.dailyBreakdown || []}
-              loading={loading}
-              emptyMessage={t('reports.noDailySales', null, 'No daily sales records found for this period.')}
-              defaultSortKey="date"
-              defaultSortDirection="desc"
-            />
+
+            {/* Desktop / Tablet Table View */}
+            <div className="hidden md:block">
+              <DataTable
+                columns={dailyColumns}
+                data={historyData?.dailyBreakdown || []}
+                loading={loading}
+                emptyMessage={t('reports.noDailySales', null, 'No daily sales records found for this period.')}
+                defaultSortKey="date"
+                defaultSortDirection="desc"
+              />
+            </div>
+
+            {/* Mobile Cards */}
+            <div className="block md:hidden">
+              {loading ? (
+                <div className="text-center py-8 text-slate-400 text-xs">{t('common.loading', null, 'Loading daily sales...')}</div>
+              ) : (historyData?.dailyBreakdown || []).length === 0 ? (
+                <div className="text-center py-8 text-slate-400 text-xs font-medium">{t('reports.noDailySales', null, 'No daily sales records found for this period.')}</div>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {(historyData?.dailyBreakdown || []).map((day, idx) => {
+                    const d = new Date(`${day.date}T00:00:00`);
+                    const aov = day.ordersCount > 0 ? Math.round(Number(day.sales) / day.ordersCount) : 0;
+
+                    return (
+                      <div key={idx} className="bg-slate-50/80 rounded-2xl border border-slate-200 p-3.5 space-y-2">
+                        <div className="flex items-center justify-between pb-2 border-b border-slate-200">
+                          <span className="font-bold text-slate-800 text-xs">
+                            {d.toLocaleDateString('en-IN', { weekday: 'short', day: '2-digit', month: 'short', year: 'numeric' })}
+                          </span>
+                          <span className="font-extrabold text-emerald-600 text-sm">
+                            ₹{formatNumber(Number(day.sales || 0))}
+                          </span>
+                        </div>
+                        <div className="grid grid-cols-3 gap-2 text-center text-xs">
+                          <div className="bg-white p-1.5 rounded-lg border border-slate-100">
+                            <span className="text-[10px] text-slate-400 block uppercase font-bold">Orders</span>
+                            <span className="font-bold text-slate-700">{formatNumber(day.ordersCount)}</span>
+                          </div>
+                          <div className="bg-white p-1.5 rounded-lg border border-slate-100">
+                            <span className="text-[10px] text-slate-400 block uppercase font-bold">Dishes</span>
+                            <span className="font-bold text-slate-700">{formatNumber(day.itemsCount || 0)}</span>
+                          </div>
+                          <div className="bg-white p-1.5 rounded-lg border border-slate-100">
+                            <span className="text-[10px] text-slate-400 block uppercase font-bold">Avg Order</span>
+                            <span className="font-bold text-slate-700">₹{formatNumber(aov)}</span>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
           </div>
         </div>
       )}

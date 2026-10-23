@@ -222,13 +222,91 @@ export const KitchenStationManager = () => {
         </div>
       )}
 
-      {/* Table */}
-      <DataTable
-        columns={columns}
-        data={stations}
-        loading={loading}
-        emptyMessage={t('kitchen.noActiveTickets', 'No kitchen stations configured yet.')}
-      />
+      {/* Desktop / Tablet Table */}
+      <div className="hidden md:block">
+        <DataTable
+          columns={columns}
+          data={stations}
+          loading={loading}
+          emptyMessage={t('kitchen.noActiveTickets', 'No kitchen stations configured yet.')}
+        />
+      </div>
+
+      {/* Mobile-Only Grid/Card View (Optimized for Mobile Screens & Web-View App) */}
+      <div className="block md:hidden">
+        {loading ? (
+          <div className="bg-white rounded-2xl border border-slate-200 p-8 text-center shadow-xs">
+            <div className="inline-block animate-spin rounded-full h-8 w-8 border-4 border-slate-200 border-t-blue-600 mb-3"></div>
+            <p className="text-sm font-medium text-slate-500">{t('common.loading', null, 'Loading kitchen stations...')}</p>
+          </div>
+        ) : stations.length === 0 ? (
+          <div className="bg-white rounded-2xl border border-dashed border-slate-300 p-8 text-center text-slate-500 text-sm font-medium">
+            {t('kitchen.noActiveTickets', 'No kitchen stations configured yet.')}
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {stations.map((row) => (
+              <div
+                key={row.id}
+                className="bg-white rounded-2xl border border-slate-200 p-3.5 shadow-xs flex flex-col justify-between transition-all hover:border-blue-400 hover:shadow-md"
+              >
+                <div>
+                  {/* Top Bar: Sort Order + Name & Status */}
+                  <div className="flex items-center justify-between gap-2 pb-2.5 border-b border-slate-100">
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <div className="w-8 h-8 rounded-lg bg-orange-50 text-orange-600 flex items-center justify-center font-bold text-xs shrink-0">
+                        <Flame className="w-4 h-4" />
+                      </div>
+                      <div className="truncate">
+                        <h4 className="font-bold text-slate-800 text-sm truncate">{row.name}</h4>
+                        {row.code && <span className="text-[10px] text-slate-400 font-mono">Code: {row.code}</span>}
+                      </div>
+                    </div>
+
+                    <Badge variant={row.isActive ? 'success' : 'default'} size="sm">
+                      {row.isActive ? t('common.active', 'Active') : t('common.inactive', 'Inactive')}
+                    </Badge>
+                  </div>
+
+                  {row.description && (
+                    <p className="text-xs text-slate-500 mt-2 line-clamp-2">{row.description}</p>
+                  )}
+                </div>
+
+                {/* Actions Toolbar */}
+                <div className="pt-2.5 border-t border-slate-100 flex items-center justify-between gap-1.5 mt-2.5">
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    icon={Edit2}
+                    onClick={() => handleOpenEdit(row)}
+                    className="flex-1 text-xs justify-center"
+                  >
+                    {t('common.edit', 'Edit')}
+                  </Button>
+                  <Button
+                    variant={row.isActive ? 'ghost' : 'secondary'}
+                    size="sm"
+                    onClick={() => handleToggleStatus(row)}
+                    className={`flex-1 text-xs justify-center ${
+                      row.isActive ? 'text-amber-600 hover:text-amber-700' : 'text-emerald-600 hover:text-emerald-700'
+                    }`}
+                  >
+                    {row.isActive ? t('common.deactivate', 'Deactivate') : t('common.activate', 'Activate')}
+                  </Button>
+                  <button
+                    onClick={() => handleDelete(row)}
+                    title="Delete Kitchen Station"
+                    className="p-2 text-slate-400 hover:text-rose-600 rounded-lg hover:bg-rose-50 transition-colors border border-slate-200 shrink-0"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
 
       {/* Add / Edit Station Modal */}
       <Modal
