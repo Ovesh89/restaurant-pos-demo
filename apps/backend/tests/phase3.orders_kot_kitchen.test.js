@@ -237,6 +237,14 @@ describe('Phase 3A — Orders, Reception, KOT, Kitchen & Notifications API Suite
     const tableDoc = await db.collection('tables').findOne({ _id: 'tbl-05' });
     assert.equal(tableDoc.status, 'AVAILABLE');
     assert.equal(tableDoc.activeOrderId, null);
+
+    // Verify Kitchen Queue has 0 active tickets for rejected order
+    const queueRes = await request(app)
+      .get('/api/v1/kitchen/queue?branchId=branch-main')
+      .set('Authorization', `Bearer ${kitchenToken}`);
+    assert.equal(queueRes.status, 200);
+    const orderKotInQueue = queueRes.body.data.find((k) => k.orderId === orderId);
+    assert.equal(orderKotInQueue, undefined);
   });
 
   it('creates MODIFICATION KOT when items are added after initial KOT and CANCELLATION KOT on cancellation', async () => {

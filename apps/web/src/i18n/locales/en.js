@@ -193,7 +193,11 @@ export const en = {
     historyTitle: 'Order History & Closed Invoices',
     historySubtitle: 'Search and inspect previous dining sessions and completed bills',
     dateFilter: 'Date Filter',
-    allStatuses: 'All Statuses'
+    allStatuses: 'All Statuses',
+    completedOrders: 'Completed',
+    cancelledOrders: 'Cancelled',
+    inBilling: 'In Billing',
+    billPending: 'Payment Pending'
   },
   reception: {
     title: 'Reception Order Approvals',
@@ -203,7 +207,9 @@ export const en = {
     approveOrder: 'Approve & Fire KOT',
     rejectOrder: 'Reject Order',
     rejectionReasonPrompt: 'Please specify the rejection reason:',
-    confirmOrderNotice: 'Approving this order will dispatch KOT tickets to assigned kitchen stations.'
+    confirmOrderNotice: 'Approving this order will dispatch KOT tickets to assigned kitchen stations.',
+    holdOrders: 'Hold Orders',
+    rejectedOrders: 'Rejected Orders'
   },
   kitchen: {
     title: 'Kitchen Display System (KDS)',

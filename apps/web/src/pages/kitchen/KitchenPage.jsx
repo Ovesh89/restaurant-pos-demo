@@ -46,12 +46,29 @@ export const KitchenPage = () => {
       const data = await kotRepository.getKOTs({
         station: selectedStation === 'ALL' ? undefined : selectedStation
       });
-      setKots(data);
+      // Safety filter: exclude any cancelled, served, or already completed/billed orders
+      const cleanData = (data || []).filter((k) => {
+        if (k.status === KOT_STATUS.CANCELLED || k.status === KOT_STATUS.SERVED || k.type === KOT_TYPE.CANCELLATION) {
+          return false;
+        }
+        if (k.isOrderCompleted) {
+          return false;
+        }
+        if (['COMPLETED', 'PAID', 'CANCELLED', 'REJECTED', 'SERVED'].includes(k.orderStatus)) {
+          return false;
+        }
+        return true;
+      });
+      setKots(cleanData);
 
       // Keep selectedKotDetail in sync if open
       if (selectedKotDetail) {
-        const fresh = data.find((k) => k.id === selectedKotDetail.id);
-        if (fresh) setSelectedKotDetail(fresh);
+        const fresh = cleanData.find((k) => k.id === selectedKotDetail.id);
+        if (fresh) {
+          setSelectedKotDetail(fresh);
+        } else {
+          setSelectedKotDetail(null);
+        }
       }
     } catch (err) {
       console.error('Failed to load kitchen tickets:', err);
@@ -90,29 +107,47 @@ export const KitchenPage = () => {
     }
   };
 
-  const handleToggleItemPrepared = (kotId, itemIndex) => {
-    setPreparedItemsByKot((prev) => {
-      const currentKotItems = prev[kotId] || {};
-      return {
-        ...prev,
-        [kotId]: {
-          ...currentKotItems,
-          [itemIndex]: !currentKotItems[itemIndex],
-        },
-      };
-    });
+  const handleToggleItemPrepared = async (kotOrId, itemIndex) => {
+    const targetKot = typeof kotOrId === 'object' ? kotOrId : (kots.find((k) => k.id === kotOrId) || selectedKotDetail);
+    const kotId = targetKot ? (targetKot.id || targetKot._id) : kotOrId;
+    if (!targetKot || !kotId) return;
+
+    const currentKotItems = preparedItemsByKot[kotId] || {};
+    const willBePrepared = !currentKotItems[itemIndex];
+    const updatedMap = {
+      ...currentKotItems,
+      [itemIndex]: willBePrepared,
+    };
+
+    setPreparedItemsByKot((prev) => ({
+      ...prev,
+      [kotId]: updatedMap,
+    }));
+
+    // Auto mark ready when all items completed
+    const totalItems = targetKot.items?.length || 0;
+    const preparedCount = (targetKot.items || []).filter((_, idx) => updatedMap[idx]).length;
+
+    if (totalItems > 0 && preparedCount === totalItems && targetKot.status !== KOT_STATUS.READY) {
+      await handleUpdateStatus(targetKot, KOT_STATUS.READY);
+    }
   };
 
-  const handleMarkAllItemsPrepared = (kot) => {
+  const handleMarkAllItemsPrepared = async (kot) => {
     if (!kot || !Array.isArray(kot.items)) return;
+    const kotId = kot.id || kot._id;
     const allTrue = {};
     kot.items.forEach((_, idx) => {
       allTrue[idx] = true;
     });
     setPreparedItemsByKot((prev) => ({
       ...prev,
-      [kot.id]: allTrue,
+      [kotId]: allTrue,
     }));
+
+    if (kot.status !== KOT_STATUS.READY) {
+      await handleUpdateStatus(kot, KOT_STATUS.READY);
+    }
   };
 
   const handlePrint = (kot) => {
@@ -121,6 +156,15 @@ export const KitchenPage = () => {
 
   // Filter KOTs
   const displayedKOTs = kots.filter((k) => {
+    if (
+      k.status === KOT_STATUS.CANCELLED ||
+      k.status === KOT_STATUS.SERVED ||
+      k.type === KOT_TYPE.CANCELLATION ||
+      k.isOrderCompleted ||
+      ['COMPLETED', 'PAID', 'CANCELLED', 'REJECTED', 'SERVED'].includes(k.orderStatus)
+    ) {
+      return false;
+    }
     if (statusFilter === 'ACTIVE') {
       return k.status === KOT_STATUS.NEW || k.status === KOT_STATUS.PREPARING;
     }
@@ -336,7 +380,7 @@ export const KitchenPage = () => {
                                 type="button"
                                 onClick={(e) => {
                                   e.stopPropagation();
-                                  handleToggleItemPrepared(kot.id, iIdx);
+                                  handleToggleItemPrepared(kot, iIdx);
                                 }}
                                 className={`text-[10px] font-bold px-2 py-0.5 rounded-md border transition-colors shrink-0 ${
                                   isPrepared
@@ -503,7 +547,7 @@ export const KitchenPage = () => {
                     <div
                       key={idx}
                       onClick={() => {
-                        if (canCheck) handleToggleItemPrepared(selectedKotDetail.id, idx);
+                        if (canCheck) handleToggleItemPrepared(selectedKotDetail, idx);
                       }}
                       className={`p-3.5 flex items-center justify-between gap-3 transition-colors ${
                         canCheck ? 'cursor-pointer hover:bg-slate-50' : ''

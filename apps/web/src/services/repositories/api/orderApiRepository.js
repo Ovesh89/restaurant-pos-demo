@@ -37,7 +37,11 @@ class OrderApiRepository {
       };
     });
 
-    const subtotal = items.reduce((acc, i) => acc + i.subtotal, 0);
+    const activeItems = items.filter((i) => i.status !== 'CANCELLED');
+    const calculatedSubtotal = activeItems.reduce((acc, i) => acc + i.subtotal, 0);
+    const subtotal = order.financials?.subtotal !== undefined
+      ? Number(order.financials.subtotal)
+      : calculatedSubtotal;
     const orderNo = order.orderNumber || order.orderNo || '';
     const tableNo = order.tableNumber || order.tableNo || '';
     const kots = (order.kots || []).map((k) => kotApiRepository.normalizeKOT(k));
@@ -167,7 +171,8 @@ class OrderApiRepository {
     captainName,
     items,
     notes = '',
-    isDraft = false
+    isDraft = false,
+    autoApprove = false,
   }) {
     if (!items || items.length === 0) {
       throw new Error('Order must contain at least one menu dish.');
@@ -199,7 +204,8 @@ class OrderApiRepository {
         note: i.notes?.trim() || i.note?.trim() || (notes ? notes.trim() : '')
       })),
       held: Boolean(isDraft),
-      submitImmediately: !isDraft
+      submitImmediately: !isDraft,
+      autoApprove: Boolean(autoApprove),
     };
 
     const res = await apiClient.post('/orders', payload);
@@ -219,6 +225,10 @@ class OrderApiRepository {
     return { order, kotTicket };
   }
 
+  async activateOrder(orderId, actor = { id: 'staff', name: 'Staff' }) {
+    return this.confirmOrder(orderId, actor);
+  }
+
   async rejectOrder(orderId, reason, actor = { id: 'reception', name: 'Reception Staff' }) {
     if (!reason || !reason.trim()) {
       throw new Error('Mandatory rejection reason must be specified.');
@@ -226,6 +236,14 @@ class OrderApiRepository {
 
     const res = await apiClient.post(`/orders/${orderId}/reject`, {
       reason: reason.trim()
+    });
+    return this.normalizeOrder(res);
+  }
+
+  async updateOrderStatus(orderId, status, reason = null) {
+    const res = await apiClient.post(`/orders/${orderId}/status`, {
+      status,
+      reason: reason ? reason.trim() : undefined,
     });
     return this.normalizeOrder(res);
   }
@@ -261,7 +279,7 @@ class OrderApiRepository {
 
     if (hasExistingProducts) {
       updatedItems.forEach((newItm) => {
-        const oldItm = prevItems.find((oi) => oi.productId === newItm.productId);
+        const oldItm = prevItems.find((oi) => oi.productId === newItm.productId && (oi.status || 'ACTIVE') !== 'CANCELLED');
         if (!oldItm) {
           itemsToAdd.push({
             productId: newItm.productId,

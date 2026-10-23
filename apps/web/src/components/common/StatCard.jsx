@@ -6,7 +6,8 @@ export const StatCard = ({
   subtitle,
   icon: Icon,
   color = 'blue',
-  trend
+  trend,
+  onClick
 }) => {
   const colorMap = {
     blue: 'bg-blue-50 text-blue-600 border-blue-100',
@@ -17,7 +18,17 @@ export const StatCard = ({
   };
 
   return (
-    <div className="bg-white rounded-xl border border-slate-200 p-4 sm:p-5 shadow-sm hover:shadow transition-shadow">
+    <div
+      onClick={onClick}
+      role={onClick ? 'button' : undefined}
+      tabIndex={onClick ? 0 : undefined}
+      onKeyDown={onClick ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick(); } } : undefined}
+      className={`bg-white rounded-xl border border-slate-200 p-4 sm:p-5 shadow-sm transition-all ${
+        onClick
+          ? 'cursor-pointer hover:shadow-md hover:border-blue-400 hover:-translate-y-0.5 active:translate-y-0 select-none'
+          : 'hover:shadow'
+      }`}
+    >
       <div className="flex items-center justify-between gap-2">
         <div className="min-w-0">
           <p className="text-[11px] sm:text-xs font-semibold uppercase tracking-wider text-slate-500 truncate">{title}</p>

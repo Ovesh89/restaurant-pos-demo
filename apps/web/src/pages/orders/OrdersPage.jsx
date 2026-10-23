@@ -16,13 +16,19 @@ import {
   Printer,
   Layers,
   ChevronRight,
-  ArrowLeft
+  ArrowLeft,
+  ArrowRight,
+  XCircle,
+  Check,
+  Receipt,
+  Play,
+  PauseCircle
 } from 'lucide-react';
 import { orderRepository } from '../../services/repositories/orderRepository';
 import { kotRepository } from '../../services/repositories/kotRepository';
 import { productRepository } from '../../services/repositories/productRepository';
 import { categoryRepository } from '../../services/repositories/categoryRepository';
-import { printService } from '../../services/printing/printService';
+import { printService, formatReceiptSequence } from '../../services/printing/printService';
 import { useAuth } from '../../hooks/useAuth';
 import { PageHeader } from '../../components/common/PageHeader';
 import { Button } from '../../components/common/Button';
@@ -30,6 +36,7 @@ import { Input } from '../../components/common/Input';
 import { Modal } from '../../components/common/Modal';
 import { Badge } from '../../components/common/Badge';
 import { DataTable } from '../../components/common/DataTable';
+import { Pagination } from '../../components/common/Pagination';
 import { ORDER_STATUS, ORDER_STATUS_CONFIG, getOrderStatusConfig } from '../../constants/orderStatus';
 import { PERMISSIONS } from '../../constants/permissions';
 import { useTranslation } from '../../hooks/useTranslation';
@@ -65,6 +72,20 @@ export const OrdersPage = () => {
   const [cancelError, setCancelError] = useState('');
   const [cancelLoading, setCancelLoading] = useState(false);
 
+  // Reject Order Modal
+  const [rejectOrderTarget, setRejectOrderTarget] = useState(null);
+  const [rejectReason, setRejectReason] = useState('');
+  const [rejectError, setRejectError] = useState('');
+  const [rejectLoading, setRejectLoading] = useState(false);
+
+  // Status Action Modal
+  const [statusActionTarget, setStatusActionTarget] = useState(null);
+  const [statusActionLoading, setStatusActionLoading] = useState(false);
+  const [statusActionError, setStatusActionError] = useState('');
+  const [statusModalKots, setStatusModalKots] = useState([]);
+  const [statusModalKotsLoading, setStatusModalKotsLoading] = useState(false);
+  const [servingKotId, setServingKotId] = useState(null);
+
   // Modify Order Modal
   const [modifyingOrder, setModifyingOrder] = useState(null);
   const [availableProducts, setAvailableProducts] = useState([]);
@@ -75,12 +96,13 @@ export const OrdersPage = () => {
   const [modificationReason, setModificationReason] = useState('');
   const [modError, setModError] = useState('');
   const [modLoading, setModLoading] = useState(false);
+  const [activatingOrderId, setActivatingOrderId] = useState(null);
 
   const getResolvedStatus = (sf) => {
     if (sf === 'ACTIVE') {
       return [
         ORDER_STATUS.DRAFT,
-        ORDER_STATUS.WAITING_CONFIRMATION,
+        ORDER_STATUS.HOLD,
         ORDER_STATUS.SUBMITTED,
         ORDER_STATUS.CONFIRMED,
         ORDER_STATUS.KOT_SENT,
@@ -91,13 +113,43 @@ export const OrdersPage = () => {
         ORDER_STATUS.BILL_PENDING,
       ];
     }
-    if (sf === 'WAITING') {
-      return ORDER_STATUS.WAITING_CONFIRMATION;
+    if (sf === 'HOLD') {
+      return [ORDER_STATUS.HOLD, ORDER_STATUS.DRAFT];
+    }
+    if (sf === ORDER_STATUS.COMPLETED || sf === 'COMPLETED') {
+      return ORDER_STATUS.COMPLETED;
+    }
+    if (sf === ORDER_STATUS.CANCELLED || sf === 'CANCELLED') {
+      return ORDER_STATUS.CANCELLED;
+    }
+    if (sf === ORDER_STATUS.REJECTED || sf === 'REJECTED') {
+      return ORDER_STATUS.REJECTED;
     }
     if (sf === 'ALL') {
       return undefined;
     }
     return sf;
+  };
+
+  const handleActivateAndSendKot = async (order) => {
+    const orderTargetId = order.id || order._id || order.orderNo || order.orderNumber;
+    setActivatingOrderId(orderTargetId);
+    try {
+      const actor = { id: user?.id || 'staff', name: user?.name || 'Staff' };
+      await orderRepository.confirmOrder(orderTargetId, actor);
+      if (selectedOrder && (selectedOrder.id === orderTargetId || selectedOrder._id === orderTargetId || selectedOrder.orderNo === orderTargetId)) {
+        const fresh = await orderRepository.getOrder(orderTargetId).catch(() => null);
+        if (fresh) setSelectedOrder(fresh);
+      }
+      if (statusActionTarget && (statusActionTarget.id === orderTargetId || statusActionTarget._id === orderTargetId || statusActionTarget.orderNo === orderTargetId)) {
+        setStatusActionTarget(null);
+      }
+      await loadOrders(page, limit);
+    } catch (err) {
+      alert(err.message || 'Failed to activate order and create KOT.');
+    } finally {
+      setActivatingOrderId(null);
+    }
   };
 
   const loadOrders = async (overridePage = page, overrideLimit = limit) => {
@@ -189,6 +241,135 @@ export const OrdersPage = () => {
     }
   };
 
+  const handleOpenReject = (order) => {
+    setRejectOrderTarget(order);
+    setRejectReason('');
+    setRejectError('');
+  };
+
+  const handleConfirmReject = async (e) => {
+    if (e && e.preventDefault) e.preventDefault();
+    if (!rejectReason.trim()) {
+      setRejectError('Mandatory rejection reason required.');
+      return;
+    }
+
+    setRejectLoading(true);
+    try {
+      const actor = { id: user?.id || 'admin', name: user?.name || 'Staff' };
+      const orderTargetId = rejectOrderTarget.id || rejectOrderTarget._id || rejectOrderTarget.orderNo || rejectOrderTarget.orderNumber;
+      await orderRepository.rejectOrder(orderTargetId, rejectReason.trim(), actor);
+      setRejectOrderTarget(null);
+      await loadOrders();
+    } catch (err) {
+      setRejectError(err.message || 'Failed to reject order.');
+    } finally {
+      setRejectLoading(false);
+    }
+  };
+
+  const getNextStatus = (currentStatus) => {
+    switch (currentStatus) {
+      case ORDER_STATUS.WAITING_CONFIRMATION:
+      case ORDER_STATUS.DRAFT:
+      case ORDER_STATUS.HOLD:
+        return ORDER_STATUS.KOT_SENT;
+      case ORDER_STATUS.CONFIRMED:
+      case ORDER_STATUS.KOT_SENT:
+        return ORDER_STATUS.PREPARING;
+      case ORDER_STATUS.PREPARING:
+        return ORDER_STATUS.READY;
+      case ORDER_STATUS.READY:
+        return ORDER_STATUS.SERVED;
+      default:
+        return null;
+    }
+  };
+
+  const handleOpenStatusModal = async (order) => {
+    setStatusActionTarget(order);
+    setStatusActionError('');
+    setStatusModalKots(order.kots || []);
+    setStatusModalKotsLoading(true);
+    try {
+      const orderTargetId = order.id || order._id || order.orderNo || order.orderNumber;
+      const kots = await kotRepository.getKOTs({ orderId: orderTargetId });
+      setStatusModalKots(kots || []);
+    } catch (err) {
+      console.error('Failed to load KOTs for status modal:', err);
+    } finally {
+      setStatusModalKotsLoading(false);
+    }
+  };
+
+  const handleServeSingleKot = async (kot) => {
+    const kotTargetId = kot.id || kot._id;
+    setServingKotId(kotTargetId);
+    setStatusActionError('');
+    try {
+      const actor = { id: user?.id || 'staff', name: user?.name || 'Staff' };
+      await kotRepository.updateKOTStatus(kotTargetId, 'SERVED', actor);
+
+      const orderTargetId = statusActionTarget.id || statusActionTarget._id || statusActionTarget.orderNo || statusActionTarget.orderNumber;
+      const freshKots = await kotRepository.getKOTs({ orderId: orderTargetId });
+      setStatusModalKots(freshKots || []);
+
+      // Check if all active KOTs are now SERVED:
+      const activeKots = (freshKots || []).filter((k) => k.status !== 'CANCELLED');
+      const allServed = activeKots.length > 0 && activeKots.every((k) => k.status === 'SERVED');
+
+      if (allServed) {
+        await orderRepository.updateOrderStatus(orderTargetId, ORDER_STATUS.SERVED);
+        setStatusActionTarget((prev) => (prev ? { ...prev, status: ORDER_STATUS.SERVED } : null));
+      }
+
+      await loadOrders(page, limit);
+    } catch (err) {
+      setStatusActionError(err.message || 'Failed to mark KOT as served.');
+    } finally {
+      setServingKotId(null);
+    }
+  };
+
+  const handleAdvanceStatus = async (order, targetStatus = null) => {
+    const next = targetStatus || getNextStatus(order.status);
+    if (!next) {
+      if (order.status === ORDER_STATUS.SERVED) {
+        navigate(`/billing?orderId=${order.id || order._id}`);
+      }
+      return;
+    }
+
+    setStatusActionLoading(true);
+    setStatusActionError('');
+    try {
+      const actor = { id: user?.id || 'staff', name: user?.name || 'Staff' };
+      const orderTargetId = order.id || order._id || order.orderNo || order.orderNumber;
+      if (next === ORDER_STATUS.KOT_SENT || next === ORDER_STATUS.CONFIRMED) {
+        await orderRepository.confirmOrder(orderTargetId, actor);
+      } else {
+        await orderRepository.updateOrderStatus(orderTargetId, next);
+      }
+
+      // If advancing to SERVED, all KOTs move to SERVED
+      if (next === ORDER_STATUS.SERVED) {
+        setStatusModalKots((prev) =>
+          prev.map((k) => (k.status !== 'CANCELLED' ? { ...k, status: 'SERVED' } : k))
+        );
+      } else {
+        const freshKots = await kotRepository.getKOTs({ orderId: orderTargetId });
+        setStatusModalKots(freshKots || []);
+      }
+
+      setStatusActionTarget((prev) => (prev ? { ...prev, status: next } : null));
+      await loadOrders(page, limit);
+    } catch (err) {
+      setStatusActionError(err.message || 'Failed to update order status.');
+    } finally {
+      setStatusActionLoading(false);
+    }
+  };
+
   const handleOpenRemoveItem = (item) => {
     setItemToRemove(item);
     setRemoveItemReason('');
@@ -236,7 +417,8 @@ export const OrdersPage = () => {
   // Modification flow
   const handleOpenModify = async (order) => {
     setModifyingOrder(order);
-    setModifiedItems(JSON.parse(JSON.stringify(order.items || [])));
+    const activeItems = (order.items || []).filter((i) => (i.status || 'ACTIVE') !== 'CANCELLED');
+    setModifiedItems(JSON.parse(JSON.stringify(activeItems)));
     setModificationReason('');
     setModError('');
     setQuickAddSearch('');
@@ -264,9 +446,11 @@ export const OrdersPage = () => {
     setModifiedItems((prev) => {
       const idx = prev.findIndex((i) => (i.productId || i.id || i._id) === targetProductId);
       if (idx > -1) {
-        const copy = [...prev];
-        copy[idx].quantity += 1;
-        return copy;
+        return prev.map((item, index) =>
+          index === idx
+            ? { ...item, quantity: item.quantity + 1 }
+            : item
+        );
       } else {
         return [
           ...prev,
@@ -387,7 +571,18 @@ export const OrdersPage = () => {
     {
       header: t('orders.orderId', null, 'Order #'),
       accessor: 'orderNo',
-      className: 'w-24 font-mono font-extrabold text-blue-700'
+      className: 'w-28 font-mono font-extrabold text-blue-700',
+      render: (row) => (
+        <button
+          type="button"
+          onClick={() => handleOpenDetails(row)}
+          className="font-mono font-extrabold text-blue-700 hover:text-blue-900 hover:underline cursor-pointer text-left flex items-center gap-1 group"
+          title="Click to view live order details"
+        >
+          <span>{formatReceiptSequence(row.orderNo || row.orderNumber)}</span>
+          <ChevronRight className="w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity" />
+        </button>
+      )
     },
     {
       header: t('tables.tableNumber', null, 'Table / Source'),
@@ -462,10 +657,21 @@ export const OrdersPage = () => {
       accessor: 'status',
       render: (row) => {
         const config = getOrderStatusConfig(row.status, t);
+        const isTerminal = row.status === ORDER_STATUS.COMPLETED || row.status === ORDER_STATUS.CANCELLED || row.status === ORDER_STATUS.REJECTED;
         return (
-          <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold border ${config.color}`}>
-            {config.label}
-          </span>
+          <button
+            type="button"
+            onClick={() => {
+              if (!isTerminal) {
+                handleOpenStatusModal(row);
+              }
+            }}
+            className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold border ${config.color} ${!isTerminal ? 'cursor-pointer hover:ring-2 hover:ring-blue-400 hover:shadow-xs transition-all active:scale-95' : ''}`}
+            title={!isTerminal ? 'Click to advance status, approve, or reject' : config.label}
+          >
+            <span>{config.label}</span>
+            {!isTerminal && <ArrowRight className="w-3 h-3 opacity-60" />}
+          </button>
         );
       }
     },
@@ -479,11 +685,26 @@ export const OrdersPage = () => {
       header: t('common.actions', null, 'Actions'),
       align: 'right',
       render: (row) => {
-        const isCompleted = row.status === ORDER_STATUS.COMPLETED || row.status === ORDER_STATUS.CANCELLED;
+        const isCompleted = row.status === ORDER_STATUS.COMPLETED || row.status === ORDER_STATUS.CANCELLED || row.status === ORDER_STATUS.REJECTED;
         const isReady = row.status === ORDER_STATUS.READY;
+        const isHold = row.status === ORDER_STATUS.HOLD || row.status === ORDER_STATUS.DRAFT || Boolean(row.held);
 
         return (
           <div className="flex items-center justify-end gap-1.5">
+            {isHold && (
+              <Button
+                variant="primary"
+                size="sm"
+                icon={Play}
+                className="bg-emerald-600 hover:bg-emerald-700 font-bold shadow-2xs text-white"
+                loading={activatingOrderId === (row.id || row._id || row.orderNo)}
+                onClick={() => handleActivateAndSendKot(row)}
+                title="Activate this Hold order and generate KOT for Kitchen"
+              >
+                Activate &amp; Send KOT
+              </Button>
+            )}
+
             <button
               onClick={() => handleOpenDetails(row)}
               title="View Order Details"
@@ -502,7 +723,7 @@ export const OrdersPage = () => {
               </Button>
             )}
 
-            {!isCompleted && row.status !== ORDER_STATUS.WAITING_CONFIRMATION && (
+            {!isCompleted && (
               <Button
                 variant="secondary"
                 size="sm"
@@ -516,8 +737,18 @@ export const OrdersPage = () => {
 
             {!isCompleted && (
               <button
+                onClick={() => handleOpenReject(row)}
+                title="Reject Order & Release Table"
+                className="p-1.5 text-slate-400 hover:text-rose-600 rounded-lg hover:bg-rose-50 transition-colors"
+              >
+                <XCircle className="w-4 h-4" />
+              </button>
+            )}
+
+            {!isCompleted && (
+              <button
                 onClick={() => handleOpenCancel(row)}
-                title="Cancel Order with Reason"
+                title="Cancel Order & Release Table"
                 className="p-1.5 text-slate-400 hover:text-red-600 rounded-lg hover:bg-red-50 transition-colors"
               >
                 <Trash2 className="w-4 h-4" />
@@ -551,11 +782,14 @@ export const OrdersPage = () => {
         <div className="flex items-center gap-1.5 overflow-x-auto pb-1 text-xs no-scrollbar">
           {[
             { id: 'ACTIVE', label: t('dashboard.activeOrders', null, 'Active Orders') },
-            { id: 'WAITING', label: t('dashboard.waitingApproval', null, 'Waiting Approval') },
+            { id: 'HOLD', label: t('orders.holdOrders', null, 'Hold Orders') },
             { id: ORDER_STATUS.KOT_SENT, label: t('orders.kotSent', null, 'KOT Sent') },
             { id: ORDER_STATUS.PREPARING, label: t('common.preparing', null, 'In Kitchen') },
             { id: ORDER_STATUS.READY, label: t('common.ready', null, 'Ready to Serve') },
             { id: ORDER_STATUS.SERVED, label: t('common.served', null, 'Served') },
+            { id: ORDER_STATUS.COMPLETED, label: t('orders.completedOrders', null, 'Completed') },
+            { id: ORDER_STATUS.CANCELLED, label: t('orders.cancelledOrders', null, 'Cancelled') },
+            { id: ORDER_STATUS.REJECTED, label: t('orders.rejectedOrders', null, 'Rejected Orders') },
             { id: 'ALL', label: t('common.all', null, 'All History') }
           ].map((tab) => (
             <button
@@ -598,26 +832,285 @@ export const OrdersPage = () => {
         </div>
       </div>
 
-      {/* Orders Table */}
-      <DataTable
-        columns={columns}
-        data={orders.filter((o) => {
-          if (orderTypeFilter === 'ALL') return true;
-          return (o.orderType || 'DINE_IN') === orderTypeFilter;
-        })}
-        loading={loading}
-        emptyMessage={t('common.noRecords', null, 'No table orders found for this filter.')}
-        pagination={pagination}
-        onPageChange={(p) => {
-          setPage(p);
-          loadOrders(p, limit);
-        }}
-        onPageSizeChange={(l) => {
-          setLimit(l);
-          setPage(1);
-          loadOrders(1, l);
-        }}
-      />
+      {/* Desktop / Tablet List/Table View */}
+      <div className="hidden md:block">
+        <DataTable
+          columns={columns}
+          data={orders.filter((o) => {
+            if (orderTypeFilter === 'ALL') return true;
+            return (o.orderType || 'DINE_IN') === orderTypeFilter;
+          })}
+          loading={loading}
+          emptyMessage={t('common.noRecords', null, 'No table orders found for this filter.')}
+          pagination={pagination}
+          onPageChange={(p) => {
+            setPage(p);
+            loadOrders(p, limit);
+          }}
+          onPageSizeChange={(l) => {
+            setLimit(l);
+            setPage(1);
+            loadOrders(1, l);
+          }}
+        />
+      </div>
+
+      {/* Mobile-Only Grid/Card View (Optimized for Mobile Screens & Web-View App) */}
+      <div className="block md:hidden">
+        {loading ? (
+          <div className="bg-white rounded-2xl border border-slate-200 p-8 text-center shadow-xs">
+            <div className="inline-block animate-spin rounded-full h-8 w-8 border-4 border-slate-200 border-t-blue-600 mb-3"></div>
+            <p className="text-sm font-medium text-slate-500">{t('common.loading', null, 'Loading live orders...')}</p>
+          </div>
+        ) : orders.filter((o) => orderTypeFilter === 'ALL' || (o.orderType || 'DINE_IN') === orderTypeFilter).length === 0 ? (
+          <div className="bg-white rounded-2xl border border-dashed border-slate-300 p-8 text-center text-slate-500 text-sm font-medium">
+            {t('common.noRecords', null, 'No table orders found for this filter.')}
+          </div>
+        ) : (
+          <div className="space-y-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {orders
+                .filter((o) => orderTypeFilter === 'ALL' || (o.orderType || 'DINE_IN') === orderTypeFilter)
+                .map((row) => {
+                  const isCompleted =
+                    row.status === ORDER_STATUS.COMPLETED ||
+                    row.status === ORDER_STATUS.CANCELLED ||
+                    row.status === ORDER_STATUS.REJECTED;
+                  const isHold = row.status === ORDER_STATUS.HOLD;
+                  const isReady = row.status === ORDER_STATUS.READY;
+                  const isServedOrBilling =
+                    row.status === ORDER_STATUS.SERVED ||
+                    row.status === ORDER_STATUS.BILLING ||
+                    row.status === ORDER_STATUS.PAYMENT_PENDING;
+                  const totalItemsCount = row.items?.reduce((acc, it) => acc + (it.quantity || 0), 0) || 0;
+                  const dishNamesPreview = (row.items || []).map((i) => `${i.quantity}x ${i.name}`).join(', ');
+
+                  return (
+                    <div
+                      key={row.id}
+                      className="bg-white rounded-2xl border border-slate-200 p-3.5 shadow-xs flex flex-col justify-between transition-all hover:border-blue-400 hover:shadow-md"
+                    >
+                      <div>
+                        {/* Top Bar: Order Sequence + Table / Channel Badge + Time */}
+                        <div className="flex items-center justify-between gap-2 pb-2.5 border-b border-slate-100">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className="font-mono font-bold text-xs px-2 py-0.5 rounded bg-slate-100 text-slate-700">
+                              {formatReceiptSequence(row.orderNo)}
+                            </span>
+                            {row.orderType && row.orderType !== 'DINE_IN' ? (
+                              <span className="text-[11px] font-bold px-2 py-0.5 rounded bg-amber-100 text-amber-900 border border-amber-200">
+                                {row.orderType === 'TAKEAWAY' ? t('orders.takeaway', null, 'Take Away') : row.orderType}
+                                {row.onlineOrderRef ? ` #${row.onlineOrderRef}` : ''}
+                              </span>
+                            ) : (
+                              <span className="text-xs font-black px-2 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200">
+                                {t('orders.table', null, 'Table')} {row.tableNo}
+                              </span>
+                            )}
+                          </div>
+
+                          <div className="flex items-center gap-1 text-[11px] text-slate-400 font-mono">
+                            <Clock className="w-3 h-3" />
+                            <span>
+                              {new Date(row.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Status & Subtotal Row */}
+                        <div className="flex items-center justify-between my-2.5">
+                          <button
+                            type="button"
+                            disabled={isCompleted}
+                            onClick={() => handleOpenStatusModal(row)}
+                            title={isCompleted ? undefined : 'Tap to change order status'}
+                            className={`inline-flex items-center gap-1.5 text-xs font-bold px-2.5 py-1 rounded-full transition-transform active:scale-95 ${
+                              row.status === ORDER_STATUS.HOLD
+                                ? 'bg-amber-100 text-amber-900 border border-amber-300'
+                                : row.status === ORDER_STATUS.READY
+                                ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                                : row.status === ORDER_STATUS.COMPLETED
+                                ? 'bg-slate-100 text-slate-700'
+                                : row.status === ORDER_STATUS.CANCELLED || row.status === ORDER_STATUS.REJECTED
+                                ? 'bg-rose-100 text-rose-800'
+                                : 'bg-blue-100 text-blue-800 border border-blue-200'
+                            }`}
+                          >
+                            <span
+                              className={`w-2 h-2 rounded-full ${
+                                row.status === ORDER_STATUS.HOLD
+                                  ? 'bg-amber-500 animate-pulse'
+                                  : row.status === ORDER_STATUS.READY
+                                  ? 'bg-emerald-500 animate-pulse'
+                                  : row.status === ORDER_STATUS.COMPLETED
+                                  ? 'bg-slate-400'
+                                  : row.status === ORDER_STATUS.CANCELLED || row.status === ORDER_STATUS.REJECTED
+                                  ? 'bg-rose-500'
+                                  : 'bg-blue-500 animate-pulse'
+                              }`}
+                            />
+                            <span>
+                              {row.status === ORDER_STATUS.BILLING
+                                ? 'In Billing'
+                                : (row.status?.replace('_', ' ') || 'ACTIVE')}
+                            </span>
+                            {!isCompleted && <ChevronRight className="w-3 h-3 text-slate-400" />}
+                          </button>
+
+                          <div className="text-right">
+                            <span className="text-[10px] uppercase font-bold text-slate-400 block tracking-wider">
+                              {t('billing.subtotalAmount', null, 'Subtotal')}
+                            </span>
+                            <span className="text-base font-black text-slate-900">
+                              {formatCurrency(row.subtotal || 0)}
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Guest / Captain & Dish Breakdown Preview */}
+                        <div className="bg-slate-50/80 rounded-xl p-2.5 border border-slate-100 text-xs text-slate-600 mb-3 space-y-1">
+                          <div className="flex items-center justify-between text-[11px]">
+                            <span className="font-semibold text-slate-700 truncate">
+                              {row.customerName ||
+                                (row.orderType !== 'DINE_IN'
+                                  ? t('orders.walkinGuest', null, 'Walk-in Guest')
+                                  : `Captain: ${row.captainName || 'Staff'}`)}
+                            </span>
+                            <span className="font-mono text-slate-500 shrink-0 font-bold">
+                              {row.items?.length || 0} {t('orders.dishes', null, 'dishes')} ({totalItemsCount} {t('orders.dishes', null, 'items')})
+                            </span>
+                          </div>
+                          {dishNamesPreview && (
+                            <p className="text-[11px] text-slate-500 line-clamp-2 leading-relaxed">
+                              {dishNamesPreview}
+                            </p>
+                          )}
+                          {isHold && row.notes && (
+                            <div className="text-[11px] font-semibold text-amber-800 bg-amber-50 p-1.5 rounded-lg border border-amber-200">
+                              Hold Note: {row.notes}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Touch-Friendly Action Buttons */}
+                      <div className="pt-2 border-t border-slate-100 space-y-2">
+                        {/* Priority Prominent Button */}
+                        {isHold && (
+                          <Button
+                            variant="primary"
+                            size="sm"
+                            icon={Play}
+                            onClick={() => handleActivateHoldOrder(row)}
+                            className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 shadow-xs"
+                          >
+                            {t('orders.activateHoldOrder', null, 'Activate & Send KOT')}
+                          </Button>
+                        )}
+
+                        {isReady && (
+                          <Button
+                            variant="primary"
+                            size="sm"
+                            icon={CheckCircle}
+                            onClick={() => handleMarkServed(row)}
+                            className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2 shadow-xs"
+                          >
+                            Mark Served
+                          </Button>
+                        )}
+
+                        {isServedOrBilling && (
+                          <Button
+                            variant="primary"
+                            size="sm"
+                            icon={Receipt}
+                            onClick={() => {
+                              const tId = row.tableId;
+                              const oId = row.id;
+                              if (tId) {
+                                navigate(`/billing?tableId=${tId}`);
+                              } else {
+                                navigate(`/billing?orderId=${oId}`);
+                              }
+                            }}
+                            className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2 shadow-xs"
+                          >
+                            Settle Bill
+                          </Button>
+                        )}
+
+                        {/* Secondary Actions Toolbar */}
+                        <div className="flex items-center justify-between gap-1.5">
+                          <Button
+                            variant="secondary"
+                            size="sm"
+                            icon={Eye}
+                            onClick={() => handleOpenDetails(row)}
+                            className="flex-1 text-xs justify-center"
+                          >
+                            {t('common.details', null, 'Details')}
+                          </Button>
+
+                          {!isCompleted && (
+                            <Button
+                              variant="secondary"
+                              size="sm"
+                              icon={Edit2}
+                              onClick={() => handleOpenModify(row)}
+                              className="flex-1 text-xs justify-center"
+                            >
+                              Modify
+                            </Button>
+                          )}
+
+                          {!isCompleted && (
+                            <button
+                              onClick={() => handleOpenReject(row)}
+                              title="Reject Order"
+                              className="p-2 text-slate-400 hover:text-rose-600 rounded-lg hover:bg-rose-50 transition-colors border border-slate-200 shrink-0"
+                            >
+                              <XCircle className="w-4 h-4" />
+                            </button>
+                          )}
+
+                          {!isCompleted && (
+                            <button
+                              onClick={() => handleOpenCancel(row)}
+                              title="Cancel Order"
+                              className="p-2 text-slate-400 hover:text-red-600 rounded-lg hover:bg-red-50 transition-colors border border-slate-200 shrink-0"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+            </div>
+
+            {/* Mobile Pagination */}
+            <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-xs">
+              <Pagination
+                currentPage={pagination?.page || page}
+                totalPages={pagination?.totalPages || 1}
+                totalItems={pagination?.total || orders.filter((o) => orderTypeFilter === 'ALL' || (o.orderType || 'DINE_IN') === orderTypeFilter).length}
+                pageSize={pagination?.limit || limit}
+                onPageChange={(p) => {
+                  setPage(p);
+                  loadOrders(p, limit);
+                }}
+                onPageSizeChange={(l) => {
+                  setLimit(l);
+                  setPage(1);
+                  loadOrders(1, l);
+                }}
+              />
+            </div>
+          </div>
+        )}
+      </div>
 
       {/* View Order Details & KOT Tickets Modal */}
       <Modal
@@ -633,8 +1126,20 @@ export const OrdersPage = () => {
             <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl flex items-center justify-between">
               <div>
                 <span className="text-xs text-slate-500">Current Order State</span>
-                <div className="mt-1">
+                <div className="mt-1 flex items-center gap-2">
                   <Badge variant="primary" size="md">{selectedOrder.status}</Badge>
+                  {(selectedOrder.status === ORDER_STATUS.HOLD || selectedOrder.status === ORDER_STATUS.DRAFT || selectedOrder.held) && (
+                    <Button
+                      variant="primary"
+                      size="sm"
+                      icon={Play}
+                      className="bg-emerald-600 hover:bg-emerald-700 font-bold shadow-2xs text-white"
+                      loading={activatingOrderId === (selectedOrder.id || selectedOrder._id || selectedOrder.orderNo)}
+                      onClick={() => handleActivateAndSendKot(selectedOrder)}
+                    >
+                      Activate &amp; Create KOT
+                    </Button>
+                  )}
                 </div>
               </div>
               <div className="text-right">
@@ -645,56 +1150,95 @@ export const OrdersPage = () => {
 
             {/* Line Items Table */}
             <div>
-              <div className="flex items-center justify-between mb-2">
-                <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400">
-                  Canonical Order Dishes (Captured Prices)
-                </h4>
-                {selectedOrder.status !== ORDER_STATUS.COMPLETED && selectedOrder.status !== ORDER_STATUS.PAID && (
-                  <span className="text-[11px] text-slate-500 font-medium">
-                    Remove dish recalculates total &amp; pending bill
-                  </span>
-                )}
-              </div>
-              <div className="divide-y divide-slate-100 border border-slate-200 rounded-xl overflow-hidden text-xs">
-                {selectedOrder.items?.map((item, idx) => {
-                  const isSettled = selectedOrder.status === ORDER_STATUS.COMPLETED || selectedOrder.status === ORDER_STATUS.PAID;
-                  return (
-                    <div key={item.lineId || item.productId || idx} className="p-3 bg-white flex items-center justify-between hover:bg-slate-50 transition-colors">
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2">
-                          <span className="font-bold text-slate-800 text-sm">{item.name}</span>
-                          {item.kotRequired === false && (
-                            <span className="text-[10px] bg-amber-50 text-amber-700 px-1.5 py-0.5 rounded border border-amber-200 font-semibold">
-                              No KOT
-                            </span>
-                          )}
-                        </div>
-                        <span className="text-slate-400 font-mono">
-                          ({item.quantity}x @ ₹{item.unitPrice})
+              {(() => {
+                const activeDishes = (selectedOrder.items || []).filter((i) => (i.status || 'ACTIVE') !== 'CANCELLED');
+                const cancelledDishes = (selectedOrder.items || []).filter((i) => (i.status || 'ACTIVE') === 'CANCELLED');
+                const isSettled = selectedOrder.status === ORDER_STATUS.COMPLETED || selectedOrder.status === ORDER_STATUS.PAID;
+
+                return (
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                          Order Dishes
+                        </h4>
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-50 text-blue-700 border border-blue-200">
+                          {activeDishes.length} Active {activeDishes.length === 1 ? 'Dish' : 'Dishes'}
                         </span>
-                        {item.notes && (
-                          <p className="text-[11px] text-blue-600 italic mt-0.5">* {item.notes}</p>
-                        )}
                       </div>
-                      <div className="flex items-center gap-3">
-                        <span className="font-extrabold text-slate-900 text-sm">
-                          ₹{item.quantity * item.unitPrice}
+                      {!isSettled && (
+                        <span className="text-[11px] text-slate-500 font-medium">
+                          Remove dish recalculates total &amp; pending bill
                         </span>
-                        {!isSettled && (
-                          <button
-                            type="button"
-                            onClick={() => handleOpenRemoveItem(item)}
-                            title="Remove dish from order (recalculates pending bill)"
-                            className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        )}
-                      </div>
+                      )}
                     </div>
-                  );
-                })}
-              </div>
+
+                    <div className="divide-y divide-slate-100 border border-slate-200 rounded-xl overflow-hidden text-xs">
+                      {activeDishes.map((item, idx) => (
+                        <div key={item.lineId || item.productId || idx} className="p-3 bg-white flex items-center justify-between hover:bg-slate-50 transition-colors">
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2">
+                              <span className="font-bold text-slate-800 text-sm">{item.name}</span>
+                              {item.kotRequired === false && (
+                                <span className="text-[10px] bg-amber-50 text-amber-700 px-1.5 py-0.5 rounded border border-amber-200 font-semibold">
+                                  No KOT
+                                </span>
+                              )}
+                            </div>
+                            <span className="text-slate-400 font-mono">
+                              ({item.quantity}x @ ₹{item.unitPrice})
+                            </span>
+                            {item.notes && (
+                              <p className="text-[11px] text-blue-600 italic mt-0.5">* {item.notes}</p>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-3">
+                            <span className="font-extrabold text-slate-900 text-sm">
+                              ₹{item.quantity * item.unitPrice}
+                            </span>
+                            {!isSettled && (
+                              <button
+                                type="button"
+                                onClick={() => handleOpenRemoveItem(item)}
+                                title="Remove dish from order (recalculates pending bill)"
+                                className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+
+                    {cancelledDishes.length > 0 && (
+                      <div className="mt-3 pt-2">
+                        <div className="flex items-center gap-2 mb-1.5">
+                          <h5 className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
+                            Cancelled / Removed Dishes
+                          </h5>
+                          <span className="px-1.5 py-0.2 rounded text-[10px] font-bold bg-slate-100 text-slate-500">
+                            {cancelledDishes.length}
+                          </span>
+                        </div>
+                        <div className="divide-y divide-slate-100 border border-slate-200 rounded-xl overflow-hidden text-xs bg-slate-50/50">
+                          {cancelledDishes.map((item, idx) => (
+                            <div key={item.lineId || item.productId || idx} className="p-2.5 flex items-center justify-between text-slate-400">
+                              <div className="flex-1">
+                                <span className="line-through font-medium">{item.name}</span>
+                                <span className="text-[10px] ml-2">({item.quantity}x @ ₹{item.unitPrice})</span>
+                              </div>
+                              <span className="text-[10px] font-bold bg-rose-50 text-rose-600 px-2 py-0.5 rounded border border-rose-200">
+                                CANCELLED
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
             </div>
 
             {/* Associated KOT Tickets */}
@@ -850,11 +1394,11 @@ export const OrdersPage = () => {
             ></textarea>
           </div>
 
-          <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
-            <Button variant="secondary" onClick={() => setCancelOrderTarget(null)}>
+          <div className="flex flex-col sm:flex-row justify-end gap-2 pt-2 border-t border-slate-100">
+            <Button variant="secondary" className="w-full sm:w-auto" onClick={() => setCancelOrderTarget(null)}>
               Abort
             </Button>
-            <Button type="submit" variant="danger" loading={cancelLoading}>
+            <Button type="submit" variant="danger" className="w-full sm:w-auto" loading={cancelLoading}>
               Confirm Cancellation
             </Button>
           </div>
@@ -1224,6 +1768,299 @@ export const OrdersPage = () => {
             </div>
           </div>
         </form>
+      </Modal>
+
+      {/* Reject Order Modal */}
+      <Modal
+        isOpen={Boolean(rejectOrderTarget)}
+        onClose={() => setRejectOrderTarget(null)}
+        title={t('reception.rejectOrder', null, 'Reject Order & Release Table')}
+        subtitle={`${t('orders.orderId', null, 'Order')} #${rejectOrderTarget?.orderNo || rejectOrderTarget?.orderNumber} • ${rejectOrderTarget?.tableNo ? `Table ${rejectOrderTarget.tableNo}` : 'Take Away'}`}
+      >
+        <form onSubmit={handleConfirmReject} className="space-y-4">
+          {rejectError && (
+            <div className="p-3 bg-red-50 border border-red-200 text-red-700 rounded-xl text-xs font-semibold">
+              {rejectError}
+            </div>
+          )}
+
+          <div>
+            <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+              {t('common.reason', null, 'Rejection Reason')} <span className="text-red-500">*</span>
+            </label>
+            <textarea
+              required
+              rows={3}
+              value={rejectReason}
+              onChange={(e) => setRejectReason(e.target.value)}
+              placeholder="e.g. Guest cancelled before kitchen preparation, duplicate entry, etc."
+              className="w-full text-xs p-3 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-red-500"
+            />
+          </div>
+
+          <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 text-xs text-amber-800">
+            Rejecting this order will immediately cancel linked KOTs and release Table {rejectOrderTarget?.tableNo || ''} to Available.
+          </div>
+
+          <div className="flex flex-col sm:flex-row justify-end gap-2 pt-2 border-t border-slate-100">
+            <Button variant="secondary" className="w-full sm:w-auto" onClick={() => setRejectOrderTarget(null)}>
+              {t('common.cancel', null, 'Cancel')}
+            </Button>
+            <Button type="submit" variant="danger" className="w-full sm:w-auto" loading={rejectLoading}>
+              {t('reception.rejectOrder', null, 'Confirm Rejection')}
+            </Button>
+          </div>
+        </form>
+      </Modal>
+
+      {/* Status Action & Progression Modal */}
+      <Modal
+        isOpen={Boolean(statusActionTarget)}
+        onClose={() => setStatusActionTarget(null)}
+        title={`Order Status: ${formatReceiptSequence(statusActionTarget?.orderNo || statusActionTarget?.orderNumber)}`}
+        subtitle={`${statusActionTarget?.tableNo ? `Table ${statusActionTarget.tableNo}` : statusActionTarget?.orderType} • Current: ${getOrderStatusConfig(statusActionTarget?.status, t).label}`}
+      >
+        {statusActionTarget && (
+          <div className="space-y-4">
+            {statusActionError && (
+              <div className="p-3 bg-red-50 border border-red-200 text-red-700 rounded-xl text-xs font-semibold">
+                {statusActionError}
+              </div>
+            )}
+
+            <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-slate-500 font-bold uppercase">Current Status</span>
+                {(() => {
+                  const cfg = getOrderStatusConfig(statusActionTarget.status, t);
+                  return (
+                    <span className={`px-3 py-1 rounded-full text-xs font-black border ${cfg.color}`}>
+                      {cfg.label}
+                    </span>
+                  );
+                })()}
+              </div>
+
+              {/* Next status progression button */}
+              {(statusActionTarget.status === ORDER_STATUS.HOLD || statusActionTarget.status === ORDER_STATUS.DRAFT || statusActionTarget.held) ? (
+                <div className="pt-2 border-t border-slate-200">
+                  <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl mb-3 flex items-start gap-2.5">
+                    <PauseCircle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+                    <div>
+                      <p className="text-xs font-bold text-amber-900">Order is currently on Hold</p>
+                      <p className="text-[11px] text-amber-700">Activate this order to immediately create the KOT and send it to the kitchen queue.</p>
+                    </div>
+                  </div>
+                  <Button
+                    variant="primary"
+                    className="w-full font-bold flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white shadow-2xs"
+                    loading={statusActionLoading || activatingOrderId === (statusActionTarget.id || statusActionTarget._id || statusActionTarget.orderNo)}
+                    onClick={() => handleActivateAndSendKot(statusActionTarget)}
+                  >
+                    <Play className="w-4 h-4" />
+                    <span>Activate &amp; Create KOT</span>
+                  </Button>
+                </div>
+              ) : getNextStatus(statusActionTarget.status) && (
+                <div className="pt-2 border-t border-slate-200">
+                  <p className="text-xs text-slate-500 mb-2 font-medium">Quick advance to next stage:</p>
+                  <Button
+                    variant="primary"
+                    className="w-full font-bold flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700"
+                    loading={statusActionLoading}
+                    onClick={() => handleAdvanceStatus(statusActionTarget)}
+                  >
+                    <span>Advance to {getOrderStatusConfig(getNextStatus(statusActionTarget.status), t).label}</span>
+                    <ArrowRight className="w-4 h-4" />
+                  </Button>
+                </div>
+              )}
+
+              {[ORDER_STATUS.SERVED, ORDER_STATUS.BILLING, ORDER_STATUS.PAYMENT_PENDING].includes(statusActionTarget.status) && (
+                <div className="pt-2 border-t border-slate-200">
+                  <Button
+                    variant="success"
+                    className="w-full font-bold flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white shadow-2xs"
+                    onClick={() => navigate(`/billing?orderId=${statusActionTarget.id || statusActionTarget._id}`)}
+                  >
+                    <Receipt className="w-4 h-4" />
+                    <span>Proceed to Billing & Settle Invoice</span>
+                  </Button>
+                </div>
+              )}
+            </div>
+
+            {/* Linked KOTs with Individual Serve Button */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-slate-700 uppercase tracking-wider">
+                  Kitchen Order Tickets ({statusModalKots.filter((k) => k.status !== 'CANCELLED').length})
+                </span>
+                {statusModalKots.some((k) => k.status === 'READY') && (
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-emerald-100 text-emerald-800 border border-emerald-200 animate-pulse">
+                    Food Ready to Serve
+                  </span>
+                )}
+              </div>
+
+              {statusModalKotsLoading ? (
+                <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-center text-xs text-slate-400">
+                  Loading KOT tickets...
+                </div>
+              ) : statusModalKots.filter((k) => k.status !== 'CANCELLED').length === 0 ? (
+                <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-center text-xs text-slate-400">
+                  No active KOT tickets for this order.
+                </div>
+              ) : (
+                <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
+                  {statusModalKots
+                    .filter((k) => k.status !== 'CANCELLED')
+                    .map((kot) => {
+                      const isReady = kot.status === 'READY';
+                      const isServed = kot.status === 'SERVED';
+                      const isServing = servingKotId === (kot.id || kot._id);
+
+                      return (
+                        <div
+                          key={kot.id || kot._id}
+                          className={`p-3 rounded-xl border transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 ${
+                            isReady
+                              ? 'bg-purple-50/50 border-purple-200 shadow-2xs'
+                              : isServed
+                              ? 'bg-slate-50/80 border-slate-200 opacity-80'
+                              : 'bg-white border-slate-200'
+                          }`}
+                        >
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="font-mono font-black text-xs text-blue-700">
+                                {kot.kotNo || kot.kotNumber}
+                              </span>
+                              <span className="text-[10px] font-bold px-1.5 py-0.2 rounded bg-slate-100 text-slate-600 border border-slate-200">
+                                {kot.type || 'NEW'} #{kot.revision || 1}
+                              </span>
+                              {kot.kitchenStation && (
+                                <span className="text-[10px] text-slate-500 font-medium">
+                                  • {kot.kitchenStation}
+                                </span>
+                              )}
+                              <span
+                                className={`text-[10px] font-black px-2 py-0.5 rounded-full border ${
+                                  isServed
+                                    ? 'bg-emerald-100 text-emerald-800 border-emerald-300'
+                                    : isReady
+                                    ? 'bg-purple-100 text-purple-800 border-purple-300'
+                                    : 'bg-amber-100 text-amber-800 border-amber-300'
+                                }`}
+                              >
+                                {kot.status}
+                              </span>
+                            </div>
+
+                            {/* Dishes summary */}
+                            <p className="text-[11px] text-slate-600 mt-1 line-clamp-2">
+                              {(kot.items || [])
+                                .map((it) => `${it.productName || it.name} (${it.quantity}x)`)
+                                .join(', ')}
+                            </p>
+                          </div>
+
+                          {/* Serve Action Button */}
+                          <div className="flex items-center gap-2 shrink-0 w-full sm:w-auto">
+                            {isServed ? (
+                              <span className="w-full sm:w-auto inline-flex items-center justify-center gap-1 text-xs font-bold text-emerald-700 bg-emerald-100/70 px-2.5 py-1.5 rounded-lg border border-emerald-200">
+                                <Check className="w-3.5 h-3.5" />
+                                <span>Served</span>
+                              </span>
+                            ) : (
+                              <Button
+                                size="sm"
+                                variant={isReady ? 'success' : 'secondary'}
+                                loading={isServing}
+                                disabled={statusActionLoading || isServing}
+                                onClick={() => handleServeSingleKot(kot)}
+                                className={`w-full sm:w-auto font-bold text-xs flex items-center justify-center gap-1.5 ${
+                                  isReady
+                                    ? 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs'
+                                    : 'text-slate-700 border-slate-300 hover:bg-slate-100'
+                                }`}
+                              >
+                                <UtensilsCrossed className="w-3.5 h-3.5" />
+                                <span>{isReady ? 'Serve KOT' : 'Mark Served'}</span>
+                              </Button>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                </div>
+              )}
+            </div>
+
+            {/* Quick status jumps */}
+            <div className="space-y-1.5">
+              <p className="text-xs font-bold text-slate-600 uppercase tracking-wider">Set Exact Status</p>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                {[
+                  { status: ORDER_STATUS.KOT_SENT, label: 'KOT Sent / Approved' },
+                  { status: ORDER_STATUS.PREPARING, label: 'Preparing' },
+                  { status: ORDER_STATUS.READY, label: 'Ready' },
+                  { status: ORDER_STATUS.SERVED, label: 'Served' },
+                ].map((s) => (
+                  <button
+                    key={s.status}
+                    type="button"
+                    disabled={statusActionTarget.status === s.status || statusActionLoading}
+                    onClick={() => handleAdvanceStatus(statusActionTarget, s.status)}
+                    className={`p-2.5 rounded-xl border text-xs font-bold text-left transition-all ${
+                      statusActionTarget.status === s.status
+                        ? 'bg-blue-50 border-blue-300 text-blue-800 opacity-60 cursor-default'
+                        : 'bg-white hover:bg-slate-50 border-slate-200 text-slate-700 hover:border-blue-300'
+                    }`}
+                  >
+                    {s.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Critical actions: Approve, Reject, Cancel */}
+            <div className="pt-3 border-t border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <div className="flex items-center gap-2 w-full sm:w-auto">
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => {
+                    const tgt = statusActionTarget;
+                    setStatusActionTarget(null);
+                    handleOpenReject(tgt);
+                  }}
+                  className="flex-1 sm:flex-none text-rose-700 border-rose-200 hover:bg-rose-50 font-bold"
+                >
+                  <XCircle className="w-3.5 h-3.5 mr-1" />
+                  Reject Order
+                </Button>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => {
+                    const tgt = statusActionTarget;
+                    setStatusActionTarget(null);
+                    handleOpenCancel(tgt);
+                  }}
+                  className="flex-1 sm:flex-none text-red-700 border-red-200 hover:bg-red-50 font-bold"
+                >
+                  <Trash2 className="w-3.5 h-3.5 mr-1" />
+                  Cancel Order
+                </Button>
+              </div>
+
+              <Button variant="ghost" size="sm" className="w-full sm:w-auto" onClick={() => setStatusActionTarget(null)}>
+                Close
+              </Button>
+            </div>
+          </div>
+        )}
       </Modal>
     </div>
   );

@@ -44,6 +44,8 @@ class KOTApiRepository {
       items,
       modificationReason: kot.modificationReason || notes,
       notes,
+      orderStatus: kot.orderStatus || null,
+      isOrderCompleted: Boolean(kot.isOrderCompleted),
       printStatus: (kot.printStatus || 'PENDING').toLowerCase(),
       createdAt: kot.createdAt,
       updatedAt: kot.updatedAt

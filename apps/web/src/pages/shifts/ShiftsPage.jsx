@@ -424,11 +424,11 @@ export const ShiftsPage = () => {
             helperText="Starting balance in notes and coins inside drawer"
           />
 
-          <div className="flex justify-end gap-2 pt-2">
-            <Button variant="secondary" onClick={() => setIsOpenModalOpen(false)}>
+          <div className="flex flex-col sm:flex-row justify-end gap-2 pt-2">
+            <Button variant="secondary" className="w-full sm:w-auto" onClick={() => setIsOpenModalOpen(false)}>
               {t('common.cancel', 'Cancel')}
             </Button>
-            <Button type="submit" variant="primary" loading={openLoading}>
+            <Button type="submit" variant="primary" className="w-full sm:w-auto" loading={openLoading}>
               {t('shifts.startShift', 'Open Shift')}
             </Button>
           </div>
@@ -466,11 +466,11 @@ export const ShiftsPage = () => {
             onChange={(e) => setCashReason(e.target.value)}
           />
 
-          <div className="flex justify-end gap-2 pt-2">
-            <Button variant="secondary" onClick={() => setIsCashModalOpen(false)}>
+          <div className="flex flex-col sm:flex-row justify-end gap-2 pt-2">
+            <Button variant="secondary" className="w-full sm:w-auto" onClick={() => setIsCashModalOpen(false)}>
               {t('common.cancel', 'Cancel')}
             </Button>
-            <Button type="submit" variant="primary" loading={cashLoading}>
+            <Button type="submit" variant="primary" className="w-full sm:w-auto" loading={cashLoading}>
               {t('common.save', 'Save Movement')}
             </Button>
           </div>
@@ -553,11 +553,11 @@ export const ShiftsPage = () => {
             onChange={(e) => setCloseNotes(e.target.value)}
           />
 
-          <div className="flex justify-end gap-2 pt-2">
-            <Button variant="secondary" onClick={() => setIsCloseModalOpen(false)}>
+          <div className="flex flex-col sm:flex-row justify-end gap-2 pt-2">
+            <Button variant="secondary" className="w-full sm:w-auto" onClick={() => setIsCloseModalOpen(false)}>
               {t('common.cancel', 'Cancel')}
             </Button>
-            <Button type="submit" variant="danger" loading={closeLoading}>
+            <Button type="submit" variant="danger" className="w-full sm:w-auto" loading={closeLoading}>
               {t('shifts.closeShift', 'Confirm Close & Lock Shift')}
             </Button>
           </div>

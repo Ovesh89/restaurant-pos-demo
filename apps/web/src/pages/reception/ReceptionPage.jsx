@@ -36,6 +36,7 @@ export const ReceptionPage = () => {
   const [rejectionReason, setRejectionReason] = useState('');
   const [rejectError, setRejectError] = useState('');
   const [actionLoading, setActionLoading] = useState(false);
+  const [selectedKotDetail, setSelectedKotDetail] = useState(null);
 
   const loadData = async () => {
     try {
@@ -305,7 +306,12 @@ export const ReceptionPage = () => {
               </p>
             ) : (
               activeKOTs.map((kot) => (
-                <div key={kot.id} className="py-3 first:pt-0 last:pb-0 space-y-1.5">
+                <div
+                  key={kot.id}
+                  onClick={() => setSelectedKotDetail(kot)}
+                  className="py-3 first:pt-0 last:pb-0 space-y-1.5 cursor-pointer hover:bg-slate-50 p-2 rounded-xl transition-all border border-transparent hover:border-slate-200"
+                  title="Click to view full KOT details"
+                >
                   <div className="flex items-center justify-between">
                     <span className="font-mono font-black text-xs text-blue-700">{kot.kotNo}</span>
                     <Badge variant={kot.status === 'READY' ? 'success' : kot.status === 'PREPARING' ? 'primary' : 'warning'} size="sm">
@@ -315,7 +321,10 @@ export const ReceptionPage = () => {
                   <div className="text-xs text-slate-600 font-semibold flex items-center justify-between">
                     <span>{t('tables.tableNumber', null, 'Table')} {formatNumber(kot.tableNo || '-')}</span>
                     <button
-                      onClick={() => handlePrintKOT(kot)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handlePrintKOT(kot);
+                      }}
                       className="text-[11px] text-blue-600 hover:text-blue-700 flex items-center gap-1 font-bold"
                     >
                       <Printer className="w-3 h-3" /> {t('common.print', null, 'Print')}
@@ -330,6 +339,80 @@ export const ReceptionPage = () => {
           </div>
         </div>
       </div>
+
+      {/* KOT Detail Modal */}
+      {selectedKotDetail && (
+        <Modal
+          isOpen={Boolean(selectedKotDetail)}
+          onClose={() => setSelectedKotDetail(null)}
+          title={`KOT Ticket: ${selectedKotDetail.kotNo || selectedKotDetail.kotNumber}`}
+          subtitle={`${selectedKotDetail.tableNo ? `Table ${selectedKotDetail.tableNo}` : 'Take Away'} • Order #${selectedKotDetail.orderNo || selectedKotDetail.orderNumber}`}
+        >
+          <div className="space-y-4">
+            <div className="flex items-center justify-between p-3 bg-slate-50 rounded-xl border border-slate-200 text-xs">
+              <div>
+                <span className="text-[10px] text-slate-400 font-bold uppercase block">Status</span>
+                <span className="font-bold text-slate-800">{selectedKotDetail.status}</span>
+              </div>
+              <div>
+                <span className="text-[10px] text-slate-400 font-bold uppercase block">Station</span>
+                <span className="font-bold text-slate-800">{selectedKotDetail.station || 'Main Kitchen'}</span>
+              </div>
+              <div>
+                <span className="text-[10px] text-slate-400 font-bold uppercase block">Captain</span>
+                <span className="font-bold text-slate-800">{selectedKotDetail.captainName || 'Staff'}</span>
+              </div>
+              <div>
+                <span className="text-[10px] text-slate-400 font-bold uppercase block">Time</span>
+                <span className="font-bold font-mono text-slate-800">
+                  {selectedKotDetail.createdAt ? new Date(selectedKotDetail.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '-'}
+                </span>
+              </div>
+            </div>
+
+            <div>
+              <p className="text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">Dishes on this Ticket</p>
+              <div className="divide-y divide-slate-100 rounded-xl border border-slate-200 overflow-hidden">
+                {(selectedKotDetail.items || []).map((itm, iIdx) => (
+                  <div key={iIdx} className="p-3 bg-white flex items-center justify-between text-xs">
+                    <div className="flex items-center gap-2">
+                      <span className="w-7 h-7 rounded-lg bg-blue-50 text-blue-700 font-black flex items-center justify-center border border-blue-200">
+                        {itm.quantity}x
+                      </span>
+                      <span className="font-bold text-slate-800">{itm.name || itm.productName}</span>
+                    </div>
+                    {itm.notes && (
+                      <span className="text-[11px] text-rose-600 bg-rose-50 px-2 py-0.5 rounded border border-rose-100 font-medium">
+                        {itm.notes}
+                      </span>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {selectedKotDetail.notes && (
+              <div className="p-3 bg-amber-50 rounded-xl border border-amber-200 text-xs text-amber-900">
+                <b>Notes:</b> {selectedKotDetail.notes}
+              </div>
+            )}
+
+            <div className="flex flex-col sm:flex-row justify-between items-stretch sm:items-center gap-2 pt-2 border-t border-slate-100">
+              <Button
+                variant="secondary"
+                icon={Printer}
+                className="w-full sm:w-auto"
+                onClick={() => handlePrintKOT(selectedKotDetail)}
+              >
+                Print KOT Ticket
+              </Button>
+              <Button variant="ghost" className="w-full sm:w-auto" onClick={() => setSelectedKotDetail(null)}>
+                Close
+              </Button>
+            </div>
+          </div>
+        </Modal>
+      )}
 
       {/* Reject Order Modal */}
       <Modal
@@ -359,11 +442,11 @@ export const ReceptionPage = () => {
             />
           </div>
 
-          <div className="flex justify-end gap-2 pt-2">
-            <Button variant="secondary" onClick={() => setIsRejectModalOpen(false)}>
+          <div className="flex flex-col sm:flex-row justify-end gap-2 pt-2">
+            <Button variant="secondary" className="w-full sm:w-auto" onClick={() => setIsRejectModalOpen(false)}>
               {t('common.cancel', null, 'Cancel')}
             </Button>
-            <Button type="submit" variant="danger" loading={actionLoading}>
+            <Button type="submit" variant="danger" className="w-full sm:w-auto" loading={actionLoading}>
               {t('reception.rejectOrder', null, 'Confirm Rejection')}
             </Button>
           </div>

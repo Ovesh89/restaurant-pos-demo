@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import {
   CreditCard,
@@ -40,6 +40,7 @@ import { Select } from '../../components/common/Select';
 import { Modal } from '../../components/common/Modal';
 import { Badge } from '../../components/common/Badge';
 import { DataTable } from '../../components/common/DataTable';
+import { Pagination } from '../../components/common/Pagination';
 import { ORDER_STATUS } from '../../constants/orderStatus';
 
 function getLocalDateString(d = new Date()) {
@@ -107,7 +108,8 @@ function getDateRangeLabel(filterType, customFrom, customTo) {
 export const BillingPage = () => {
   const { user } = useAuth();
   const { t, formatCurrency, formatNumber } = useTranslation();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const hasAutoOpenedRef = useRef(false);
 
   const [readyOrders, setReadyOrders] = useState([]);
   const [billsHistory, setBillsHistory] = useState([]);
@@ -219,7 +221,8 @@ export const BillingPage = () => {
     overrideFilter = dateFilter,
     overrideFrom = customFromDate,
     overrideTo = customToDate,
-    overrideSearch = historySearch
+    overrideSearch = historySearch,
+    autoOpen = true
   ) => {
     try {
       setLoading(true);
@@ -232,6 +235,9 @@ export const BillingPage = () => {
             ORDER_STATUS.BILLING,
             ORDER_STATUS.KOT_SENT,
             ORDER_STATUS.PREPARING,
+            ORDER_STATUS.CONFIRMED,
+            ORDER_STATUS.WAITING_CONFIRMATION,
+            ORDER_STATUS.DRAFT,
           ],
         }),
         billRepository.getBills({
@@ -273,17 +279,23 @@ export const BillingPage = () => {
         }
       );
 
-      const targetTableId = searchParams.get('tableId');
-      const targetOrderId = searchParams.get('orderId');
-      if (targetOrderId) {
-        const match = pendingOrders.find((o) => o.id === targetOrderId);
-        if (match) {
-          handleOpenCheckout(match);
-        }
-      } else if (targetTableId) {
-        const match = pendingOrders.find((o) => o.tableId === targetTableId);
-        if (match) {
-          handleOpenCheckout(match);
+      if (autoOpen && !hasAutoOpenedRef.current) {
+        const targetTableId = searchParams.get('tableId');
+        const targetOrderId = searchParams.get('orderId');
+        if (targetOrderId) {
+          const match = pendingOrders.find(
+            (o) => o.id === targetOrderId || o._id === targetOrderId || o.orderNo === targetOrderId || o.orderNumber === targetOrderId
+          );
+          if (match) {
+            hasAutoOpenedRef.current = true;
+            handleOpenCheckout(match);
+          }
+        } else if (targetTableId) {
+          const match = pendingOrders.find((o) => o.tableId === targetTableId);
+          if (match) {
+            hasAutoOpenedRef.current = true;
+            handleOpenCheckout(match);
+          }
         }
       }
     } catch (err) {
@@ -311,14 +323,28 @@ export const BillingPage = () => {
   };
 
   useEffect(() => {
-    loadBillingData();
+    hasAutoOpenedRef.current = false;
+    loadBillingData(dateFilter, customFromDate, customToDate, historySearch, true);
   }, [searchParams]);
 
   // Close Checkout Modal & Synchronize
   const handleCloseDesk = async () => {
+    hasAutoOpenedRef.current = true;
+    if (activeBill && (activeBill.isSettled || activeBill.balance <= 0) && activeBill.rawStatus !== 'COMPLETED') {
+      try {
+        const actor = { id: user?.id || 'cashier', name: user?.name || 'Cashier' };
+        await billRepository.closeBill(activeBill.id, actor);
+      } catch (err) {
+        console.warn('Auto close bill on close desk failed:', err);
+      }
+    }
     setSelectedOrder(null);
     setActiveBill(null);
-    await loadBillingData();
+    setActionError('');
+    if (searchParams.get('orderId') || searchParams.get('tableId')) {
+      setSearchParams({}, { replace: true });
+    }
+    await loadBillingData(dateFilter, customFromDate, customToDate, historySearch, false);
   };
 
   // Open Checkout Terminal
@@ -499,6 +525,52 @@ export const BillingPage = () => {
     }
   };
 
+  // Settle remaining balance in full, close bill/order (releasing table), and print invoice
+  const handleSettleAndPrint = async () => {
+    if (!activeBill) return;
+    setActionError('');
+    setActionLoading(true);
+
+    try {
+      const actor = { id: user?.id || 'cashier', name: user?.name || 'Cashier' };
+      let currentBill = activeBill;
+
+      // 1. If balance remains, record full payment using current paymentMode
+      if (currentBill.balance > 0) {
+        const payRes = await billRepository.addPayment(
+          currentBill.id,
+          {
+            mode: paymentMode,
+            amount: currentBill.balance,
+            reference: paymentRef?.trim() || undefined,
+          },
+          actor
+        );
+        currentBill = payRes.bill || payRes;
+      }
+
+      // 2. Finalize and close the bill (marks order COMPLETED and table AVAILABLE)
+      if (currentBill.rawStatus !== 'COMPLETED') {
+        currentBill = await billRepository.closeBill(currentBill.id, actor);
+      }
+
+      // 3. Print thermal tax invoice
+      const sysSettings = await settingsRepository.getSettings().catch(() => ({}));
+      const configuredUpiId = sysSettings.upiId || 'q705457761@ybl';
+      printService.printInvoice(currentBill, selectedOrder, selectedCustomer, null, {
+        paymentMode,
+        upiId: configuredUpiId,
+      });
+
+      // 4. Close checkout desk and refresh queue
+      await handleCloseDesk();
+    } catch (err) {
+      setActionError(err.message || 'Failed to settle and print bill.');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
   // Customer search & select
   const handleSearchCustomer = async (q) => {
     setCustomerQuery(q);
@@ -562,7 +634,8 @@ export const BillingPage = () => {
   // Dish modification handlers
   const handleOpenBillingModify = async (order) => {
     if (!order) return;
-    setBillingModifiedItems(JSON.parse(JSON.stringify(order.items || [])));
+    const activeItems = (order.items || []).filter((i) => (i.status || 'ACTIVE') !== 'CANCELLED');
+    setBillingModifiedItems(JSON.parse(JSON.stringify(activeItems)));
     setBillingModReason('');
     setBillingModError('');
     setBillingSearch('');
@@ -592,9 +665,11 @@ export const BillingPage = () => {
     setBillingModifiedItems((prev) => {
       const idx = prev.findIndex((i) => (i.productId || i.id || i._id) === targetProductId);
       if (idx > -1) {
-        const copy = [...prev];
-        copy[idx].quantity += 1;
-        return copy;
+        return prev.map((item, index) =>
+          index === idx
+            ? { ...item, quantity: item.quantity + 1 }
+            : item
+        );
       } else {
         return [
           ...prev,
@@ -1107,22 +1182,188 @@ export const BillingPage = () => {
           )}
         </div>
 
-        <DataTable
-          columns={historyColumns}
-          data={billsHistory}
-          loading={historyLoading}
-          emptyMessage={`${t('billing.noSettledInvoices', null, 'No historical bills settled yet for')} ${getDateRangeLabel(dateFilter, customFromDate, customToDate)}.`}
-          pagination={historyPagination}
-          onPageChange={(p) => {
-            setHistoryPage(p);
-            loadSettledBills(p, historyLimit);
-          }}
-          onPageSizeChange={(l) => {
-            setHistoryLimit(l);
-            setHistoryPage(1);
-            loadSettledBills(1, l);
-          }}
-        />
+        {/* Settled Invoices - Desktop / Tablet Table View */}
+        <div className="hidden md:block">
+          <DataTable
+            columns={historyColumns}
+            data={billsHistory}
+            loading={historyLoading}
+            emptyMessage={`${t('billing.noSettledInvoices', null, 'No historical bills settled yet for')} ${getDateRangeLabel(dateFilter, customFromDate, customToDate)}.`}
+            pagination={historyPagination}
+            onPageChange={(p) => {
+              setHistoryPage(p);
+              loadSettledBills(p, historyLimit);
+            }}
+            onPageSizeChange={(l) => {
+              setHistoryLimit(l);
+              setHistoryPage(1);
+              loadSettledBills(1, l);
+            }}
+          />
+        </div>
+
+        {/* Settled Invoices - Mobile Grid/Card View (Optimized for Mobile Screens & Web-View App) */}
+        <div className="block md:hidden">
+          {historyLoading ? (
+            <div className="bg-white rounded-2xl border border-slate-200 p-8 text-center shadow-xs">
+              <div className="inline-block animate-spin rounded-full h-8 w-8 border-4 border-slate-200 border-t-blue-600 mb-3"></div>
+              <p className="text-sm font-medium text-slate-500">{t('common.loading', null, 'Loading settled invoices...')}</p>
+            </div>
+          ) : billsHistory.length === 0 ? (
+            <div className="bg-white rounded-2xl border border-dashed border-slate-300 p-8 text-center text-slate-500 text-sm font-medium">
+              {`${t('billing.noSettledInvoices', null, 'No historical bills settled yet for')} ${getDateRangeLabel(dateFilter, customFromDate, customToDate)}.`}
+            </div>
+          ) : (
+            <div className="space-y-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {billsHistory.map((row) => {
+                  const timestamp = row.completedAt || row.createdAt;
+                  const dateObj = timestamp ? new Date(timestamp) : null;
+                  const formattedDate =
+                    dateObj && !isNaN(dateObj.getTime())
+                      ? dateObj.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
+                      : '—';
+                  const formattedTime =
+                    dateObj && !isNaN(dateObj.getTime())
+                      ? dateObj.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })
+                      : '';
+
+                  return (
+                    <div
+                      key={row.id}
+                      className="bg-white rounded-2xl border border-slate-200 p-3.5 shadow-xs flex flex-col justify-between transition-all hover:border-blue-400 hover:shadow-md"
+                    >
+                      <div>
+                        {/* Top Header: Bill Sequence + Status */}
+                        <div className="flex items-center justify-between gap-2 pb-2.5 border-b border-slate-100">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className="font-mono font-bold text-xs px-2 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200">
+                              {formatReceiptSequence(row.billNo)}
+                            </span>
+                            <span className="text-[10px] text-slate-400 font-mono">
+                              {row.billNo}
+                            </span>
+                          </div>
+
+                          <Badge variant={row.status === BILL_STATUS.PAID ? 'success' : 'default'} size="sm">
+                            {row.status}
+                          </Badge>
+                        </div>
+
+                        {/* Table / Channel & Customer Info */}
+                        <div className="my-2.5">
+                          <div className="flex items-center justify-between">
+                            <span className="text-sm font-black text-slate-800">
+                              {row.orderType && row.orderType !== 'DINE_IN'
+                                ? row.orderType === 'TAKEAWAY'
+                                  ? t('orders.takeaway', null, 'Take Away')
+                                  : row.orderType
+                                : row.tableNo
+                                ? `${t('orders.table', null, 'Table')} ${row.tableNo}`
+                                : 'Direct Bill'}
+                            </span>
+                            <div className="text-right text-[11px] text-slate-500 font-mono">
+                              <span>{formattedDate}</span>
+                              {formattedTime && <span className="ml-1 text-slate-400">{formattedTime}</span>}
+                            </div>
+                          </div>
+
+                          <p className="text-xs text-slate-600 mt-1 font-medium">
+                            {row.customerName
+                              ? `${row.customerName} ${row.customerMobile ? `(${row.customerMobile})` : ''}`
+                              : t('orders.walkinGuest', null, 'Walk-in Guest')}
+                          </p>
+                        </div>
+
+                        {/* Amount & Payments Breakdown */}
+                        <div className="bg-slate-50/80 rounded-xl p-2.5 border border-slate-100 text-xs text-slate-600 mb-3 space-y-1.5">
+                          <div className="flex items-center justify-between">
+                            <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">
+                              {t('billing.finalPayable', null, 'Grand Total')}
+                            </span>
+                            <span className="text-base font-black text-emerald-600">
+                              ₹{formatNumber(row.grandTotal)}
+                            </span>
+                          </div>
+
+                          {row.discountAmount > 0 && (
+                            <div className="flex items-center justify-between text-[11px] text-amber-700 font-semibold">
+                              <span>{t('billing.discountAmount', null, 'Discount')}</span>
+                              <span>-₹{formatNumber(row.discountAmount)}</span>
+                            </div>
+                          )}
+
+                          {row.payments && row.payments.length > 0 && (
+                            <div className="pt-1 border-t border-slate-200/60 flex flex-wrap gap-1">
+                              {row.payments.map((p, pIdx) => (
+                                <span
+                                  key={pIdx}
+                                  className="bg-white border border-slate-200 text-slate-700 px-2 py-0.5 rounded text-[10px] font-mono font-semibold"
+                                >
+                                  {p.mode}: ₹{formatNumber(p.amount)}
+                                </span>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Action Buttons Toolbar */}
+                      <div className="pt-2 border-t border-slate-100 flex items-center justify-between gap-1.5">
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          icon={Eye}
+                          onClick={() => handleOpenInspectInvoice(row)}
+                          className="flex-1 text-xs justify-center"
+                        >
+                          {t('common.details', null, 'Details')}
+                        </Button>
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          icon={Tag}
+                          onClick={() => handleOpenDiscountModal(row)}
+                          className="flex-1 text-xs justify-center"
+                        >
+                          {t('billing.discountAmount', null, 'Discount')}
+                        </Button>
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          icon={Printer}
+                          onClick={() => handleReprintInvoice(row)}
+                          className="flex-1 text-xs justify-center"
+                        >
+                          {t('billing.reprint', null, 'Reprint')}
+                        </Button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Mobile History Pagination */}
+              <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-xs">
+                <Pagination
+                  currentPage={historyPagination?.page || historyPage}
+                  totalPages={historyPagination?.totalPages || 1}
+                  totalItems={historyPagination?.total || billsHistory.length}
+                  pageSize={historyPagination?.limit || historyLimit}
+                  onPageChange={(p) => {
+                    setHistoryPage(p);
+                    loadSettledBills(p, historyLimit);
+                  }}
+                  onPageSizeChange={(l) => {
+                    setHistoryLimit(l);
+                    setHistoryPage(1);
+                    loadSettledBills(1, l);
+                  }}
+                />
+              </div>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Comprehensive Checkout & Settlement Modal */}
@@ -1202,7 +1443,12 @@ export const BillingPage = () => {
                 {/* Items Snapshot with Modify Dishes Button */}
                 <div>
                   <div className="flex items-center justify-between mb-2">
-                    <h4 className="text-xs font-bold uppercase text-slate-400">{t('kitchen.orderedDishes', null, 'Ordered Dishes')}</h4>
+                    <div className="flex items-center gap-2">
+                      <h4 className="text-xs font-bold uppercase text-slate-400">{t('kitchen.orderedDishes', null, 'Ordered Dishes')}</h4>
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-50 text-blue-700 border border-blue-200">
+                        {activeBill.items.length} {activeBill.items.length === 1 ? 'Dish' : 'Dishes'}
+                      </span>
+                    </div>
                     <button
                       type="button"
                       onClick={() => handleOpenBillingModify(selectedOrder)}
@@ -1212,7 +1458,7 @@ export const BillingPage = () => {
                       {t('billing.modifyDishes', null, 'Modify Dishes')}
                     </button>
                   </div>
-                  <div className="divide-y divide-slate-100 border border-slate-200 rounded-xl overflow-hidden text-xs max-h-48 overflow-y-auto">
+                  <div className="divide-y divide-slate-100 border border-slate-200 rounded-xl overflow-hidden text-xs max-h-60 overflow-y-auto">
                     {activeBill.items.map((i, idx) => (
                       <div key={idx} className="p-2.5 bg-white flex items-center justify-between">
                         <div>
@@ -1391,30 +1637,58 @@ export const BillingPage = () => {
                   <div className="bg-emerald-50 p-4 rounded-xl border border-emerald-200 text-center space-y-2">
                     <CheckCircle2 className="w-8 h-8 text-emerald-600 mx-auto" />
                     <p className="font-bold text-sm text-emerald-900">{t('billing.billCompleted', null, 'Bill is Fully Settled!')}</p>
-                    <p className="text-xs text-emerald-700">{t('billing.settledDesc', null, 'All balances cleared. You can now close the table and print invoice.')}</p>
+                    <p className="text-xs text-emerald-700">{t('billing.settledDesc', null, 'All balances cleared. You can now print the bill and close.')}</p>
                   </div>
                 )}
 
                 {/* Finalize & Print Actions */}
-                <div className="flex items-center gap-2 pt-2">
-                  <Button
-                    variant="secondary"
-                    className="flex-1"
-                    icon={Printer}
-                    onClick={handlePrintInvoice}
-                  >
-                    {t('billing.settleAndPrint', null, 'Print Bill')}
-                  </Button>
-                  <Button
-                    variant="success"
-                    className="flex-1"
-                    icon={CheckCircle2}
-                    disabled={activeBill.balance > 0}
-                    loading={actionLoading}
-                    onClick={handleCloseBill}
-                  >
-                    {t('billing.completeReleaseTable', null, 'Complete & Release Table')}
-                  </Button>
+                <div className="flex flex-col sm:flex-row items-center gap-2 pt-2">
+                  {((activeBill.balance !== undefined && activeBill.balance <= 0) || activeBill.isSettled || activeBill.rawStatus === 'COMPLETED' || activeBill.status === 'PAID') ? (
+                    <>
+                      <Button
+                        variant="primary"
+                        className="flex-1 w-full bg-emerald-600 hover:bg-emerald-700 font-bold"
+                        icon={Printer}
+                        onClick={handlePrintInvoice}
+                      >
+                        {t('billing.printOnly', null, 'Print Bill')}
+                      </Button>
+                      <Button
+                        variant="secondary"
+                        className="w-full sm:w-auto px-6 font-semibold"
+                        onClick={handleCloseDesk}
+                      >
+                        {t('common.close', null, 'Close')}
+                      </Button>
+                    </>
+                  ) : (
+                    <>
+                      <Button
+                        variant="primary"
+                        className="flex-1 w-full bg-emerald-600 hover:bg-emerald-700 font-bold"
+                        icon={Printer}
+                        loading={actionLoading}
+                        onClick={handleSettleAndPrint}
+                      >
+                        Settle & Print Tax Invoice
+                      </Button>
+                      <Button
+                        variant="secondary"
+                        className="w-full sm:w-auto"
+                        icon={Printer}
+                        onClick={handlePrintInvoice}
+                      >
+                        {t('billing.printOnly', null, 'Print Bill')}
+                      </Button>
+                      <Button
+                        variant="secondary"
+                        className="w-full sm:w-auto"
+                        onClick={handleCloseDesk}
+                      >
+                        {t('common.close', null, 'Close')}
+                      </Button>
+                    </>
+                  )}
                 </div>
               </div>
             </div>

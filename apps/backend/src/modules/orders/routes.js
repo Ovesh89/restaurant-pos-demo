@@ -118,6 +118,7 @@ router.post(
       orderId: req.params.id,
       actorId: req.user.id,
       actorName: req.user.displayName || req.user.username,
+      autoApprove: Boolean(req.body?.autoApprove),
     });
     return successResponse(res, order, 'Order submitted for Reception review.');
   })
@@ -154,11 +155,11 @@ router.post(
   })
 );
 
-// POST /api/v1/orders/:id/confirm
+// POST /api/v1/orders/:id/confirm and POST /api/v1/orders/:id/activate
 router.post(
-  '/orders/:id/confirm',
+  ['/orders/:id/confirm', '/orders/:id/activate'],
   authenticate,
-  requirePermissions(['order.confirm']),
+  requireAnyPermission(['order.confirm', 'order.approve', 'order.modify', 'order.create', 'order.resume']),
   asyncHandler(async (req, res) => {
     const result = await orderService.confirmOrder({
       orderId: req.params.id,
@@ -182,6 +183,23 @@ router.post(
       actorName: req.user.displayName || req.user.username,
     });
     return successResponse(res, order, 'Order rejected.');
+  })
+);
+
+// POST /api/v1/orders/:id/status
+router.post(
+  '/orders/:id/status',
+  authenticate,
+  requireAnyPermission(['order.modify', 'order.confirm', 'order.create']),
+  asyncHandler(async (req, res) => {
+    const result = await orderService.updateOrderStatus({
+      orderId: req.params.id,
+      newStatus: req.body?.status,
+      reason: req.body?.reason,
+      actorId: req.user.id,
+      actorName: req.user.displayName || req.user.username,
+    });
+    return successResponse(res, result, `Order status updated to ${req.body?.status}.`);
   })
 );
 

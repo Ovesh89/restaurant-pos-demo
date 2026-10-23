@@ -31,7 +31,7 @@ import { StatCard } from '../../components/common/StatCard';
 import { Button } from '../../components/common/Button';
 import { DataTable } from '../../components/common/DataTable';
 import { Modal } from '../../components/common/Modal';
-import { ORDER_STATUS_CONFIG, getOrderStatusConfig } from '../../constants/orderStatus';
+import { ORDER_STATUS, ORDER_STATUS_CONFIG, getOrderStatusConfig } from '../../constants/orderStatus';
 
 export const OrderHistoryPage = () => {
   const { t, formatNumber } = useTranslation();
@@ -236,6 +236,7 @@ export const OrderHistoryPage = () => {
       header: t('orders.orderId', null, 'Order #'),
       accessor: 'orderNo',
       className: 'w-24 font-mono font-black text-blue-700',
+      sortValue: (row) => row.orderNo || row.orderNumber || '',
       render: (row) => (
         <span className="font-mono font-black text-blue-700 hover:underline cursor-pointer" onClick={() => setSelectedOrder(row)}>
           {row.orderNo || row.orderNumber}
@@ -245,6 +246,7 @@ export const OrderHistoryPage = () => {
     {
       header: t('common.time', null, 'Date & Time'),
       accessor: 'createdAt',
+      sortValue: (row) => new Date(row.createdAt).getTime(),
       render: (row) => {
         const d = new Date(row.createdAt);
         return (
@@ -262,6 +264,7 @@ export const OrderHistoryPage = () => {
     {
       header: t('tables.table', null, 'Table'),
       accessor: 'tableNo',
+      sortValue: (row) => Number(row.tableNo || row.tableNumber) || (row.tableNo || row.tableNumber || 0),
       render: (row) => (
         <span className="font-extrabold text-slate-800 text-sm">{t('orders.table', null, 'Table')} {row.tableNo || row.tableNumber}</span>
       )
@@ -269,6 +272,7 @@ export const OrderHistoryPage = () => {
     {
       header: t('billing.customerInfo', null, 'Guest / Customer'),
       accessor: 'customer',
+      sortValue: (row) => row.customer?.name || 'Walk-in',
       render: (row) => {
         if (!row.customer) {
           return <span className="text-xs text-slate-400 italic">{t('orders.walkinGuest', null, 'Walk-in Guest')}</span>;
@@ -286,9 +290,9 @@ export const OrderHistoryPage = () => {
     {
       header: t('menu.productsTitle', null, 'Dishes & Categories'),
       accessor: 'items',
+      sortValue: (row) => (row.items || []).reduce((acc, i) => acc + (i.quantity || 1), 0),
       render: (row) => {
         const items = row.items || [];
-        const totalItemsCount = items.reduce((acc, i) => acc + (i.quantity || 1), 0);
         const categoriesSeen = [...new Set(items.map((i) => i.categoryName).filter(Boolean))];
         return (
           <div className="space-y-1">
@@ -317,6 +321,7 @@ export const OrderHistoryPage = () => {
     {
       header: t('orders.status', null, 'Status'),
       accessor: 'status',
+      sortValue: (row) => row.status || '',
       render: (row) => {
         const config = getOrderStatusConfig(row.status, t);
         return (
@@ -330,6 +335,7 @@ export const OrderHistoryPage = () => {
       header: `${t('reports.totalRevenue', null, 'Total Sales')} (₹)`,
       accessor: 'grandTotal',
       align: 'right',
+      sortValue: (row) => Number(row.grandTotal || row.subtotal || 0),
       render: (row) => (
         <span className="font-extrabold text-slate-900 text-sm">
           ₹{formatNumber(Number(row.grandTotal || row.subtotal || 0))}
@@ -339,6 +345,7 @@ export const OrderHistoryPage = () => {
     {
       header: t('common.actions', null, 'Actions'),
       align: 'center',
+      sortable: false,
       render: (row) => (
         <Button
           size="sm"
@@ -357,11 +364,13 @@ export const OrderHistoryPage = () => {
     {
       header: t('common.rank', null, 'Rank'),
       className: 'w-12 font-bold text-slate-400',
+      sortable: false,
       render: (_, idx) => `#${formatNumber(idx + 1)}`
     },
     {
       header: t('menu.categoriesTitle', null, 'Menu Category'),
       accessor: 'categoryName',
+      sortValue: (row) => row.categoryName || '',
       render: (row) => (
         <div className="flex items-center gap-2">
           <Layers className="w-4 h-4 text-blue-600" />
@@ -373,11 +382,13 @@ export const OrderHistoryPage = () => {
       header: t('reports.portionsSold', null, 'Portions Sold'),
       accessor: 'quantity',
       className: 'font-mono font-bold text-blue-600',
+      sortValue: (row) => Number(row.quantity || 0),
       render: (row) => `${formatNumber(row.quantity)} ${t('reports.portions', null, 'portions')}`
     },
     {
       header: t('reports.pctNetSales', null, '% of Net Sales'),
       accessor: 'percentage',
+      sortValue: (row) => Number(row.percentage || 0),
       render: (row) => (
         <div className="flex items-center gap-3">
           <div className="w-24 bg-slate-100 rounded-full h-2 overflow-hidden border border-slate-200">
@@ -394,6 +405,7 @@ export const OrderHistoryPage = () => {
       header: `${t('reports.totalRevenue', null, 'Total Revenue')} (₹)`,
       accessor: 'revenue',
       align: 'right',
+      sortValue: (row) => Number(row.revenue || 0),
       render: (row) => (
         <span className="font-extrabold text-slate-900 text-sm">
           ₹{formatNumber(Number(row.revenue))}
@@ -407,6 +419,7 @@ export const OrderHistoryPage = () => {
     {
       header: t('common.date', null, 'Date'),
       accessor: 'date',
+      sortValue: (row) => new Date(`${row.date}T00:00:00`).getTime(),
       render: (row) => {
         const d = new Date(`${row.date}T00:00:00`);
         return (
@@ -420,17 +433,20 @@ export const OrderHistoryPage = () => {
       header: t('reports.ordersPlaced', null, 'Orders Placed'),
       accessor: 'ordersCount',
       className: 'font-mono font-bold text-slate-700',
+      sortValue: (row) => Number(row.ordersCount || 0),
       render: (row) => `${formatNumber(row.ordersCount)} ${t('reports.orders', null, 'orders')}`
     },
     {
       header: t('reports.dishesServed', null, 'Dishes Served'),
       accessor: 'itemsCount',
       className: 'font-mono text-slate-600',
+      sortValue: (row) => Number(row.itemsCount || 0),
       render: (row) => `${formatNumber(row.itemsCount || 0)} ${t('reports.items', null, 'items')}`
     },
     {
       header: `${t('reports.avgOrderValue', null, 'Average Order')} (₹)`,
-      accessor: 'sales',
+      accessor: 'aov',
+      sortValue: (row) => (row.ordersCount > 0 ? Number(row.sales) / row.ordersCount : 0),
       render: (row) => {
         const aov = row.ordersCount > 0 ? Math.round(Number(row.sales) / row.ordersCount) : 0;
         return <span className="font-mono text-xs text-slate-600">₹{formatNumber(aov)}</span>;
@@ -440,6 +456,7 @@ export const OrderHistoryPage = () => {
       header: `${t('reports.netSales', null, 'Net Day Sales')} (₹)`,
       accessor: 'sales',
       align: 'right',
+      sortValue: (row) => Number(row.sales || 0),
       render: (row) => (
         <span className="font-black text-emerald-700 text-sm">
           ₹{formatNumber(Number(row.sales))}
@@ -536,10 +553,10 @@ export const OrderHistoryPage = () => {
         </div>
 
         {/* Filter Controls Row */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
           {/* Start Date / Month Picker */}
           {datePreset === 'MONTH_PICKER' ? (
-            <div>
+            <div className="sm:col-span-2 lg:col-span-1">
               <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block mb-1">
                 {t('reports.selectMonth', null, 'Select Month')}
               </label>
@@ -583,6 +600,29 @@ export const OrderHistoryPage = () => {
               </div>
             </>
           )}
+
+          {/* Status Filter */}
+          <div>
+            <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block mb-1">
+              {t('orders.status', null, 'Order Status')}
+            </label>
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+              className="w-full text-xs font-bold px-3 py-2 border border-slate-200 rounded-xl bg-slate-50 focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="ALL">{t('orders.allStatuses', null, 'All Statuses')}</option>
+              <option value={ORDER_STATUS.COMPLETED}>{t('common.completed', null, 'Completed')}</option>
+              <option value={ORDER_STATUS.SERVED}>{t('common.served', null, 'Served')}</option>
+              <option value={ORDER_STATUS.BILLING}>{t('orders.inBilling', null, 'In Billing')}</option>
+              <option value={ORDER_STATUS.READY}>{t('common.ready', null, 'Ready to Serve')}</option>
+              <option value={ORDER_STATUS.PREPARING}>{t('common.preparing', null, 'In Kitchen')}</option>
+              <option value={ORDER_STATUS.KOT_SENT}>{t('orders.kotSent', null, 'KOT Sent')}</option>
+              <option value={ORDER_STATUS.HOLD}>{t('orders.holdOrders', null, 'Hold / Paused')}</option>
+              <option value={ORDER_STATUS.CANCELLED}>{t('common.cancelled', null, 'Cancelled')}</option>
+              <option value={ORDER_STATUS.REJECTED}>{t('common.rejected', null, 'Rejected')}</option>
+            </select>
+          </div>
 
           {/* Customer Filter */}
           <div>
@@ -674,6 +714,8 @@ export const OrderHistoryPage = () => {
             pagination={historyData?.pagination}
             onPageChange={handlePageChange}
             onPageSizeChange={handleLimitChange}
+            defaultSortKey="createdAt"
+            defaultSortDirection="desc"
           />
         </div>
       )}
@@ -691,6 +733,8 @@ export const OrderHistoryPage = () => {
               data={historyData?.categoryBreakdown || []}
               loading={loading}
               emptyMessage={t('reports.noCategorySales', null, 'No category sales recorded in this date range.')}
+              defaultSortKey="revenue"
+              defaultSortDirection="desc"
             />
           </div>
         </div>
@@ -709,6 +753,8 @@ export const OrderHistoryPage = () => {
               data={historyData?.dailyBreakdown || []}
               loading={loading}
               emptyMessage={t('reports.noDailySales', null, 'No daily sales records found for this period.')}
+              defaultSortKey="date"
+              defaultSortDirection="desc"
             />
           </div>
         </div>
@@ -754,8 +800,8 @@ export const OrderHistoryPage = () => {
             {/* Dishes & Items Table */}
             <div>
               <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">{t('kitchen.orderedDishes', null, 'Ordered Dishes & Items')}</h4>
-              <div className="border border-slate-200 rounded-xl overflow-hidden">
-                <table className="w-full text-xs text-left">
+              <div className="border border-slate-200 rounded-xl overflow-x-auto">
+                <table className="w-full min-w-[500px] sm:min-w-0 text-xs text-left">
                   <thead className="bg-slate-50 text-slate-500 font-bold border-b border-slate-200">
                     <tr>
                       <th className="py-2.5 px-3">#</th>
@@ -822,10 +868,11 @@ export const OrderHistoryPage = () => {
             </div>
 
             {/* Footer Buttons */}
-            <div className="flex justify-end gap-2 pt-2 border-t border-slate-200">
+            <div className="flex flex-col sm:flex-row justify-end gap-2 pt-2 border-t border-slate-200">
               <Button
                 variant="secondary"
                 icon={Printer}
+                className="w-full sm:w-auto"
                 onClick={() => {
                   try {
                     const billData = selectedOrder.bill || {

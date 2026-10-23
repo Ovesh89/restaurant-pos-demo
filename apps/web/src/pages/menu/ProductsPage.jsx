@@ -563,11 +563,11 @@ export const ProductsPage = () => {
             ></textarea>
           </div>
 
-          <div className="flex justify-end gap-2 pt-4 border-t border-slate-100">
-            <Button variant="secondary" onClick={() => setIsModalOpen(false)}>
+          <div className="flex flex-col sm:flex-row justify-end gap-2 pt-4 border-t border-slate-100">
+            <Button variant="secondary" className="w-full sm:w-auto" onClick={() => setIsModalOpen(false)}>
               {t('common.cancel', 'Cancel')}
             </Button>
-            <Button type="submit" loading={formLoading}>
+            <Button type="submit" className="w-full sm:w-auto" loading={formLoading}>
               {editingProduct ? t('common.save', 'Save Updates') : t('common.create', 'Add to Menu')}
             </Button>
           </div>
@@ -625,11 +625,11 @@ export const ProductsPage = () => {
             ></textarea>
           </div>
 
-          <div className="flex justify-end gap-2 pt-4 border-t border-slate-100">
-            <Button variant="secondary" onClick={() => setIsPriceModalOpen(false)}>
+          <div className="flex flex-col sm:flex-row justify-end gap-2 pt-4 border-t border-slate-100">
+            <Button variant="secondary" className="w-full sm:w-auto" onClick={() => setIsPriceModalOpen(false)}>
               {t('common.cancel', 'Cancel')}
             </Button>
-            <Button type="submit" variant="primary" loading={priceLoading}>
+            <Button type="submit" variant="primary" className="w-full sm:w-auto" loading={priceLoading}>
               {t('common.save', 'Commit Price Change')}
             </Button>
           </div>
@@ -684,7 +684,7 @@ export const ProductsPage = () => {
           )}
 
           <div className="flex justify-end pt-3 border-t border-slate-100">
-            <Button variant="secondary" onClick={() => setIsHistoryModalOpen(false)}>
+            <Button variant="secondary" className="w-full sm:w-auto" onClick={() => setIsHistoryModalOpen(false)}>
               {t('common.close', 'Close')}
             </Button>
           </div>

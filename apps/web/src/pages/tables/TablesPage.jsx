@@ -89,36 +89,36 @@ export const TablesPage = () => {
         const activeOrderId = tbl.activeOrderId || activeOrder?.id || null;
 
         if (activeOrder) {
-          if (!effectiveStatus || effectiveStatus === TABLE_STATUS.AVAILABLE) {
-            switch (activeOrder.status) {
-              case 'WAITING_CONFIRMATION':
-              case 'DRAFT':
-              case 'HOLD':
-                effectiveStatus = TABLE_STATUS.ORDER_IN_PROGRESS;
-                break;
-              case 'CONFIRMED':
-              case 'KOT_SENT':
-                effectiveStatus = TABLE_STATUS.KOT_SENT;
-                break;
-              case 'PREPARING':
-                effectiveStatus = TABLE_STATUS.PREPARING;
-                break;
-              case 'READY':
-                effectiveStatus = TABLE_STATUS.READY;
-                break;
-              case 'SERVED':
-                effectiveStatus = TABLE_STATUS.SERVED;
-                break;
-              case 'BILLING':
-              case 'BILL_PENDING':
-              case 'PAYMENT_PENDING':
-                effectiveStatus = TABLE_STATUS.BILL_PENDING;
-                break;
-              default:
-                effectiveStatus = TABLE_STATUS.OCCUPIED;
-                break;
-            }
+          switch (activeOrder.status) {
+            case 'WAITING_CONFIRMATION':
+            case 'DRAFT':
+            case 'HOLD':
+              effectiveStatus = TABLE_STATUS.ORDER_IN_PROGRESS;
+              break;
+            case 'CONFIRMED':
+            case 'KOT_SENT':
+              effectiveStatus = TABLE_STATUS.KOT_SENT;
+              break;
+            case 'PREPARING':
+              effectiveStatus = TABLE_STATUS.PREPARING;
+              break;
+            case 'READY':
+              effectiveStatus = TABLE_STATUS.READY;
+              break;
+            case 'SERVED':
+              effectiveStatus = TABLE_STATUS.SERVED;
+              break;
+            case 'BILLING':
+            case 'BILL_PENDING':
+            case 'PAYMENT_PENDING':
+              effectiveStatus = TABLE_STATUS.BILL_PENDING;
+              break;
+            default:
+              effectiveStatus = TABLE_STATUS.OCCUPIED;
+              break;
           }
+        } else if (!tbl.activeOrderId) {
+          effectiveStatus = TABLE_STATUS.AVAILABLE;
         }
 
         return {
@@ -496,11 +496,11 @@ export const TablesPage = () => {
             required
           />
 
-          <div className="flex justify-end gap-2 pt-4 border-t border-slate-100">
-            <Button variant="secondary" onClick={() => setIsModalOpen(false)}>
+          <div className="flex flex-col sm:flex-row justify-end gap-2 pt-4 border-t border-slate-100">
+            <Button variant="secondary" className="w-full sm:w-auto" onClick={() => setIsModalOpen(false)}>
               {t('common.cancel', 'Cancel')}
             </Button>
-            <Button type="submit" loading={formLoading}>
+            <Button type="submit" className="w-full sm:w-auto" loading={formLoading}>
               {editingTable ? t('common.save', 'Save Table') : t('common.create', 'Create Table')}
             </Button>
           </div>
@@ -548,11 +548,11 @@ export const TablesPage = () => {
             onChange={(e) => setTransferReason(e.target.value)}
           />
 
-          <div className="flex justify-end gap-2 pt-4 border-t border-slate-100">
-            <Button variant="secondary" onClick={() => setIsTransferModalOpen(false)}>
+          <div className="flex flex-col sm:flex-row justify-end gap-2 pt-4 border-t border-slate-100">
+            <Button variant="secondary" className="w-full sm:w-auto" onClick={() => setIsTransferModalOpen(false)}>
               {t('common.cancel', 'Cancel')}
             </Button>
-            <Button type="submit" variant="primary" icon={ArrowRightLeft} loading={transferLoading}>
+            <Button type="submit" variant="primary" icon={ArrowRightLeft} className="w-full sm:w-auto" loading={transferLoading}>
               {t('tables.confirmTransfer', 'Confirm Transfer')}
             </Button>
           </div>

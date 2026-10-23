@@ -171,8 +171,12 @@ class BillLocalRepository {
 
     storageAdapter.setItem(STORAGE_KEYS.BILLS, bills);
 
-    // Update order status to BILLING if not yet settled
-    if (!calc.isSettled && order.status !== ORDER_STATUS.BILLING) {
+    // Update order status to BILLING only if not yet settled and not already in an operational state (SERVED, READY, PREPARING)
+    if (
+      !calc.isSettled &&
+      order.status !== ORDER_STATUS.BILLING &&
+      !['SERVED', 'READY', 'PREPARING', 'COMPLETED', 'CANCELLED', 'REJECTED'].includes(order.status)
+    ) {
       const orders = storageAdapter.getItem(STORAGE_KEYS.ORDERS) || [];
       const ordIdx = orders.findIndex((o) => o.id === order.id);
       if (ordIdx > -1) {
@@ -330,6 +334,31 @@ class BillLocalRepository {
       bills[idx] = bill;
       storageAdapter.setItem(STORAGE_KEYS.BILLS, bills);
     }
+
+    // Mark linked order COMPLETED and active KOTs SERVED in local storage
+    if (bill.orderId) {
+      const orders = storageAdapter.getItem(STORAGE_KEYS.ORDERS) || [];
+      const ordIdx = orders.findIndex((o) => o.id === bill.orderId || o.orderNo === bill.orderId);
+      if (ordIdx > -1) {
+        orders[ordIdx].status = 'COMPLETED';
+        orders[ordIdx].updatedAt = new Date().toISOString();
+        storageAdapter.setItem(STORAGE_KEYS.ORDERS, orders);
+      }
+
+      const kots = storageAdapter.getItem(STORAGE_KEYS.KOTS) || [];
+      let kotsModified = false;
+      const updatedKots = kots.map((k) => {
+        if ((k.orderId === bill.orderId || k.orderId === bill.orderNumber) && k.status !== 'CANCELLED') {
+          kotsModified = true;
+          return { ...k, status: 'SERVED', updatedAt: new Date().toISOString() };
+        }
+        return k;
+      });
+      if (kotsModified) {
+        storageAdapter.setItem(STORAGE_KEYS.KOTS, updatedKots);
+      }
+    }
+
     return bill;
   }
 

@@ -8,7 +8,7 @@ export function getIstDateKey(date = new Date()) {
     timeZone: 'Asia/Kolkata',
     day: '2-digit',
     month: '2-digit',
-    year: 'numeric',
+    year: '2-digit',
   }).format(date);
   return istDateStr.replace(/[^0-9]/g, '');
 }

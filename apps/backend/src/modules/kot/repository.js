@@ -84,6 +84,22 @@ export class KOTRepository extends BaseMongoRepository {
     }
     return this.findMany(query, { sort: { createdAt: 1 } });
   }
+
+  async cancelKotsForOrder(orderId, reason = 'Order cancelled or rejected') {
+    const now = BaseMongoRepository.utcNowIso();
+    const col = await this.collection();
+    const orderIdKeys = Array.isArray(orderId) ? orderId : [String(orderId)];
+    return col.updateMany(
+      { orderId: { $in: orderIdKeys }, status: { $nin: ['CANCELLED', 'SERVED'] } },
+      {
+        $set: {
+          status: 'CANCELLED',
+          notes: `CANCELLED: ${reason}`,
+          updatedAt: now,
+        },
+      }
+    );
+  }
 }
 
 export const kotRepository = new KOTRepository();

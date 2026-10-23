@@ -288,7 +288,36 @@ class KOTService {
   }
 
   async listKots(filters = {}) {
-    return kotRepository.listKots(filters);
+    const paginated = await kotRepository.listKots(filters);
+    const kots = paginated.items || [];
+    if (kots.length === 0) return paginated;
+
+    const orderIds = [...new Set(kots.map((k) => k.orderId).filter(Boolean))];
+    if (orderIds.length > 0) {
+      const orders = await orderRepository.findMany({
+        $or: [
+          { _id: { $in: orderIds } },
+          { orderNumber: { $in: orderIds } },
+        ],
+      });
+      const orderMap = new Map();
+      for (const ord of orders) {
+        orderMap.set(String(ord._id), ord);
+        orderMap.set(String(ord.id), ord);
+        if (ord.orderNumber) orderMap.set(String(ord.orderNumber), ord);
+      }
+
+      paginated.items = kots.map((kot) => {
+        const ord = orderMap.get(String(kot.orderId));
+        return {
+          ...kot,
+          orderStatus: ord ? ord.status : null,
+          isOrderCompleted: ord ? ['COMPLETED', 'PAID', 'CANCELLED', 'REJECTED'].includes(ord.status) : false,
+        };
+      });
+    }
+
+    return paginated;
   }
 
   async findByOrder(orderId) {
@@ -303,9 +332,27 @@ class KOTService {
 class KitchenService {
   async getKitchenQueue({ branchId, kitchenStation = null }) {
     const kots = await kotRepository.findActiveQueue(branchId, kitchenStation);
+    if (!kots || kots.length === 0) return [];
+
+    // Safety filter: Exclude any KOTs whose orders are cancelled, rejected, completed, or deleted
+    const orderIds = [...new Set(kots.map((k) => k.orderId).filter(Boolean))];
+    let activeOrderIdsSet = new Set(orderIds);
+    if (orderIds.length > 0) {
+      const activeOrders = await orderRepository.findMany({
+        $or: [
+          { _id: { $in: orderIds }, status: { $nin: ['CANCELLED', 'REJECTED', 'COMPLETED'] } },
+          { orderNumber: { $in: orderIds }, status: { $nin: ['CANCELLED', 'REJECTED', 'COMPLETED'] } },
+        ],
+      });
+      activeOrderIdsSet = new Set(
+        activeOrders.flatMap((o) => [String(o._id), String(o.id), String(o.orderNumber)].filter(Boolean))
+      );
+    }
+
+    const filteredKots = kots.filter((kot) => activeOrderIdsSet.has(String(kot.orderId)));
     const nowMs = Date.now();
 
-    return kots.map((kot) => {
+    return filteredKots.map((kot) => {
       let elapsedMinutes = 0;
       if (kot.createdAt) {
         const createdMs = new Date(kot.createdAt).getTime();
@@ -366,11 +413,19 @@ class KitchenService {
     const tableId = kot.tableId;
     const branchId = kot.branchId;
 
+    // Check existing order state: do not revert completed or cancelled orders
+    const order = orderId ? await orderRepository.findById(orderId) : null;
+    const isOrderTerminal = order && ['COMPLETED', 'CANCELLED', 'REJECTED'].includes(order.status);
+
+    // Check table state: only update table status if it still has this active order
+    const table = tableId ? await tableRepository.findById(tableId) : null;
+    const isTableAssigned = table && (table.activeOrderId === orderId || (!table.activeOrderId && !isOrderTerminal && table.status !== 'AVAILABLE'));
+
     if (newStatus === 'PREPARING') {
-      if (tableId) {
+      if (tableId && isTableAssigned && !isOrderTerminal) {
         await tableRepository.updateById(tableId, { status: 'PREPARING' });
       }
-      if (orderId) {
+      if (orderId && !isOrderTerminal && order.status !== 'SERVED' && order.status !== 'BILLING') {
         await orderRepository.updateStatus(orderId, 'PREPARING');
         await orderEventRepository.recordEvent({
           orderId,
@@ -383,10 +438,10 @@ class KitchenService {
         });
       }
     } else if (newStatus === 'READY') {
-      if (tableId) {
+      if (tableId && isTableAssigned && !isOrderTerminal) {
         await tableRepository.updateById(tableId, { status: 'READY' });
       }
-      if (orderId) {
+      if (orderId && !isOrderTerminal && order.status !== 'SERVED' && order.status !== 'BILLING') {
         await orderRepository.updateStatus(orderId, 'READY');
         await orderEventRepository.recordEvent({
           orderId,
@@ -413,14 +468,14 @@ class KitchenService {
         },
       });
     } else if (newStatus === 'SERVED') {
-      if (orderId) {
+      if (orderId && !isOrderTerminal) {
         const allKots = await kotRepository.findByOrder(orderId);
         const activeKots = allKots.filter((k) => k.status !== 'CANCELLED');
         const allServed = activeKots.every((k) => k.status === 'SERVED' || k._id === kotId);
 
         if (allServed) {
           await orderRepository.updateStatus(orderId, 'SERVED', { servedAt: now });
-          if (tableId) {
+          if (tableId && isTableAssigned) {
             await tableRepository.updateById(tableId, { status: 'SERVED' });
           }
         }

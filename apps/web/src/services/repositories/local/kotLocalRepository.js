@@ -111,7 +111,42 @@ class KOTLocalRepository {
       details: `${currentKOT.kotNo} moved from ${oldStatus} to ${newStatus}.`
     });
 
+    if (newStatus === 'SERVED' && currentKOT.orderId) {
+      const orderKots = kots.filter((k) => k.orderId === currentKOT.orderId && k.status !== 'CANCELLED');
+      const allServed = orderKots.length > 0 && orderKots.every((k) => k.status === 'SERVED');
+      if (allServed) {
+        const orders = storageAdapter.getItem(STORAGE_KEYS.ORDERS) || [];
+        const ordIdx = orders.findIndex((o) => o.id === currentKOT.orderId);
+        if (ordIdx !== -1) {
+          orders[ordIdx].status = 'SERVED';
+          orders[ordIdx].updatedAt = new Date().toISOString();
+          storageAdapter.setItem(STORAGE_KEYS.ORDERS, orders);
+        }
+      }
+    }
+
     return currentKOT;
+  }
+
+  async cancelKOTsByOrderId(orderId, reason = 'Order cancelled or rejected') {
+    const kots = storageAdapter.getItem(STORAGE_KEYS.KOTS) || [];
+    let modified = false;
+    const targetIdStr = String(orderId);
+    const updatedKots = kots.map((k) => {
+      if (String(k.orderId) === targetIdStr && k.status !== KOT_STATUS.CANCELLED && k.status !== 'SERVED') {
+        modified = true;
+        return {
+          ...k,
+          status: KOT_STATUS.CANCELLED,
+          notes: `CANCELLED: ${reason}`,
+          updatedAt: new Date().toISOString()
+        };
+      }
+      return k;
+    });
+    if (modified) {
+      storageAdapter.setItem(STORAGE_KEYS.KOTS, updatedKots);
+    }
   }
 }
 

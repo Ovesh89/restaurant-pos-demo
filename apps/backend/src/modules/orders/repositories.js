@@ -85,8 +85,16 @@ export class OrderRepository extends BaseMongoRepository {
         expandedStatuses.add('BILL_PENDING');
       }
 
+      // Hold / Draft Compatibility Shim
+      if (expandedStatuses.has('HOLD') || expandedStatuses.has('DRAFT')) {
+        expandedStatuses.add('HOLD');
+        expandedStatuses.add('DRAFT');
+      }
+
       const statusList = [...expandedStatuses];
-      if (statusList.length === 1) {
+      if (statusList.length === 2 && expandedStatuses.has('HOLD') && expandedStatuses.has('DRAFT')) {
+        query.status = { $in: ['HOLD', 'DRAFT'] };
+      } else if (statusList.length === 1) {
         query.status = statusList[0];
       } else if (statusList.length > 1) {
         query.status = { $in: statusList };

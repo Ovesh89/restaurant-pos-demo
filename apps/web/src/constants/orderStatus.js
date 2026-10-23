@@ -1,5 +1,6 @@
 export const ORDER_STATUS = {
   DRAFT: 'DRAFT',
+  HOLD: 'HOLD',
   SUBMITTED: 'SUBMITTED',
   WAITING_CONFIRMATION: 'WAITING_CONFIRMATION',
   CONFIRMED: 'CONFIRMED',
@@ -15,7 +16,8 @@ export const ORDER_STATUS = {
 };
 
 export const ORDER_STATUS_CONFIG = {
-  [ORDER_STATUS.DRAFT]: { label: 'Draft / Hold', color: 'bg-slate-100 text-slate-700 border-slate-300' },
+  [ORDER_STATUS.DRAFT]: { label: 'Draft', color: 'bg-slate-100 text-slate-700 border-slate-300' },
+  [ORDER_STATUS.HOLD]: { label: 'Hold / Paused', color: 'bg-amber-100 text-amber-800 border-amber-300' },
   [ORDER_STATUS.SUBMITTED]: { label: 'Submitted', color: 'bg-blue-50 text-blue-700 border-blue-200' },
   [ORDER_STATUS.WAITING_CONFIRMATION]: { label: 'Waiting Approval', color: 'bg-amber-100 text-amber-800 border-amber-300' },
   [ORDER_STATUS.CONFIRMED]: { label: 'Confirmed', color: 'bg-indigo-100 text-indigo-800 border-indigo-300' },
@@ -55,7 +57,8 @@ export const getOrderStatusConfig = (status, t = null) => {
   if (!t) return base;
 
   const keyMap = {
-    [ORDER_STATUS.DRAFT]: 'orders.holdOrder',
+    [ORDER_STATUS.DRAFT]: 'common.draft',
+    [ORDER_STATUS.HOLD]: 'orders.holdOrder',
     [ORDER_STATUS.SUBMITTED]: 'common.submitted',
     [ORDER_STATUS.WAITING_CONFIRMATION]: 'dashboard.waitingApproval',
     [ORDER_STATUS.CONFIRMED]: 'common.confirmed',
@@ -63,8 +66,8 @@ export const getOrderStatusConfig = (status, t = null) => {
     [ORDER_STATUS.PREPARING]: 'common.preparing',
     [ORDER_STATUS.READY]: 'common.ready',
     [ORDER_STATUS.SERVED]: 'common.served',
-    [ORDER_STATUS.BILLING]: 'common.billed',
-    [ORDER_STATUS.PAYMENT_PENDING]: 'common.pending',
+    [ORDER_STATUS.BILLING]: 'orders.inBilling',
+    [ORDER_STATUS.PAYMENT_PENDING]: 'orders.billPending',
     [ORDER_STATUS.COMPLETED]: 'common.completed',
     [ORDER_STATUS.CANCELLED]: 'common.cancelled',
     [ORDER_STATUS.REJECTED]: 'common.rejected'

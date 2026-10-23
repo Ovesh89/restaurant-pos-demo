@@ -281,11 +281,18 @@ class OrderLocalRepository {
     }
 
     const order = orders[index];
-    if (order.status !== ORDER_STATUS.WAITING_CONFIRMATION && order.status !== ORDER_STATUS.SUBMITTED) {
+    if (
+      order.status !== ORDER_STATUS.WAITING_CONFIRMATION &&
+      order.status !== ORDER_STATUS.SUBMITTED &&
+      order.status !== ORDER_STATUS.HOLD &&
+      order.status !== ORDER_STATUS.DRAFT
+    ) {
       throw new Error(`Order cannot be confirmed from status "${order.status}".`);
     }
 
     order.status = ORDER_STATUS.KOT_SENT;
+    order.held = false;
+    order.holdReason = '';
     order.kotRevision = (order.kotRevision || 0) + 1;
     order.confirmedBy = actor.name;
     order.confirmedAt = new Date().toISOString();
@@ -323,6 +330,10 @@ class OrderLocalRepository {
     return { order, kotTicket };
   }
 
+  async activateOrder(orderId, actor = { id: 'staff', name: 'Staff' }) {
+    return this.confirmOrder(orderId, actor);
+  }
+
   /**
    * Reception Rejection: Returns order with mandatory reason
    */
@@ -339,6 +350,8 @@ class OrderLocalRepository {
 
     const order = orders[index];
     order.status = ORDER_STATUS.REJECTED;
+    order.held = false;
+    order.holdReason = '';
     order.rejectionReason = reason.trim();
     order.updatedAt = new Date().toISOString();
 
@@ -352,6 +365,11 @@ class OrderLocalRepository {
       null,
       actor
     );
+
+    // Cancel all associated active KOTs so they are removed from KDS
+    if (kotRepository.cancelKOTsByOrderId) {
+      await kotRepository.cancelKOTsByOrderId(orderId, reason.trim());
+    }
 
     await auditRepository.logEvent({
       actorId: actor.id,
@@ -648,10 +666,14 @@ class OrderLocalRepository {
     );
 
     // Cancel all associated active KOTs
-    const kots = await kotRepository.getKOTs({ orderId });
-    for (const k of kots) {
-      if (k.status !== KOT_STATUS.CANCELLED) {
-        await kotRepository.updateKOTStatus(k.id, KOT_STATUS.CANCELLED, actor);
+    if (kotRepository.cancelKOTsByOrderId) {
+      await kotRepository.cancelKOTsByOrderId(orderId, reason.trim());
+    } else {
+      const kots = await kotRepository.getKOTs({ orderId });
+      for (const k of kots) {
+        if (k.status !== KOT_STATUS.CANCELLED) {
+          await kotRepository.updateKOTStatus(k.id, KOT_STATUS.CANCELLED, actor);
+        }
       }
     }
 
@@ -717,6 +739,48 @@ class OrderLocalRepository {
     return order;
   }
 
+  async updateOrderStatus(orderId, newStatus, reason = null, actor = { id: 'staff', name: 'Staff' }) {
+    const orders = storageAdapter.getItem(STORAGE_KEYS.ORDERS) || [];
+    const index = this._findOrderIndex(orders, orderId);
+    if (index === -1) throw new Error('Order not found');
+
+    const order = orders[index];
+    order.status = newStatus;
+    if (newStatus === ORDER_STATUS.CANCELLED) {
+      order.cancellationReason = reason || 'Cancelled by staff';
+    } else if (newStatus === ORDER_STATUS.REJECTED) {
+      order.rejectionReason = reason || 'Rejected by staff';
+    }
+    order.updatedAt = new Date().toISOString();
+    orders[index] = order;
+    storageAdapter.setItem(STORAGE_KEYS.ORDERS, orders);
+
+    if (order.tableId) {
+      if (newStatus === ORDER_STATUS.COMPLETED || newStatus === ORDER_STATUS.CANCELLED || newStatus === ORDER_STATUS.REJECTED) {
+        await tableRepository.releaseTable(order.tableId, actor);
+      } else {
+        await tableRepository.updateOperationalStatus(order.tableId, newStatus, order.id, actor);
+      }
+    }
+
+    if (newStatus === ORDER_STATUS.SERVED) {
+      const kots = storageAdapter.getItem(STORAGE_KEYS.KOTS) || [];
+      let kotsChanged = false;
+      kots.forEach((k) => {
+        if (k.orderId === order.id && k.status !== 'CANCELLED' && k.status !== 'SERVED') {
+          k.status = 'SERVED';
+          k.updatedAt = new Date().toISOString();
+          kotsChanged = true;
+        }
+      });
+      if (kotsChanged) {
+        storageAdapter.setItem(STORAGE_KEYS.KOTS, kots);
+      }
+    }
+
+    return order;
+  }
+
   async getOrderHistory(filters = {}) {
     const rawOrders = storageAdapter.getItem(STORAGE_KEYS.ORDERS) || [];
     const categories = storageAdapter.getItem(STORAGE_KEYS.CATEGORIES) || [];
@@ -757,8 +821,12 @@ class OrderLocalRepository {
       if (end && ordTime > new Date(end).getTime()) continue;
 
       if (filters.status && filters.status !== 'ALL') {
-        if (filters.status === 'COMPLETED_PAID') {
+        if (filters.status === 'COMPLETED_PAID' || filters.status === 'COMPLETED') {
           if (order.status !== ORDER_STATUS.COMPLETED && order.status !== 'PAID') continue;
+        } else if (filters.status === 'BILLING' || filters.status === 'BILL_PENDING') {
+          if (order.status !== ORDER_STATUS.BILLING && order.status !== 'BILL_PENDING') continue;
+        } else if (filters.status === 'HOLD' || filters.status === 'DRAFT') {
+          if (order.status !== ORDER_STATUS.HOLD && order.status !== ORDER_STATUS.DRAFT) continue;
         } else if (filters.status === 'ACTIVE') {
           if (
             order.status === ORDER_STATUS.COMPLETED ||
@@ -766,7 +834,7 @@ class OrderLocalRepository {
             order.status === ORDER_STATUS.REJECTED
           ) continue;
         } else if (filters.status === 'CANCELLED') {
-          if (order.status !== ORDER_STATUS.CANCELLED && order.status !== ORDER_STATUS.REJECTED) continue;
+          if (order.status !== ORDER_STATUS.CANCELLED) continue;
         } else if (order.status !== filters.status) {
           continue;
         }

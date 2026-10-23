@@ -13,6 +13,7 @@ import { customerRepository } from '../customers/repository.js';
 import { billRepository } from '../billing/repositories.js';
 import { billingService } from '../billing/service.js';
 import { kotService } from '../kot/service.js';
+import { kotRepository } from '../kot/repository.js';
 import { notificationService } from '../notifications/service.js';
 import { auditService } from '../audit/service.js';
 import { orderRepository, orderEventRepository } from './repositories.js';
@@ -214,12 +215,19 @@ class OrderService {
     const financials = calculateOrderFinancials(capturedItems);
     const orderNumber = await getNextDailyOrderSequence(branch.code || 'MAIN');
 
+    const isHeld = Boolean(held);
+    const autoApprove = Boolean(data.autoApprove);
     let status = 'DRAFT';
-    if (held) {
+    if (isHeld) {
       status = 'HOLD';
+    } else if (autoApprove) {
+      status = 'KOT_SENT';
     } else if (submitImmediately) {
       status = 'WAITING_CONFIRMATION';
     }
+
+    const isApproved = status === 'KOT_SENT';
+    const kotRevision = isApproved ? 1 : 0;
 
     const orderDoc = {
       _id: crypto.randomUUID(),
@@ -236,14 +244,14 @@ class OrderService {
       onlineOrderRef: data.onlineOrderRef || '',
       status,
       source: isTableOrder ? 'CAPTAIN' : orderType,
-      held,
+      held: isHeld,
       notes,
       items: capturedItems,
       financials,
-      kotRevision: 0,
-      submittedAt: status === 'WAITING_CONFIRMATION' ? now : null,
-      confirmedAt: null,
-      confirmedBy: null,
+      kotRevision,
+      submittedAt: status === 'WAITING_CONFIRMATION' || isApproved ? now : null,
+      confirmedAt: isApproved ? now : null,
+      confirmedBy: isApproved ? (captainName || 'Staff') : null,
       servedAt: null,
       completedAt: null,
       cancelledAt: null,
@@ -255,14 +263,23 @@ class OrderService {
 
     const serializedOrder = await orderRepository.insertOne(orderDoc);
 
-    // Update Table status to OCCUPIED only if Dine-in
-    if (tableId) {
-      await tableRepository.updateById(tableId, {
-        status: 'OCCUPIED',
-        activeOrderId: serializedOrder.id,
+    let initialKot = null;
+    if (isApproved) {
+      initialKot = await kotService.createInitialKot({
+        order: serializedOrder,
+        actorId: captainId,
+        actorName: captainName || 'Staff',
+        branchCode: branch.code || 'MAIN',
       });
     }
 
+    // Update Table status to KOT_SENT (or OCCUPIED) only if Dine-in
+    if (tableId) {
+      await tableRepository.updateById(tableId, {
+        status: isApproved ? 'KOT_SENT' : 'OCCUPIED',
+        activeOrderId: serializedOrder.id,
+      });
+    }
 
     // Record ORDER_CREATED event
     await orderEventRepository.recordEvent({
@@ -275,7 +292,19 @@ class OrderService {
       metadata: { orderNumber, tableNumber: tableNumber || null },
     });
 
-    if (status === 'WAITING_CONFIRMATION') {
+    if (isApproved) {
+      await orderEventRepository.recordEvent({
+        orderId: serializedOrder.id,
+        branchId,
+        eventType: 'ORDER_CONFIRMED',
+        fromStatus: 'DRAFT',
+        toStatus: 'KOT_SENT',
+        actorId: captainId,
+        metadata: initialKot
+          ? { kotId: initialKot.id, kotNumber: initialKot.kotNumber }
+          : { notes: 'Order confirmed immediately without manual approval' },
+      });
+    } else if (status === 'WAITING_CONFIRMATION') {
       await orderEventRepository.recordEvent({
         orderId: serializedOrder.id,
         branchId,
@@ -302,19 +331,24 @@ class OrderService {
       action: 'ORDER_CREATED',
       entityType: 'ORDER',
       entityId: serializedOrder.id,
-      metadata: { orderNumber, itemCount: capturedItems.length },
+      metadata: { orderNumber, itemCount: capturedItems.length, autoApproved: !isHeld },
     });
 
     return {
       ...serializedOrder,
-      kots: [],
+      kots: initialKot ? [initialKot] : [],
     };
   }
 
-  async submitOrder({ orderId, actorId, actorName }) {
+  async submitOrder({ orderId, actorId, actorName, autoApprove = false }) {
     const order = await orderRepository.findById(orderId);
     if (!order) {
       throw new NotFoundAppError('Order not found.');
+    }
+
+    if (autoApprove) {
+      const confirmRes = await this.confirmOrder({ orderId, actorId, actorName });
+      return confirmRes.order || confirmRes;
     }
 
     const currentStatus = order.status;
@@ -323,7 +357,9 @@ class OrderService {
     }
 
     if (!['DRAFT', 'HOLD'].includes(currentStatus)) {
-      throw new StateConflictError(`Cannot submit order in status '${currentStatus}'.`);
+      throw new StateConflictError(
+        `Cannot submit order in status '${currentStatus}'.`
+      );
     }
 
     const now = utcNowIso();
@@ -344,20 +380,10 @@ class OrderService {
     await notificationService.notify({
       branchId: order.branchId,
       eventType: 'ORDER_SUBMITTED',
-      title: `Order Submitted: Table ${order.tableNumber || ''}`,
-      message: `Order ${order.orderNumber} is ready for review.`,
+      title: order.tableNumber ? `New Order: Table ${order.tableNumber}` : 'New Order',
+      message: `Order ${order.orderNumber} submitted by ${actorName || 'Staff'} awaiting confirmation.`,
       recipientRole: 'RECEPTION',
       metadata: { orderId, orderNumber: order.orderNumber },
-    });
-
-    await auditService.logAction({
-      branchId: order.branchId,
-      actorId,
-      actorName,
-      action: 'ORDER_SUBMITTED',
-      entityType: 'ORDER',
-      entityId: orderId,
-      metadata: { orderNumber: order.orderNumber },
     });
 
     return {
@@ -454,9 +480,9 @@ class OrderService {
       };
     }
 
-    if (currentStatus !== 'WAITING_CONFIRMATION') {
+    if (!['WAITING_CONFIRMATION', 'DRAFT', 'HOLD'].includes(currentStatus)) {
       throw new StateConflictError(
-        `Order cannot be confirmed in status '${currentStatus}'. Expected 'WAITING_CONFIRMATION'.`
+        `Order cannot be confirmed in status '${currentStatus}'.`
       );
     }
 
@@ -465,7 +491,9 @@ class OrderService {
       confirmedAt: now,
       confirmedBy: actorName,
       confirmedByUserId: actorId,
-      kotRevision: 1,
+      kotRevision: Math.max(1, order.kotRevision || 1),
+      held: false,
+      holdReason: '',
     });
 
     const kot = await kotService.createInitialKot({
@@ -475,7 +503,7 @@ class OrderService {
     });
 
     if (updatedOrder.tableId) {
-      await tableRepository.updateById(updatedOrder.tableId, { status: 'KOT_SENT' });
+      await tableRepository.updateById(updatedOrder.tableId, { status: 'KOT_SENT', activeOrderId: orderId });
     }
 
     await orderEventRepository.recordEvent({
@@ -516,7 +544,7 @@ class OrderService {
     }
 
     const currentStatus = order.status;
-    if (currentStatus !== 'WAITING_CONFIRMATION') {
+    if (['COMPLETED', 'CANCELLED', 'REJECTED'].includes(currentStatus)) {
       throw new StateConflictError(`Cannot reject order in status '${currentStatus}'.`);
     }
 
@@ -525,12 +553,49 @@ class OrderService {
     const updated = await orderRepository.updateStatus(orderId, 'REJECTED', {
       rejectionReason: trimmedReason,
       rejectedAt: now,
+      held: false,
+      holdReason: '',
     });
 
+    // Cancel all existing KOTs for this order so they disappear from Kitchen Display System (KDS)
+    const orderIdentifiers = [order._id, order.id, order.orderNumber].filter(Boolean).map(String);
+    await kotRepository.cancelKotsForOrder(orderIdentifiers, trimmedReason);
+
+    // If KOT was sent, record cancellation KOT ticket
+    if (['CONFIRMED', 'KOT_SENT', 'PREPARING', 'READY'].includes(currentStatus)) {
+      await kotService.createCancellationKot({
+        order,
+        reason: trimmedReason,
+        actorId,
+        actorName,
+      });
+    }
+
+    // Immediately release the table to AVAILABLE
     if (order.tableId) {
       await tableRepository.updateById(order.tableId, {
         status: 'AVAILABLE',
         activeOrderId: null,
+      });
+    } else if (order.tableNumber) {
+      const tbl = await tableRepository.findOne({ branchId: order.branchId, tableNumber: order.tableNumber });
+      if (tbl) {
+        await tableRepository.updateById(tbl._id, {
+          status: 'AVAILABLE',
+          activeOrderId: null,
+        });
+      }
+    }
+
+    // Cancel any open unsettled bill
+    const openBill = await billRepository.findOne({
+      orderId: order._id || order.id,
+      status: { $nin: ['COMPLETED', 'CANCELLED'] },
+    });
+    if (openBill) {
+      await billRepository.updateById(openBill._id || openBill.id, {
+        status: 'CANCELLED',
+        updatedAt: now,
       });
     }
 
@@ -703,7 +768,13 @@ class OrderService {
       cancelledAt: now,
       items: cancelledItems,
       financials,
+      held: false,
+      holdReason: '',
     });
+
+    // Cancel all existing KOTs for this order so they disappear from Kitchen Display System (KDS)
+    const orderIdentifiers = [canonicalOrderId, order.id, order.orderNumber].filter(Boolean).map(String);
+    await kotRepository.cancelKotsForOrder(orderIdentifiers, trimmedReason);
 
     if (
       ['CONFIRMED', 'KOT_SENT', 'PREPARING', 'READY', 'SERVED', 'BILL_PENDING'].includes(
@@ -722,6 +793,26 @@ class OrderService {
       await tableRepository.updateById(order.tableId, {
         status: 'AVAILABLE',
         activeOrderId: null,
+      });
+    } else if (order.tableNumber) {
+      const tbl = await tableRepository.findOne({ branchId: order.branchId, tableNumber: order.tableNumber });
+      if (tbl) {
+        await tableRepository.updateById(tbl._id, {
+          status: 'AVAILABLE',
+          activeOrderId: null,
+        });
+      }
+    }
+
+    // Cancel any open unsettled bill for this order
+    const openBill = await billRepository.findOne({
+      orderId: canonicalOrderId,
+      status: { $nin: ['COMPLETED', 'CANCELLED'] },
+    });
+    if (openBill) {
+      await billRepository.updateById(openBill._id || openBill.id, {
+        status: 'CANCELLED',
+        updatedAt: now,
       });
     }
 
@@ -749,6 +840,91 @@ class OrderService {
       ...updated,
       kots: await kotService.findByOrder(canonicalOrderId),
     };
+  }
+
+  async updateOrderStatus({ orderId, newStatus, reason = null, actorId, actorName }) {
+    const order = await orderRepository.findById(orderId);
+    if (!order) {
+      throw new NotFoundAppError('Order not found.');
+    }
+
+    const currentStatus = order.status;
+    const targetStatus = String(newStatus || '').toUpperCase().trim();
+
+    if (currentStatus === targetStatus) {
+      return this.getOrder(orderId);
+    }
+
+    if (targetStatus === 'CANCELLED') {
+      return this.cancelOrder({ orderId, reason: reason || 'Cancelled by staff', actorId, actorName });
+    }
+    if (targetStatus === 'REJECTED') {
+      return this.rejectOrder({ orderId, reason: reason || 'Rejected by staff', actorId, actorName });
+    }
+    if (targetStatus === 'CONFIRMED' || targetStatus === 'KOT_SENT') {
+      return this.confirmOrder({ orderId, actorId, actorName });
+    }
+
+    const now = utcNowIso();
+    const updateFields = { updatedAt: now };
+    if (targetStatus === 'SERVED') {
+      updateFields.servedAt = now;
+    } else if (targetStatus === 'COMPLETED') {
+      updateFields.completedAt = now;
+    }
+
+    const updatedOrder = await orderRepository.updateStatus(orderId, targetStatus, updateFields);
+
+    // Update table status if dine-in
+    if (order.tableId) {
+      if (targetStatus === 'COMPLETED') {
+        await tableRepository.updateById(order.tableId, { status: 'AVAILABLE', activeOrderId: null });
+      } else {
+        await tableRepository.updateById(order.tableId, { status: targetStatus });
+      }
+    }
+
+    // Update active KOTs if advancing to PREPARING, READY, SERVED, or COMPLETED
+    if (['PREPARING', 'READY', 'SERVED', 'COMPLETED'].includes(targetStatus)) {
+      const kotTargetStatus = targetStatus === 'COMPLETED' ? 'SERVED' : targetStatus;
+      const orderIdentifiers = [order._id, order.id, order.orderNumber].filter(Boolean).map(String);
+      const activeKots = await kotRepository.findMany({
+        orderId: { $in: orderIdentifiers },
+        status: { $nin: ['CANCELLED', 'SERVED'] },
+      });
+      for (const k of activeKots) {
+        await kotRepository.updateById(k._id || k.id, {
+          status: kotTargetStatus,
+          updatedAt: now,
+          ...(kotTargetStatus === 'PREPARING' ? { preparingAt: now } : {}),
+          ...(kotTargetStatus === 'READY' ? { readyAt: now } : {}),
+          ...(kotTargetStatus === 'SERVED' ? { servedAt: now } : {}),
+        });
+      }
+    }
+
+    await orderEventRepository.recordEvent({
+      orderId: order._id || order.id,
+      branchId: order.branchId,
+      eventType: `ORDER_STATUS_${targetStatus}`,
+      fromStatus: currentStatus,
+      toStatus: targetStatus,
+      actorId,
+      reason: reason || null,
+    });
+
+    await auditService.logAction({
+      branchId: order.branchId,
+      actorId,
+      actorName,
+      action: 'ORDER_STATUS_UPDATED',
+      entityType: 'ORDER',
+      entityId: order._id || order.id,
+      reason: reason || `Updated from ${currentStatus} to ${targetStatus}`,
+      metadata: { orderNumber: order.orderNumber, fromStatus: currentStatus, toStatus: targetStatus },
+    });
+
+    return this.getOrder(orderId);
   }
 
   async cancelOrderItem({ orderId, itemId, reason, actorId, actorName }) {
@@ -925,12 +1101,16 @@ class OrderService {
     }
 
     if (status && status !== 'ALL') {
-      if (status === 'COMPLETED_PAID') {
-        query.status = { $in: ['COMPLETED', 'PAID', 'BILLING', 'BILL_PENDING'] };
+      if (status === 'COMPLETED' || status === 'COMPLETED_PAID') {
+        query.status = { $in: ['COMPLETED', 'PAID'] };
+      } else if (status === 'BILLING' || status === 'BILL_PENDING') {
+        query.status = { $in: ['BILLING', 'BILL_PENDING'] };
+      } else if (status === 'HOLD' || status === 'DRAFT') {
+        query.status = { $in: ['HOLD', 'DRAFT'] };
       } else if (status === 'ACTIVE') {
         query.status = { $nin: ['COMPLETED', 'CANCELLED', 'REJECTED'] };
       } else if (status === 'CANCELLED') {
-        query.status = { $in: ['CANCELLED', 'REJECTED'] };
+        query.status = 'CANCELLED';
       } else {
         query.status = status;
       }

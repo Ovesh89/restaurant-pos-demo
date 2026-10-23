@@ -10,6 +10,7 @@ import {
 import { branchRepository, tableRepository } from '../restaurant/repositories.js';
 import { orderRepository, orderEventRepository } from '../orders/repositories.js';
 import { customerRepository } from '../customers/repository.js';
+import { kotRepository } from '../kot/repository.js';
 import { auditService } from '../audit/service.js';
 import { BillingCalculator } from './calculator.js';
 import {
@@ -124,7 +125,11 @@ class BillingService {
       });
     }
 
-    await orderRepository.updateStatus(orderId, 'BILLING');
+    // Only update order status to BILLING if order is not already in an operational state like SERVED, READY, or PREPARING.
+    // Reviewing or calculating bill details should not prematurely mark an order as billed before payment is settled.
+    if (!['SERVED', 'READY', 'PREPARING', 'COMPLETED', 'CANCELLED', 'REJECTED'].includes(order.status)) {
+      await orderRepository.updateStatus(orderId, 'BILLING');
+    }
     if (order.tableId) {
       await tableRepository.updateById(order.tableId, { status: 'BILL_PENDING' });
     }
@@ -171,7 +176,10 @@ class BillingService {
     actorId,
     actorName,
   }) {
-    const trimmedReason = String(reason || 'Discount').trim() || 'Discount';
+    if (!reason || !String(reason).trim()) {
+      throw new ValidationAppError('A non-empty discount reason is required.');
+    }
+    const trimmedReason = String(reason).trim();
 
     const dType = String(discountType || '').toUpperCase();
     if (!['PERCENTAGE', 'FIXED'].includes(dType)) {
@@ -361,14 +369,26 @@ class BillingService {
 
     const orderId = bill.orderId;
     if (orderId) {
+      const existingOrder = await orderRepository.findById(orderId);
+      const prevOrderStatus = existingOrder?.status || 'BILLING';
+
       await orderRepository.updateStatus(orderId, 'COMPLETED', {
         completedAt: now,
       });
+
+      // Mark all pending/ready KOTs for this order as SERVED so they clear from Kitchen KDS
+      const orderIdentifiers = [orderId, String(orderId), bill.orderNumber].filter(Boolean);
+      const col = await kotRepository.collection();
+      await col.updateMany(
+        { orderId: { $in: orderIdentifiers }, status: { $nin: ['CANCELLED', 'SERVED'] } },
+        { $set: { status: 'SERVED', servedAt: now, updatedAt: now } }
+      );
+
       await orderEventRepository.recordEvent({
         orderId,
         branchId: bill.branchId,
         eventType: 'ORDER_COMPLETED',
-        fromStatus: 'BILLING',
+        fromStatus: prevOrderStatus,
         toStatus: 'COMPLETED',
         actorId,
         metadata: { billId, billNumber: bill.billNumber },
