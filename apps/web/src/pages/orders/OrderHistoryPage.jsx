@@ -1091,7 +1091,7 @@ export const OrderHistoryPage = () => {
             </div>
 
             {/* Footer Buttons */}
-            <div className="flex flex-col sm:flex-row justify-end gap-2 pt-2 border-t border-slate-200">
+            <div className="flex flex-col sm:flex-row justify-end gap-2 pt-2 border-t border-slate-200 pos-modal-actions">
               <Button
                 variant="secondary"
                 icon={Printer}

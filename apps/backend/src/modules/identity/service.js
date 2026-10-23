@@ -1,4 +1,4 @@
-import { ALL_PERMISSIONS } from '../../config/permissions.js';
+import { ALL_PERMISSIONS, expandPermissions } from '../../config/permissions.js';
 import {
   AuthenticationAppError,
   ConflictAppError,
@@ -40,12 +40,13 @@ export class IdentityService {
 
     const userId = String(userDoc._id);
     const roles = await this.roleRepo.findByIds(userDoc.roleIds || []);
-    const permissionsSet = new Set();
+    const rawPermissions = [];
     for (const r of roles) {
       for (const p of r.permissions || []) {
-        permissionsSet.add(p);
+        rawPermissions.push(p);
       }
     }
+    const permissionsSet = new Set(expandPermissions(rawPermissions));
 
     await this.userRepo.updateById(userId, {
       lastLoginAt: UserRepository.utcNowIso(),
@@ -127,12 +128,13 @@ export class IdentityService {
       throw new NotFoundAppError('User not found.');
     }
     const roles = await this.roleRepo.findByIds(userDoc.roleIds || []);
-    const permissionsSet = new Set();
+    const rawPermissions = [];
     for (const r of roles) {
       for (const p of r.permissions || []) {
-        permissionsSet.add(p);
+        rawPermissions.push(p);
       }
     }
+    const permissionsSet = new Set(expandPermissions(rawPermissions));
 
     return {
       user: userDoc,

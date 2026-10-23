@@ -4,6 +4,7 @@ import {
 } from './errorHandler.js';
 import { decodeToken } from '../modules/identity/tokens.js';
 import { roleRepository, userRepository } from '../modules/identity/repositories.js';
+import { expandPermissions } from '../config/permissions.js';
 
 /**
  * JWT Bearer Authentication Middleware.
@@ -41,15 +42,17 @@ export async function authenticate(req, _res, next) {
 
     const roleIds = userDoc.roleIds || [];
     const roles = await roleRepository.findByIds(roleIds);
-    const permissionsSet = new Set();
+    const rawPermissions = [];
     const roleCodes = [];
 
     for (const r of roles) {
       if (r.code) roleCodes.push(r.code);
       for (const perm of r.permissions || []) {
-        permissionsSet.add(perm);
+        rawPermissions.push(perm);
       }
     }
+
+    const permissionsSet = new Set(expandPermissions(rawPermissions));
 
     req.user = {
       id: String(userDoc._id),

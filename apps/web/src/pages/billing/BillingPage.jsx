@@ -1642,7 +1642,7 @@ export const BillingPage = () => {
                 )}
 
                 {/* Finalize & Print Actions */}
-                <div className="flex flex-col sm:flex-row items-center gap-2 pt-2">
+                <div className="flex flex-col sm:flex-row items-center gap-2 pt-2 border-t border-slate-100 pos-modal-actions">
                   {((activeBill.balance !== undefined && activeBill.balance <= 0) || activeBill.isSettled || activeBill.rawStatus === 'COMPLETED' || activeBill.status === 'PAID') ? (
                     <>
                       <Button
@@ -1783,15 +1783,15 @@ export const BillingPage = () => {
                   )}
                 </div>
 
-                {/* Categories Pills */}
-                <div className="flex flex-wrap items-center gap-1.5 text-xs max-h-24 overflow-y-auto">
+                {/* Categories Pills (Wrapped & Scrollable) */}
+                <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 text-xs max-h-36 sm:max-h-40 overflow-y-auto pr-1">
                   <button
                     type="button"
                     onClick={() => setBillingActiveCategory('ALL')}
-                    className={`px-2.5 py-1 rounded-lg font-bold text-xs transition-colors ${
+                    className={`px-3 py-1.5 rounded-xl font-bold text-xs transition-all active:scale-95 ${
                       billingActiveCategory === 'ALL'
-                        ? 'bg-blue-600 text-white'
-                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                        ? 'bg-blue-600 text-white shadow-xs'
+                        : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
                     }`}
                   >
                     {t('common.all', null, 'All Dishes')}
@@ -1801,10 +1801,10 @@ export const BillingPage = () => {
                       key={c.id || c._id}
                       type="button"
                       onClick={() => setBillingActiveCategory(c.id || c._id)}
-                      className={`px-2.5 py-1 rounded-lg font-bold text-xs transition-colors ${
+                      className={`px-3 py-1.5 rounded-xl font-bold text-xs transition-all active:scale-95 ${
                         billingActiveCategory === (c.id || c._id)
-                          ? 'bg-blue-600 text-white'
-                          : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                          ? 'bg-blue-600 text-white shadow-xs'
+                          : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
                       }`}
                     >
                       {c.name}
@@ -1844,7 +1844,7 @@ export const BillingPage = () => {
               />
             </div>
 
-            <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
+            <div className="flex justify-end gap-2 pt-2 border-t border-slate-100 pos-modal-actions">
               <Button variant="secondary" onClick={() => setIsBillingModifyOpen(false)}>
                 {t('common.cancel', null, 'Cancel')}
               </Button>
@@ -1999,7 +1999,7 @@ export const BillingPage = () => {
             </div>
 
             {/* Actions Footer */}
-            <div className="pt-3 border-t border-slate-100 flex flex-wrap items-center justify-between gap-2">
+            <div className="pt-3 border-t border-slate-100 flex flex-wrap items-center justify-between gap-2 pos-modal-actions">
               <div className="flex items-center gap-2">
                 <Button
                   variant="secondary"
@@ -2074,7 +2074,7 @@ export const BillingPage = () => {
               placeholder="e.g. UPI Ref / Receipt No"
             />
 
-            <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
+            <div className="flex justify-end gap-2 pt-2 border-t border-slate-100 pos-modal-actions">
               <Button variant="secondary" onClick={() => setIsExtraPaymentOpen(false)}>
                 {t('common.cancel', null, 'Cancel')}
               </Button>
@@ -2109,7 +2109,7 @@ export const BillingPage = () => {
             placeholder="e.g. 9876543210"
             required
           />
-          <div className="flex justify-end gap-2 pt-2">
+          <div className="flex justify-end gap-2 pt-2 border-t border-slate-100 pos-modal-actions">
             <Button variant="secondary" onClick={() => setIsNewCustModalOpen(false)}>
               {t('common.cancel', null, 'Cancel')}
             </Button>

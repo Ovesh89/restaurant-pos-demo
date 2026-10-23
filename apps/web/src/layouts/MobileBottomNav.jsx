@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { NavLink } from 'react-router-dom';
 import { LayoutDashboard, ShoppingBag, Coffee, Receipt, Menu } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
@@ -8,6 +8,43 @@ import { PERMISSIONS } from '../constants/permissions';
 export const MobileBottomNav = ({ onOpenMenu }) => {
   const { hasAnyPermission, hasPermission } = useAuth();
   const { t } = useTranslation();
+  const [isModalOpen, setIsModalOpen] = useState(() => {
+    if (typeof document !== 'undefined') {
+      return (
+        document.body.classList.contains('has-modal-open') ||
+        document.body.getAttribute('data-modal-open') === 'true'
+      );
+    }
+    return false;
+  });
+
+  useEffect(() => {
+    const handleModalState = (e) => {
+      setIsModalOpen(Boolean(e.detail?.isOpen));
+    };
+
+    window.addEventListener('pos-modal-state', handleModalState);
+
+    // Also observe class mutations on body as fallback
+    const observer = new MutationObserver(() => {
+      const open =
+        document.body.classList.contains('has-modal-open') ||
+        document.body.getAttribute('data-modal-open') === 'true';
+      setIsModalOpen(open);
+    });
+
+    observer.observe(document.body, { attributes: true, attributeFilter: ['class', 'data-modal-open'] });
+
+    return () => {
+      window.removeEventListener('pos-modal-state', handleModalState);
+      observer.disconnect();
+    };
+  }, []);
+
+  // When any modal or popup is open, hide the bottom navigation menu
+  if (isModalOpen) {
+    return null;
+  }
 
   const navButtons = [
     {
@@ -37,7 +74,10 @@ export const MobileBottomNav = ({ onOpenMenu }) => {
   ];
 
   return (
-    <nav className="lg:hidden fixed bottom-0 left-0 right-0 z-40 bg-white border-t border-slate-200 shadow-[0_-4px_12px_rgba(0,0,0,0.06)] safe-area-bottom">
+    <nav
+      id="mobile-bottom-nav"
+      className="mobile-bottom-nav lg:hidden fixed bottom-0 left-0 right-0 z-40 bg-white border-t border-slate-200 shadow-[0_-4px_12px_rgba(0,0,0,0.06)] safe-area-bottom transition-all duration-150"
+    >
       <div className="flex items-stretch justify-around h-14">
         {navButtons.map((item) => {
           if (!item.show) return null;

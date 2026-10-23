@@ -424,7 +424,7 @@ export const ShiftsPage = () => {
             helperText="Starting balance in notes and coins inside drawer"
           />
 
-          <div className="flex flex-col sm:flex-row justify-end gap-2 pt-2">
+          <div className="flex flex-col sm:flex-row justify-end gap-2 pt-2 border-t border-slate-100 pos-modal-actions">
             <Button variant="secondary" className="w-full sm:w-auto" onClick={() => setIsOpenModalOpen(false)}>
               {t('common.cancel', 'Cancel')}
             </Button>
@@ -466,7 +466,7 @@ export const ShiftsPage = () => {
             onChange={(e) => setCashReason(e.target.value)}
           />
 
-          <div className="flex flex-col sm:flex-row justify-end gap-2 pt-2">
+          <div className="flex flex-col sm:flex-row justify-end gap-2 pt-2 border-t border-slate-100 pos-modal-actions">
             <Button variant="secondary" className="w-full sm:w-auto" onClick={() => setIsCashModalOpen(false)}>
               {t('common.cancel', 'Cancel')}
             </Button>
@@ -553,7 +553,7 @@ export const ShiftsPage = () => {
             onChange={(e) => setCloseNotes(e.target.value)}
           />
 
-          <div className="flex flex-col sm:flex-row justify-end gap-2 pt-2">
+          <div className="flex flex-col sm:flex-row justify-end gap-2 pt-2 border-t border-slate-100 pos-modal-actions">
             <Button variant="secondary" className="w-full sm:w-auto" onClick={() => setIsCloseModalOpen(false)}>
               {t('common.cancel', 'Cancel')}
             </Button>
@@ -630,7 +630,7 @@ export const ShiftsPage = () => {
               </div>
             )}
 
-            <div className="flex justify-end pt-2">
+            <div className="flex justify-end pt-2 border-t border-slate-100 pos-modal-actions">
               <Button variant="secondary" onClick={() => setSelectedShift(null)}>
                 {t('common.close', 'Close')}
               </Button>

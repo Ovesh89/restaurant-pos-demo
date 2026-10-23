@@ -703,7 +703,7 @@ export const ProductsPage = () => {
             ></textarea>
           </div>
 
-          <div className="flex flex-col sm:flex-row justify-end gap-2 pt-4 border-t border-slate-100">
+          <div className="flex flex-col sm:flex-row justify-end gap-2 pt-4 border-t border-slate-100 pos-modal-actions">
             <Button variant="secondary" className="w-full sm:w-auto" onClick={() => setIsModalOpen(false)}>
               {t('common.cancel', 'Cancel')}
             </Button>
@@ -765,7 +765,7 @@ export const ProductsPage = () => {
             ></textarea>
           </div>
 
-          <div className="flex flex-col sm:flex-row justify-end gap-2 pt-4 border-t border-slate-100">
+          <div className="flex flex-col sm:flex-row justify-end gap-2 pt-4 border-t border-slate-100 pos-modal-actions">
             <Button variant="secondary" className="w-full sm:w-auto" onClick={() => setIsPriceModalOpen(false)}>
               {t('common.cancel', 'Cancel')}
             </Button>

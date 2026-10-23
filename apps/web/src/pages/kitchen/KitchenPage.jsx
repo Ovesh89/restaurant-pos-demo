@@ -611,7 +611,7 @@ export const KitchenPage = () => {
             </div>
 
             {/* Bottom Actions Bar */}
-            <div className="pt-3 border-t border-slate-100 flex flex-col sm:flex-row items-center justify-between gap-3">
+            <div className="pt-3 border-t border-slate-100 flex flex-col sm:flex-row items-center justify-between gap-3 pos-modal-actions">
               <Button
                 variant="secondary"
                 icon={Printer}

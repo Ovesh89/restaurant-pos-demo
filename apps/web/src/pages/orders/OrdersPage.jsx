@@ -1280,7 +1280,7 @@ export const OrdersPage = () => {
               )}
             </div>
 
-            <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5 pt-3 border-t border-slate-100">
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5 pt-3 border-t border-slate-100 pos-modal-actions">
               {hasAnyPermission([PERMISSIONS.BILLING_GENERATE, PERMISSIONS.PAYMENT_COLLECT]) &&
                 selectedOrder.status !== ORDER_STATUS.CANCELLED &&
                 selectedOrder.status !== ORDER_STATUS.REJECTED &&
@@ -1347,7 +1347,7 @@ export const OrdersPage = () => {
             />
           </div>
 
-          <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
+          <div className="flex justify-end gap-2 pt-2 border-t border-slate-100 pos-modal-actions">
             <Button variant="secondary" onClick={() => setItemToRemove(null)}>
               Cancel
             </Button>
@@ -1394,7 +1394,7 @@ export const OrdersPage = () => {
             ></textarea>
           </div>
 
-          <div className="flex flex-col sm:flex-row justify-end gap-2 pt-2 border-t border-slate-100">
+          <div className="flex flex-col sm:flex-row justify-end gap-2 pt-2 border-t border-slate-100 pos-modal-actions">
             <Button variant="secondary" className="w-full sm:w-auto" onClick={() => setCancelOrderTarget(null)}>
               Abort
             </Button>
@@ -1554,7 +1554,7 @@ export const OrdersPage = () => {
               </div>
 
               {/* Category Pills Navigation (Wrapped & Scrollable) */}
-              <div className="flex flex-wrap items-center gap-1.5 text-xs max-h-28 overflow-y-auto pr-1">
+              <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 text-xs max-h-36 sm:max-h-40 overflow-y-auto pr-1">
                 <button
                   type="button"
                   onClick={() => setActiveCategory('CATEGORIES')}
@@ -1735,7 +1735,7 @@ export const OrdersPage = () => {
             ></textarea>
           </div>
 
-          <div className="flex flex-col-reverse sm:flex-row justify-between items-center gap-2 pt-2 border-t border-slate-100">
+          <div className="flex flex-col-reverse sm:flex-row justify-between items-center gap-2 pt-2 border-t border-slate-100 pos-modal-actions">
             <div className="text-xs text-slate-500">
               {(() => {
                 const changes = getModificationChanges();
@@ -1802,7 +1802,7 @@ export const OrdersPage = () => {
             Rejecting this order will immediately cancel linked KOTs and release Table {rejectOrderTarget?.tableNo || ''} to Available.
           </div>
 
-          <div className="flex flex-col sm:flex-row justify-end gap-2 pt-2 border-t border-slate-100">
+          <div className="flex flex-col sm:flex-row justify-end gap-2 pt-2 border-t border-slate-100 pos-modal-actions">
             <Button variant="secondary" className="w-full sm:w-auto" onClick={() => setRejectOrderTarget(null)}>
               {t('common.cancel', null, 'Cancel')}
             </Button>
@@ -2025,7 +2025,7 @@ export const OrdersPage = () => {
             </div>
 
             {/* Critical actions: Approve, Reject, Cancel */}
-            <div className="pt-3 border-t border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            <div className="pt-3 border-t border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2 pos-modal-actions">
               <div className="flex items-center gap-2 w-full sm:w-auto">
                 <Button
                   variant="secondary"

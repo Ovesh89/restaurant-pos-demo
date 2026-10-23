@@ -374,7 +374,7 @@ export const CategoriesPage = () => {
             </p>
           </div>
 
-          <div className="flex flex-col-reverse sm:flex-row justify-end gap-2 pt-4 border-t border-slate-100">
+          <div className="flex flex-col-reverse sm:flex-row justify-end gap-2 pt-4 border-t border-slate-100 pos-modal-actions">
             <Button variant="secondary" onClick={() => setIsModalOpen(false)} className="w-full sm:w-auto">
               {t('common.cancel', 'Cancel')}
             </Button>

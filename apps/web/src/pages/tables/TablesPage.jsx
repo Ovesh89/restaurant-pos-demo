@@ -1,9 +1,31 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Coffee, Edit2, Users, Layers, AlertCircle, Receipt, ArrowRightLeft } from 'lucide-react';
+import {
+  Plus,
+  Coffee,
+  Edit2,
+  Users,
+  Layers,
+  AlertCircle,
+  Receipt,
+  ArrowRightLeft,
+  Eye,
+  Trash2,
+  Printer,
+  Search,
+  CheckCircle,
+  Clock,
+  UtensilsCrossed,
+  ChevronRight,
+  X
+} from 'lucide-react';
 import { tableRepository } from '../../services/repositories/tableRepository';
 import { branchRepository } from '../../services/repositories/branchRepository';
 import { orderRepository } from '../../services/repositories/orderRepository';
+import { productRepository } from '../../services/repositories/productRepository';
+import { categoryRepository } from '../../services/repositories/categoryRepository';
+import { kotRepository } from '../../services/repositories/kotRepository';
+import { printService, formatReceiptSequence } from '../../services/printing/printService';
 import { useAuth } from '../../hooks/useAuth';
 import { PageHeader } from '../../components/common/PageHeader';
 import { Button } from '../../components/common/Button';
@@ -12,6 +34,7 @@ import { Select } from '../../components/common/Select';
 import { Modal } from '../../components/common/Modal';
 import { Badge } from '../../components/common/Badge';
 import { TABLE_STATUS_CONFIG, TABLE_STATUS, getTableStatusConfig } from '../../constants/tableStatus';
+import { ORDER_STATUS } from '../../constants/orderStatus';
 import { PERMISSIONS } from '../../constants/permissions';
 import { DiningAreaManager } from '../../components/restaurant/DiningAreaManager.jsx';
 import { useTranslation } from '../../hooks/useTranslation';
@@ -29,6 +52,27 @@ export const TablesPage = () => {
 
   // Dining Areas Modal State
   const [isAreaModalOpen, setIsAreaModalOpen] = useState(false);
+
+  // Success Notice State
+  const [successMsg, setSuccessMsg] = useState('');
+
+  // Order Details Modal State
+  const [selectedOrder, setSelectedOrder] = useState(null);
+  const [selectedTable, setSelectedTable] = useState(null);
+  const [isOrderDetailsOpen, setIsOrderDetailsOpen] = useState(false);
+  const [orderKOTs, setOrderKOTs] = useState([]);
+  const [detailsLoading, setDetailsLoading] = useState(false);
+
+  // Modify Order Modal State
+  const [modifyingOrder, setModifyingOrder] = useState(null);
+  const [modifiedItems, setModifiedItems] = useState([]);
+  const [modificationReason, setModificationReason] = useState('');
+  const [availableProducts, setAvailableProducts] = useState([]);
+  const [categories, setCategories] = useState([]);
+  const [quickAddSearch, setQuickAddSearch] = useState('');
+  const [activeCategory, setActiveCategory] = useState('ALL');
+  const [modError, setModError] = useState('');
+  const [modLoading, setModLoading] = useState(false);
 
   // Add / Edit Table Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -237,6 +281,216 @@ export const TablesPage = () => {
     }
   };
 
+  // Open Order Details for Occupied Table
+  const handleOpenOrderDetails = async (tbl) => {
+    setSelectedTable(tbl);
+    let order = tbl.activeOrder;
+    const orderTargetId = tbl.activeOrderId || order?.id || order?._id;
+
+    if (!order && !orderTargetId) {
+      alert(t('tables.noActiveOrder', 'No active order recorded for this table.'));
+      return;
+    }
+
+    setSelectedOrder(order || { id: orderTargetId, tableNo: tbl.tableNo });
+    setIsOrderDetailsOpen(true);
+    setDetailsLoading(true);
+
+    try {
+      if (orderTargetId) {
+        const [freshOrder, kots] = await Promise.all([
+          orderRepository.getOrderById(orderTargetId).catch(() => order),
+          kotRepository.getKOTs({ orderId: orderTargetId }).catch(() => [])
+        ]);
+        if (freshOrder) setSelectedOrder(freshOrder);
+        setOrderKOTs(kots || []);
+      }
+    } catch (err) {
+      console.error('Failed to load table order details or KOTs:', err);
+    } finally {
+      setDetailsLoading(false);
+    }
+  };
+
+  // Open Modify Dishes Modal for Table
+  const handleOpenModify = async (tblOrOrder) => {
+    let order = tblOrOrder;
+    if (tblOrOrder.activeOrder || tblOrOrder.activeOrderId) {
+      order = tblOrOrder.activeOrder || { id: tblOrOrder.activeOrderId, tableNo: tblOrOrder.tableNo };
+      const orderTargetId = tblOrOrder.activeOrderId || order?.id || order?._id;
+      if (orderTargetId) {
+        try {
+          const freshOrder = await orderRepository.getOrderById(orderTargetId);
+          if (freshOrder) order = freshOrder;
+        } catch (err) {
+          console.warn('Could not fetch latest order before modify:', err);
+        }
+      }
+    }
+
+    if (!order) {
+      alert('No active order to modify.');
+      return;
+    }
+
+    setIsOrderDetailsOpen(false);
+    setModifyingOrder(order);
+    const activeItems = (order.items || []).filter((i) => (i.status || 'ACTIVE') !== 'CANCELLED');
+    setModifiedItems(JSON.parse(JSON.stringify(activeItems)));
+    setModificationReason('');
+    setModError('');
+    setQuickAddSearch('');
+    setActiveCategory('ALL');
+
+    try {
+      const [prods, cats] = await Promise.all([
+        productRepository.getProducts({ onlyAvailable: true }),
+        categoryRepository.getCategories(false)
+      ]);
+      setAvailableProducts(prods || []);
+      setCategories(cats || []);
+    } catch (err) {
+      console.error('Failed to load menu products/categories for order modification:', err);
+    }
+  };
+
+  const handleAddDishToModified = (prod) => {
+    const prodCat = categories.find((c) => (c.id || c._id) === (prod.categoryId || prod.category));
+    const kotRequired = prod.kotRequired !== undefined
+      ? prod.kotRequired
+      : (prodCat?.kotRequired !== undefined ? prodCat.kotRequired : true);
+
+    const targetProductId = prod.id || prod._id;
+
+    setModifiedItems((prev) => {
+      const idx = prev.findIndex((i) => (i.productId || i.id || i._id) === targetProductId);
+      if (idx > -1) {
+        return prev.map((item, index) =>
+          index === idx
+            ? { ...item, quantity: item.quantity + 1 }
+            : item
+        );
+      } else {
+        return [
+          ...prev,
+          {
+            lineId: `line-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+            productId: targetProductId,
+            categoryId: prod.categoryId || prod.category || null,
+            name: prod.name,
+            code: prod.code,
+            quantity: 1,
+            unitPrice: prod.price,
+            taxRate: prod.taxRate || 5,
+            station: prod.station || 'Main Curry',
+            notes: '',
+            kotRequired
+          }
+        ];
+      }
+    });
+  };
+
+  const handleAdjustModQty = (productId, delta) => {
+    setModifiedItems((prev) =>
+      prev
+        .map((item) => {
+          if (item.productId === productId || item.id === productId || item._id === productId) {
+            const n = item.quantity + delta;
+            return n > 0 ? { ...item, quantity: n } : null;
+          }
+          return item;
+        })
+        .filter(Boolean)
+    );
+  };
+
+  const handleRemoveModItem = (productId) => {
+    setModifiedItems((prev) => prev.filter((i) => i.productId !== productId && i.id !== productId && i._id !== productId));
+  };
+
+  const filteredQuickProducts = availableProducts.filter((p) => {
+    const matchesSearch =
+      !quickAddSearch.trim() ||
+      p.name?.toLowerCase().includes(quickAddSearch.toLowerCase()) ||
+      p.code?.toLowerCase().includes(quickAddSearch.toLowerCase()) ||
+      p.station?.toLowerCase().includes(quickAddSearch.toLowerCase());
+
+    const matchesCategory =
+      activeCategory === 'ALL' ||
+      activeCategory === 'CATEGORIES' ||
+      p.categoryId === activeCategory;
+
+    return matchesSearch && matchesCategory;
+  });
+
+  const getModificationChanges = () => {
+    if (!modifyingOrder) return { added: 0, updated: 0, removed: 0, deltaCount: 0, requiresKot: false };
+    const origMap = new Map((modifyingOrder.items || []).map((i) => [i.productId || i.id || i._id, i.quantity]));
+    const newMap = new Map(modifiedItems.map((i) => [i.productId || i.id || i._id, i.quantity]));
+
+    let added = 0;
+    let updated = 0;
+    let removed = 0;
+    let requiresKot = false;
+
+    for (const item of modifiedItems) {
+      const pId = item.productId || item.id || item._id;
+      const qty = item.quantity;
+      const prodCat = categories.find((c) => (c.id || c._id) === (item.categoryId || item.category));
+      const itemKotReq = item.kotRequired !== undefined
+        ? item.kotRequired
+        : (prodCat?.kotRequired !== undefined ? prodCat.kotRequired : true);
+
+      if (!origMap.has(pId)) {
+        added++;
+        if (itemKotReq) requiresKot = true;
+      } else if (origMap.get(pId) !== qty) {
+        updated++;
+        if (itemKotReq) requiresKot = true;
+      }
+    }
+    for (const [pId] of origMap.entries()) {
+      if (!newMap.has(pId)) {
+        removed++;
+        requiresKot = true;
+      }
+    }
+    return { added, updated, removed, deltaCount: added + updated + removed, requiresKot };
+  };
+
+  const handleSubmitModification = async (e) => {
+    e.preventDefault();
+    if (modifiedItems.length === 0) {
+      setModError('Order cannot have 0 dishes. Cancel order instead.');
+      return;
+    }
+
+    setModLoading(true);
+    try {
+      const actor = { id: user?.id || 'staff', name: user?.name || 'Staff' };
+      const orderTargetId = modifyingOrder.id || modifyingOrder._id || modifyingOrder.orderNo || modifyingOrder.orderNumber;
+      const cleanModReason = modificationReason.trim() || 'Dish modification from table floor';
+
+      await orderRepository.modifyOrderItems(
+        orderTargetId,
+        modifiedItems,
+        cleanModReason,
+        actor
+      );
+
+      const modifiedTableNo = modifyingOrder.tableNo;
+      setModifyingOrder(null);
+      setSuccessMsg(`Order for Table ${modifiedTableNo || ''} modified successfully! New dishes dispatched to kitchen KOT.`);
+      setTimeout(() => setSuccessMsg(''), 5000);
+      await loadFloor();
+    } catch (err) {
+      setModError(err.message || 'Error modifying order items.');
+    } finally {
+      setModLoading(false);
+    }
+  };
+
   // Filter tables by active tab
   const displayedTables = selectedAreaId === 'ALL'
     ? tables
@@ -264,6 +518,14 @@ export const TablesPage = () => {
           </div>
         )}
       </PageHeader>
+
+      {/* Success Notification Alert */}
+      {successMsg && (
+        <div className="p-3.5 bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs rounded-2xl flex items-center gap-2 shadow-xs">
+          <CheckCircle className="w-4 h-4 text-emerald-600 shrink-0" />
+          <span className="font-semibold">{successMsg}</span>
+        </div>
+      )}
 
       {/* Area Selector Tabs & Status Legend */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 sm:gap-4 border-b border-slate-200 pb-3 sm:pb-4">
@@ -350,10 +612,8 @@ export const TablesPage = () => {
               if (!tbl.isActive) return;
               if (tbl.status === TABLE_STATUS.AVAILABLE) {
                 navigate(`/orders/new?tableId=${tbl.id}`);
-              } else if (isBillPending && hasAnyPermission([PERMISSIONS.BILLING_GENERATE, PERMISSIONS.PAYMENT_COLLECT])) {
-                navigate(`/billing?tableId=${tbl.id}`);
               } else {
-                navigate(tbl.activeOrderId ? `/orders?orderId=${tbl.activeOrderId}` : '/orders');
+                handleOpenOrderDetails(tbl);
               }
             };
 
@@ -398,26 +658,54 @@ export const TablesPage = () => {
                 <div className="pt-2 border-t border-slate-100 flex flex-wrap items-center justify-between gap-1 text-xs">
                   {tbl.status === TABLE_STATUS.AVAILABLE ? (
                     <button
-                      onClick={() => navigate(`/orders/new?tableId=${tbl.id}`)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        navigate(`/orders/new?tableId=${tbl.id}`);
+                      }}
                       className="text-[11px] font-bold text-blue-600 hover:text-blue-700 bg-blue-50 px-2 py-0.5 rounded-lg border border-blue-200"
                     >
                       + {t('orders.newOrder', 'Take Order')}
                     </button>
-                  ) : isBillPending && hasAnyPermission([PERMISSIONS.BILLING_GENERATE, PERMISSIONS.PAYMENT_COLLECT]) ? (
-                    <button
-                      onClick={() => navigate(`/billing?tableId=${tbl.id}`)}
-                      className="text-[11px] font-bold text-emerald-700 hover:text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded-lg border border-emerald-300 flex items-center gap-1"
-                    >
-                      <Receipt className="w-3 h-3" />
-                      {t('billing.recordPayment', 'Collect Bill')}
-                    </button>
                   ) : (
-                    <button
-                      onClick={() => navigate(tbl.activeOrderId ? `/orders?orderId=${tbl.activeOrderId}` : '/orders')}
-                      className="text-[11px] font-bold text-amber-700 hover:text-amber-800 bg-amber-50 px-2 py-0.5 rounded-lg border border-amber-200"
-                    >
-                      {t('orders.viewDetails', 'View Order')}
-                    </button>
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleOpenOrderDetails(tbl);
+                        }}
+                        className="text-[11px] font-bold text-blue-700 hover:text-blue-800 bg-blue-50 px-2 py-0.5 rounded-lg border border-blue-200 flex items-center gap-1"
+                        title="View order details and dishes"
+                      >
+                        <Eye className="w-3 h-3" />
+                        <span>{t('orders.viewDetails', 'View Order')}</span>
+                      </button>
+
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleOpenModify(tbl);
+                        }}
+                        className="text-[11px] font-bold text-amber-700 hover:text-amber-800 bg-amber-50 px-2 py-0.5 rounded-lg border border-amber-200 flex items-center gap-1"
+                        title="Modify dishes or add items"
+                      >
+                        <Edit2 className="w-3 h-3" />
+                        <span>Modify</span>
+                      </button>
+
+                      {isBillPending && hasAnyPermission([PERMISSIONS.BILLING_GENERATE, PERMISSIONS.PAYMENT_COLLECT]) && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            navigate(`/billing?tableId=${tbl.id}`);
+                          }}
+                          className="text-[11px] font-bold text-emerald-700 hover:text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded-lg border border-emerald-300 flex items-center gap-1"
+                          title="Proceed to billing & payment desk"
+                        >
+                          <Receipt className="w-3 h-3" />
+                          <span>{t('billing.recordPayment', 'Bill')}</span>
+                        </button>
+                      )}
+                    </div>
                   )}
 
                   {tbl.status !== TABLE_STATUS.AVAILABLE && (
@@ -496,7 +784,7 @@ export const TablesPage = () => {
             required
           />
 
-          <div className="flex flex-col sm:flex-row justify-end gap-2 pt-4 border-t border-slate-100">
+          <div className="flex flex-col sm:flex-row justify-end gap-2 pt-4 border-t border-slate-100 pos-modal-actions">
             <Button variant="secondary" className="w-full sm:w-auto" onClick={() => setIsModalOpen(false)}>
               {t('common.cancel', 'Cancel')}
             </Button>
@@ -548,7 +836,7 @@ export const TablesPage = () => {
             onChange={(e) => setTransferReason(e.target.value)}
           />
 
-          <div className="flex flex-col sm:flex-row justify-end gap-2 pt-4 border-t border-slate-100">
+          <div className="flex flex-col sm:flex-row justify-end gap-2 pt-4 border-t border-slate-100 pos-modal-actions">
             <Button variant="secondary" className="w-full sm:w-auto" onClick={() => setIsTransferModalOpen(false)}>
               {t('common.cancel', 'Cancel')}
             </Button>
@@ -571,6 +859,460 @@ export const TablesPage = () => {
         maxWidth="max-w-4xl"
       >
         <DiningAreaManager onAreasChanged={loadFloor} />
+      </Modal>
+
+      {/* View Table Order Details & KOT Tickets Modal */}
+      <Modal
+        isOpen={isOrderDetailsOpen && !!selectedOrder}
+        onClose={() => {
+          setIsOrderDetailsOpen(false);
+          setSelectedOrder(null);
+        }}
+        title={`${t('orders.title', 'Order Details')}: ${formatReceiptSequence(selectedOrder?.orderNo || selectedOrder?.orderNumber || '')}`}
+        subtitle={`${t('orders.table', 'Table')} ${selectedTable?.tableNo || selectedOrder?.tableNo} • ${t('orders.captain', 'Captain')}: ${selectedOrder?.captainName || 'Staff'}`}
+        maxWidth="max-w-3xl"
+      >
+        {selectedOrder && (
+          <div className="space-y-5">
+            {/* Header Metrics */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 bg-slate-50 p-3.5 rounded-2xl border border-slate-200 text-xs">
+              <div>
+                <span className="text-[10px] uppercase font-bold text-slate-400 block tracking-wider">Status</span>
+                <span className="font-black text-slate-800">{selectedOrder.status}</span>
+              </div>
+              <div>
+                <span className="text-[10px] uppercase font-bold text-slate-400 block tracking-wider">Order Time</span>
+                <span className="font-mono text-slate-700">
+                  {selectedOrder.createdAt
+                    ? new Date(selectedOrder.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                    : '—'}
+                </span>
+              </div>
+              <div>
+                <span className="text-[10px] uppercase font-bold text-slate-400 block tracking-wider">Customer</span>
+                <span className="font-bold text-slate-800 truncate block">
+                  {selectedOrder.customerName || selectedOrder.customer?.name || t('orders.walkinGuest', 'Walk-in Guest')}
+                </span>
+              </div>
+              <div>
+                <span className="text-[10px] uppercase font-bold text-slate-400 block tracking-wider">Order Subtotal</span>
+                <span className="font-black text-emerald-600 text-sm">
+                  ₹{formatNumber(selectedOrder.subtotal || 0)}
+                </span>
+              </div>
+            </div>
+
+            {/* Current Dishes List */}
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                  Current Order Items ({(selectedOrder.items || []).filter((i) => (i.status || 'ACTIVE') !== 'CANCELLED').length})
+                </h4>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  icon={Edit2}
+                  onClick={() => handleOpenModify(selectedOrder)}
+                  className="text-xs text-blue-700 bg-blue-50 border-blue-200 hover:bg-blue-100"
+                >
+                  Modify / Add Dishes
+                </Button>
+              </div>
+
+              <div className="border border-slate-200 rounded-xl divide-y divide-slate-100 max-h-60 overflow-y-auto">
+                {(selectedOrder.items || [])
+                  .filter((i) => (i.status || 'ACTIVE') !== 'CANCELLED')
+                  .map((item, idx) => (
+                    <div key={item.lineId || item.productId || idx} className="p-3 flex items-center justify-between text-xs">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="font-bold text-slate-800">{item.name}</span>
+                          <span className="font-mono text-slate-500 font-bold bg-slate-100 px-1.5 py-0.5 rounded text-[11px]">
+                            x{item.quantity}
+                          </span>
+                        </div>
+                        {item.notes && <p className="text-[11px] text-blue-600 italic mt-0.5">* {item.notes}</p>}
+                      </div>
+                      <span className="font-extrabold text-slate-900">
+                        ₹{(item.quantity || 1) * (item.unitPrice || 0)}
+                      </span>
+                    </div>
+                  ))}
+              </div>
+            </div>
+
+            {/* Operational KOT Tickets */}
+            <div>
+              <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-2">
+                Operational KOT Tickets ({orderKOTs.length})
+              </h4>
+              {detailsLoading ? (
+                <p className="text-xs text-slate-400">Loading KOT tickets...</p>
+              ) : orderKOTs.length === 0 ? (
+                <p className="text-xs text-slate-400">No KOT tickets issued yet.</p>
+              ) : (
+                <div className="space-y-2 max-h-40 overflow-y-auto">
+                  {orderKOTs.map((kot) => (
+                    <div key={kot.id} className="p-2.5 rounded-xl border border-slate-200 bg-slate-50/50 flex items-center justify-between text-xs">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="font-black text-blue-700 font-mono">{kot.kotNo}</span>
+                          <span className="font-semibold text-slate-600 bg-white px-2 py-0.5 rounded border border-slate-200 text-[10px]">
+                            {kot.type} Rev #{kot.revision}
+                          </span>
+                          <span className="text-slate-500 font-bold capitalize">[{kot.status}]</span>
+                        </div>
+                        <p className="text-slate-500 mt-1">
+                          {kot.items.map((i) => `${i.quantity}x ${i.name}`).join(', ')}
+                        </p>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => printService.printKOT(kot, selectedOrder, { tableNo: selectedOrder.tableNo || selectedTable?.tableNo })}
+                        className="text-xs font-bold text-blue-600 hover:text-blue-700 inline-flex items-center gap-1 bg-white p-2 rounded-lg border border-slate-200"
+                      >
+                        <Printer className="w-3.5 h-3.5" />
+                        Print
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Modal Footer Actions */}
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5 pt-3 border-t border-slate-100 pos-modal-actions">
+              <Button
+                variant="primary"
+                icon={Edit2}
+                onClick={() => handleOpenModify(selectedOrder)}
+                className="bg-blue-600 hover:bg-blue-700 text-white font-bold"
+              >
+                Modify Order &amp; Add Dishes
+              </Button>
+
+              <div className="flex items-center gap-2">
+                {hasAnyPermission([PERMISSIONS.BILLING_GENERATE, PERMISSIONS.PAYMENT_COLLECT]) && (
+                  <Button
+                    variant="secondary"
+                    icon={Receipt}
+                    onClick={() => {
+                      const tId = selectedTable?.id || selectedOrder.tableId;
+                      setIsOrderDetailsOpen(false);
+                      if (tId) {
+                        navigate(`/billing?tableId=${tId}`);
+                      } else {
+                        navigate(`/billing?orderId=${selectedOrder.id}`);
+                      }
+                    }}
+                    className="text-emerald-700 border-emerald-300 hover:bg-emerald-50 font-bold"
+                  >
+                    Proceed to Billing
+                  </Button>
+                )}
+
+                <Button
+                  variant="secondary"
+                  onClick={() => {
+                    setIsOrderDetailsOpen(false);
+                    setSelectedOrder(null);
+                  }}
+                >
+                  Close
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
+      </Modal>
+
+      {/* Modify Order Items Modal (Generates Delta KOT) */}
+      <Modal
+        isOpen={!!modifyingOrder}
+        onClose={() => setModifyingOrder(null)}
+        title={`Modify Order Dishes: ${modifyingOrder?.orderNo || `Table ${modifyingOrder?.tableNo}`}`}
+        subtitle="Add, reduce or remove dishes. A modification delta KOT will be dispatched to the kitchen."
+        maxWidth="max-w-5xl"
+      >
+        <form onSubmit={handleSubmitModification} className="space-y-4">
+          {modError && (
+            <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-xs text-red-700 font-medium">
+              {modError}
+            </div>
+          )}
+
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-start">
+            {/* Left Column: Current Items in Order */}
+            <div className="lg:col-span-5 border border-slate-200 rounded-2xl p-3.5 bg-slate-50/70 space-y-3">
+              <div className="flex items-center justify-between pb-2 border-b border-slate-200/80">
+                <div className="flex items-center gap-2">
+                  <h4 className="text-xs font-black uppercase tracking-wider text-slate-700">Order Dishes</h4>
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-white text-slate-600 border border-slate-200">
+                    {modifiedItems.length} {modifiedItems.length === 1 ? 'dish' : 'dishes'}
+                  </span>
+                </div>
+                <span className="text-xs font-extrabold text-blue-700">
+                  ₹{modifiedItems.reduce((acc, i) => acc + i.quantity * i.unitPrice, 0)}
+                </span>
+              </div>
+
+              {/* Items List */}
+              <div className="divide-y divide-slate-200/80 text-xs max-h-[360px] overflow-y-auto pr-1">
+                {modifiedItems.length === 0 ? (
+                  <div className="py-8 text-center text-slate-400">
+                    <p className="font-semibold">No dishes in this order</p>
+                    <p className="text-[11px] mt-0.5">Pick dishes from Quick Add to add them</p>
+                  </div>
+                ) : (
+                  modifiedItems.map((itm) => {
+                    const orig = modifyingOrder?.items?.find((o) => (o.productId || o.id || o._id) === (itm.productId || itm.id || itm._id));
+                    const isNew = !orig;
+                    const qtyChange = isNew ? itm.quantity : itm.quantity - orig.quantity;
+
+                    return (
+                      <div key={itm.productId || itm.id || itm._id} className="py-2.5 flex items-center justify-between gap-2">
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <p className="font-bold text-slate-800 text-xs truncate">{itm.name}</p>
+                            {itm.kotRequired === false && (
+                              <span className="px-1.5 py-0.2 rounded text-[10px] font-bold bg-slate-100 text-slate-600 border border-slate-200">
+                                No KOT
+                              </span>
+                            )}
+                            {isNew ? (
+                              <span className="px-1.5 py-0.2 rounded text-[10px] font-black bg-emerald-100 text-emerald-800 border border-emerald-200">
+                                + NEW
+                              </span>
+                            ) : qtyChange !== 0 ? (
+                              <span
+                                className={`px-1.5 py-0.2 rounded text-[10px] font-black border ${
+                                  qtyChange > 0
+                                    ? 'bg-blue-100 text-blue-800 border-blue-200'
+                                    : 'bg-amber-100 text-amber-800 border-amber-200'
+                                }`}
+                              >
+                                {qtyChange > 0 ? `+${qtyChange}` : qtyChange}
+                              </span>
+                            ) : null}
+                          </div>
+                          <p className="text-[11px] text-slate-400 mt-0.5 font-medium">
+                            ₹{itm.unitPrice} each • <span className="font-bold text-slate-600">₹{itm.quantity * itm.unitPrice}</span>
+                          </p>
+                        </div>
+
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <button
+                            type="button"
+                            onClick={() => handleAdjustModQty(itm.productId, -1)}
+                            className="w-7 h-7 rounded-lg bg-white border border-slate-300 flex items-center justify-center font-black text-slate-700 hover:bg-slate-100 active:scale-95 shadow-2xs"
+                            title="Decrease quantity"
+                          >
+                            -
+                          </button>
+                          <span className="font-black px-1.5 min-w-[20px] text-center text-xs">
+                            {itm.quantity}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => handleAdjustModQty(itm.productId, 1)}
+                            className="w-7 h-7 rounded-lg bg-white border border-slate-300 flex items-center justify-center font-black text-slate-700 hover:bg-slate-100 active:scale-95 shadow-2xs"
+                            title="Increase quantity"
+                          >
+                            +
+                          </button>
+                          {isNew && (
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveModItem(itm.productId)}
+                              className="p-1 text-slate-400 hover:text-red-600 rounded hover:bg-red-50 ml-0.5 transition-colors"
+                              title="Remove item"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+
+              {/* Order summary note */}
+              <div className="pt-2 border-t border-slate-200/80 flex items-center justify-between text-[11px] text-slate-500">
+                <span>Total Dishes: <strong className="text-slate-800">{modifiedItems.reduce((a, b) => a + b.quantity, 0)}</strong></span>
+                <span>Table: <strong className="text-slate-800">Table {modifyingOrder?.tableNo}</strong></span>
+              </div>
+            </div>
+
+            {/* Right Column: Quick Add Dish with Categories and Filter */}
+            <div className="lg:col-span-7 border border-slate-200 rounded-2xl p-3.5 bg-white space-y-3 shadow-xs">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <h4 className="text-xs font-black uppercase tracking-wider text-slate-700">Quick Add Dish</h4>
+                  <span className="text-[11px] font-bold text-slate-400">
+                    ({availableProducts.length} dishes available)
+                  </span>
+                </div>
+              </div>
+
+              {/* Search & Filter Input */}
+              <div className="relative">
+                <Input
+                  icon={Search}
+                  placeholder="Filter dishes by name, code or station..."
+                  value={quickAddSearch}
+                  onChange={(e) => setQuickAddSearch(e.target.value)}
+                />
+                {quickAddSearch && (
+                  <button
+                    type="button"
+                    onClick={() => setQuickAddSearch('')}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 text-xs font-bold px-1.5 py-0.5 rounded bg-slate-100"
+                  >
+                    Clear
+                  </button>
+                )}
+              </div>
+
+              {/* Category Filter Pills (Wrapped for easy viewing & scrolling on desktop & mobile) */}
+              <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 text-xs max-h-32 sm:max-h-36 overflow-y-auto pr-1">
+                <button
+                  type="button"
+                  onClick={() => setActiveCategory('ALL')}
+                  className={`px-3 py-1.5 rounded-xl font-bold whitespace-nowrap cursor-pointer transition-all active:scale-95 ${
+                    activeCategory === 'ALL'
+                      ? 'bg-blue-600 text-white shadow-xs'
+                      : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                  }`}
+                >
+                  All ({availableProducts.length})
+                </button>
+                {categories.map((c) => {
+                  const cId = c.id || c._id;
+                  const cCount = availableProducts.filter((p) => (p.categoryId || p.category) === cId).length;
+                  return (
+                    <button
+                      key={cId}
+                      type="button"
+                      onClick={() => setActiveCategory(cId)}
+                      className={`px-3 py-1.5 rounded-xl font-bold whitespace-nowrap cursor-pointer transition-all active:scale-95 ${
+                        activeCategory === cId
+                          ? 'bg-blue-600 text-white shadow-xs'
+                          : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                      }`}
+                    >
+                      {c.name} {cCount > 0 && <span className="opacity-80 font-semibold">({cCount})</span>}
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Available Dishes Grid */}
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 max-h-[300px] overflow-y-auto pr-1">
+                {filteredQuickProducts.length === 0 ? (
+                  <div className="col-span-full py-8 text-center text-slate-400 text-xs">
+                    No matching available dishes found.
+                  </div>
+                ) : (
+                  filteredQuickProducts.map((p) => {
+                    const pId = p.id || p._id;
+                    const inOrder = modifiedItems.find((i) => (i.productId || i.id || i._id) === pId);
+
+                    return (
+                      <button
+                        key={pId}
+                        type="button"
+                        onClick={() => handleAddDishToModified(p)}
+                        className={`text-left p-2.5 rounded-xl border transition-all flex flex-col justify-between group ${
+                          inOrder
+                            ? 'bg-blue-50/60 border-blue-300 hover:border-blue-400'
+                            : 'bg-slate-50/70 border-slate-200 hover:border-slate-300 hover:bg-white'
+                        }`}
+                      >
+                        <div>
+                          <div className="flex items-start justify-between gap-1">
+                            <p className="font-bold text-slate-800 text-xs line-clamp-2 leading-tight">
+                              {p.name}
+                            </p>
+                            {inOrder && (
+                              <span className="shrink-0 px-1.5 py-0.2 rounded-full text-[10px] font-black bg-blue-600 text-white">
+                                {inOrder.quantity}
+                              </span>
+                            )}
+                          </div>
+                          <span className="text-[10px] text-slate-400 mt-1 block">
+                            {p.station || 'Main'}
+                          </span>
+                        </div>
+                        <div className="mt-2 pt-1 border-t border-slate-200/60 flex items-center justify-between">
+                          <span className="font-extrabold text-xs text-slate-900">₹{p.price}</span>
+                          <span className="text-[10px] font-bold text-blue-600 group-hover:underline">
+                            + Add
+                          </span>
+                        </div>
+                      </button>
+                    );
+                  })
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Modification Reason & Delta Impact */}
+          {(() => {
+            const delta = getModificationChanges();
+            return (
+              <div className="bg-blue-50/70 p-3 rounded-xl border border-blue-200 text-xs text-blue-900 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <div className="space-y-0.5">
+                  <p className="font-bold flex items-center gap-1.5">
+                    <span>Delta Changes Detected:</span>
+                    <span className="bg-blue-600 text-white font-mono px-1.5 py-0.2 rounded text-[10px]">
+                      {delta.deltaCount} change(s)
+                    </span>
+                  </p>
+                  <p className="text-[11px] text-blue-700">
+                    {delta.added > 0 && `+${delta.added} added, `}
+                    {delta.updated > 0 && `${delta.updated} qty modified, `}
+                    {delta.removed > 0 && `-${delta.removed} removed.`}
+                    {delta.requiresKot
+                      ? ' A modification KOT will be dispatched to the kitchen.'
+                      : ' No operational KOT required.'}
+                  </p>
+                </div>
+
+                <div className="w-full sm:w-64">
+                  <input
+                    type="text"
+                    className="w-full text-xs p-2 rounded-lg border border-blue-300 bg-white focus:outline-none focus:ring-2 focus:ring-blue-400"
+                    placeholder="Reason for change (e.g. Guest added items)"
+                    value={modificationReason}
+                    onChange={(e) => setModificationReason(e.target.value)}
+                  />
+                </div>
+              </div>
+            );
+          })()}
+
+          {/* Actions */}
+          <div className="flex flex-col sm:flex-row justify-end gap-2 pt-2 border-t border-slate-100 pos-modal-actions">
+            <Button
+              variant="secondary"
+              className="w-full sm:w-auto"
+              onClick={() => setModifyingOrder(null)}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="submit"
+              variant="primary"
+              className="w-full sm:w-auto bg-blue-600 hover:bg-blue-700 text-white font-bold"
+              loading={modLoading}
+            >
+              Submit Updated Order &amp; Send KOT
+            </Button>
+          </div>
+        </form>
       </Modal>
     </div>
   );

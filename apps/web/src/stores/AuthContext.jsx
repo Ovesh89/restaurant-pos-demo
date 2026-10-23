@@ -69,19 +69,42 @@ export const AuthProvider = ({ children }) => {
     return updated;
   };
 
+  const PERMISSION_EQUIVALENTS = {
+    'billing.generate': ['billing.create'],
+    'billing.create': ['billing.generate'],
+    'billing.discount': ['discount.apply', 'discount.approve'],
+    'discount.apply': ['billing.discount'],
+    'payment.collect': ['payment.record'],
+    'payment.record': ['payment.collect'],
+    'bill.cancel': ['billing.close'],
+    'billing.close': ['bill.cancel'],
+    'menu.edit': ['menu.manage'],
+    'menu.manage': ['menu.edit'],
+    'customer.edit': ['customer.manage'],
+    'customer.manage': ['customer.edit'],
+    'settings.manage': ['branch.manage'],
+    'branch.manage': ['settings.manage'],
+    'kot.manage': ['kot.send', 'kot.modify', 'kot.cancel'],
+    'kot.send': ['kot.manage'],
+    'kot.modify': ['kot.manage'],
+    'kot.cancel': ['kot.manage'],
+  };
+
   const hasPermission = (permissionCode) => {
     if (!session || !session.permissions) return false;
     const userRole = session.user?.role?.toLowerCase();
     // Owner and Admin have full operational access
     if (userRole === 'owner' || userRole === 'admin') return true;
-    return session.permissions.includes(permissionCode);
+    if (session.permissions.includes(permissionCode)) return true;
+    const aliases = PERMISSION_EQUIVALENTS[permissionCode] || [];
+    return aliases.some((code) => session.permissions.includes(code));
   };
 
   const hasAnyPermission = (permissionCodes = []) => {
     if (!session || !session.permissions) return false;
     const userRole = session.user?.role?.toLowerCase();
     if (userRole === 'owner' || userRole === 'admin') return true;
-    return permissionCodes.some((code) => session.permissions.includes(code));
+    return permissionCodes.some((code) => hasPermission(code));
   };
 
   return (
