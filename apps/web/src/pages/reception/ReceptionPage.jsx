@@ -21,6 +21,15 @@ import { Modal } from '../../components/common/Modal';
 import { Badge } from '../../components/common/Badge';
 import { ORDER_STATUS } from '../../constants/orderStatus';
 
+const formatTableBadge = (order) => {
+  if (order?.orderType && order.orderType !== 'DINE_IN') {
+    if (order.orderType === 'TAKEAWAY') return 'TAKE';
+    return String(order.orderType).slice(0, 4);
+  }
+  const clean = String(order?.tableNo || '').trim().replace(/^(T-?)+/i, '');
+  return clean ? `T-${clean}` : 'ORD';
+};
+
 export const ReceptionPage = () => {
   const { user } = useAuth();
   const { t, formatNumber, formatCurrency } = useTranslation();
@@ -166,10 +175,10 @@ export const ReceptionPage = () => {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Left 2 Cols: Orders Waiting Confirmation */}
         <div className="lg:col-span-2 space-y-4">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 sm:gap-4">
             <h2 className="text-base font-bold text-slate-800 flex items-center gap-2">
               <span>{t('reception.pendingQueue', null, 'Waiting Confirmation Queue')}</span>
-              <span className="w-6 h-6 rounded-full bg-amber-100 text-amber-800 text-xs font-black flex items-center justify-center font-mono">
+              <span className="w-6 h-6 rounded-full bg-amber-100 text-amber-800 text-xs font-black flex items-center justify-center font-mono shrink-0">
                 {formatNumber(pendingOrders.length)}
               </span>
             </h2>
@@ -200,8 +209,8 @@ export const ReceptionPage = () => {
                   {/* Order Header */}
                   <div className="flex flex-wrap items-center justify-between pb-3 border-b border-slate-100 gap-2">
                     <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-xl bg-blue-100 text-blue-800 flex items-center justify-center font-black text-sm font-mono">
-                        T-{formatNumber(ord.tableNo)}
+                      <div className="min-w-[44px] h-10 px-2 rounded-xl bg-blue-100 text-blue-800 flex items-center justify-center font-black text-xs sm:text-sm font-mono shrink-0 whitespace-nowrap shadow-xs">
+                        {formatTableBadge(ord)}
                       </div>
                       <div>
                         <div className="flex items-center gap-2">
@@ -224,28 +233,38 @@ export const ReceptionPage = () => {
 
                   {/* Line Items */}
                   <div className="py-3 divide-y divide-slate-100 text-xs">
-                    {ord.items.map((item, idx) => (
-                      <div key={idx} className="py-2 flex items-center justify-between">
-                        <div className="flex items-center gap-2.5">
-                          <span className="w-6 h-6 rounded-lg bg-slate-100 text-slate-700 font-bold flex items-center justify-center font-mono">
-                            {formatNumber(item.quantity)}x
-                          </span>
-                          <div>
-                            <span className="font-bold text-slate-800 text-sm">{item.name}</span>
-                            <span className="text-[10px] text-slate-400 ml-2 font-mono">[{item.station}]</span>
-                            {item.notes && (
-                              <p className="text-[11px] text-blue-600 italic mt-0.5">
-                                * {item.notes}
-                              </p>
-                            )}
+                    {(ord.items || []).map((item, idx) => {
+                      const isItemCancelled = item.status === 'CANCELLED';
+                      return (
+                        <div key={idx} className={`py-2 flex items-center justify-between ${isItemCancelled ? 'opacity-60' : ''}`}>
+                          <div className="flex items-center gap-2.5">
+                            <span className={`w-6 h-6 rounded-lg font-bold flex items-center justify-center font-mono ${isItemCancelled ? 'bg-slate-100 text-slate-400 line-through' : 'bg-slate-100 text-slate-700'}`}>
+                              {formatNumber(item.quantity)}x
+                            </span>
+                            <div>
+                              <span className={`font-bold text-sm ${isItemCancelled ? 'line-through text-slate-400 font-normal' : 'text-slate-800'}`}>
+                                {item.name}
+                              </span>
+                              {isItemCancelled && (
+                                <span className="ml-2 px-1.5 py-0.5 rounded text-[10px] font-bold bg-rose-50 text-rose-700 border border-rose-200">
+                                  Cancelled
+                                </span>
+                              )}
+                              <span className="text-[10px] text-slate-400 ml-2 font-mono">[{item.station}]</span>
+                              {item.notes && (
+                                <p className="text-[11px] text-blue-600 italic mt-0.5">
+                                  * {item.notes}
+                                </p>
+                              )}
+                            </div>
                           </div>
-                        </div>
 
-                        <span className="font-bold text-slate-800 text-sm">
-                          {formatCurrency(item.quantity * item.unitPrice)}
-                        </span>
-                      </div>
-                    ))}
+                          <span className={`font-bold text-sm ${isItemCancelled ? 'line-through text-slate-400' : 'text-slate-800'}`}>
+                            {formatCurrency(item.quantity * item.unitPrice)}
+                          </span>
+                        </div>
+                      );
+                    })}
                   </div>
 
                   {/* Order-level note */}
@@ -319,7 +338,7 @@ export const ReceptionPage = () => {
                     </Badge>
                   </div>
                   <div className="text-xs text-slate-600 font-semibold flex items-center justify-between">
-                    <span>{t('tables.tableNumber', null, 'Table')} {formatNumber(kot.tableNo || '-')}</span>
+                    <span>{t('tables.tableNumber', null, 'Table')} {kot.tableNo ? String(kot.tableNo).trim().replace(/^(T-?)+/i, '') : '-'}</span>
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
@@ -346,7 +365,7 @@ export const ReceptionPage = () => {
           isOpen={Boolean(selectedKotDetail)}
           onClose={() => setSelectedKotDetail(null)}
           title={`KOT Ticket: ${selectedKotDetail.kotNo || selectedKotDetail.kotNumber}`}
-          subtitle={`${selectedKotDetail.tableNo ? `Table ${selectedKotDetail.tableNo}` : 'Take Away'} • Order #${selectedKotDetail.orderNo || selectedKotDetail.orderNumber}`}
+          subtitle={`${selectedKotDetail.tableNo ? `Table ${String(selectedKotDetail.tableNo).trim().replace(/^(T-?)+/i, '')}` : 'Take Away'} • Order #${selectedKotDetail.orderNo || selectedKotDetail.orderNumber}`}
         >
           <div className="space-y-4">
             <div className="flex items-center justify-between p-3 bg-slate-50 rounded-xl border border-slate-200 text-xs">
@@ -419,7 +438,7 @@ export const ReceptionPage = () => {
         isOpen={isRejectModalOpen}
         onClose={() => setIsRejectModalOpen(false)}
         title={t('reception.rejectOrder', null, 'Reject Order')}
-        subtitle={`${t('orders.orderId', null, 'Order')} #${selectedOrderToReject?.orderNo} • ${t('tables.tableNumber', null, 'Table')} ${formatNumber(selectedOrderToReject?.tableNo)}`}
+        subtitle={`${t('orders.orderId', null, 'Order')} #${selectedOrderToReject?.orderNo} • ${selectedOrderToReject?.orderType && selectedOrderToReject?.orderType !== 'DINE_IN' ? selectedOrderToReject.orderType : `${t('tables.tableNumber', null, 'Table')} ${String(selectedOrderToReject?.tableNo || '').trim().replace(/^(T-?)+/i, '') || '-'}`}`}
       >
         <form onSubmit={handleRejectSubmit} className="space-y-4">
           {rejectError && (

@@ -16,6 +16,9 @@ import {
   Printer,
   Layers,
   ChevronRight,
+  ChevronDown,
+  ChevronUp,
+  Filter,
   ArrowLeft,
   ArrowRight,
   XCircle,
@@ -54,6 +57,7 @@ export const OrdersPage = () => {
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(20);
   const [pagination, setPagination] = useState(null);
+  const [isMobileFiltersOpen, setIsMobileFiltersOpen] = useState(false);
 
   // View Details Modal
   const [selectedOrder, setSelectedOrder] = useState(null);
@@ -104,6 +108,7 @@ export const OrdersPage = () => {
         ORDER_STATUS.DRAFT,
         ORDER_STATUS.HOLD,
         ORDER_STATUS.SUBMITTED,
+        ORDER_STATUS.WAITING_CONFIRMATION,
         ORDER_STATUS.CONFIRMED,
         ORDER_STATUS.KOT_SENT,
         ORDER_STATUS.PREPARING,
@@ -691,7 +696,7 @@ export const OrdersPage = () => {
 
         return (
           <div className="flex items-center justify-end gap-1.5">
-            {isHold && (
+            {(isHold || row.status === ORDER_STATUS.WAITING_CONFIRMATION) && (
               <Button
                 variant="primary"
                 size="sm"
@@ -699,9 +704,9 @@ export const OrdersPage = () => {
                 className="bg-emerald-600 hover:bg-emerald-700 font-bold shadow-2xs text-white"
                 loading={activatingOrderId === (row.id || row._id || row.orderNo)}
                 onClick={() => handleActivateAndSendKot(row)}
-                title="Activate this Hold order and generate KOT for Kitchen"
+                title={row.status === ORDER_STATUS.WAITING_CONFIRMATION ? 'Approve and generate KOT for Kitchen' : 'Activate this Hold order and generate KOT for Kitchen'}
               >
-                Activate &amp; Send KOT
+                {row.status === ORDER_STATUS.WAITING_CONFIRMATION ? 'Approve & Send KOT' : 'Activate & Send KOT'}
               </Button>
             )}
 
@@ -766,62 +771,109 @@ export const OrdersPage = () => {
         title={t('orders.title', null, 'Live Restaurant Orders')}
         subtitle={t('orders.subtitle', null, 'Manage ongoing table orders, modification deltas, kitchen state, and cancellations')}
       >
-        <div className="flex items-center gap-2">
-          <Button variant="secondary" icon={Clock} onClick={() => navigate('/orders/history')}>
-            {t('orders.historyTitle', null, 'Order History & Analytics')}
-          </Button>
-          <Button variant="primary" icon={Plus} onClick={() => navigate('/orders/new')}>
-            {t('orders.newOrder', null, 'Take New Order')}
-          </Button>
-        </div>
+        <Button
+          variant="secondary"
+          icon={Clock}
+          onClick={() => navigate('/orders/history')}
+          className="h-11 sm:h-auto w-full sm:w-auto justify-center text-xs font-bold whitespace-nowrap"
+        >
+          <span className="sm:hidden">Order History</span>
+          <span className="hidden sm:inline">{t('orders.historyTitle', null, 'Order History & Closed Invoices')}</span>
+        </Button>
+        <Button
+          variant="primary"
+          icon={Plus}
+          onClick={() => navigate('/orders/new')}
+          className="h-11 sm:h-auto w-full sm:w-auto justify-center text-xs font-bold whitespace-nowrap"
+        >
+          <span className="sm:hidden">Take Order</span>
+          <span className="hidden sm:inline">{t('orders.newOrder', null, 'Take New Order')}</span>
+        </Button>
       </PageHeader>
 
-      {/* Filter Tabs */}
-      <div className="bg-white p-3 sm:p-4 rounded-2xl border border-slate-200 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-3 sm:gap-4">
-        {/* Status Switcher Tabs */}
-        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 text-xs no-scrollbar">
-          {[
-            { id: 'ACTIVE', label: t('dashboard.activeOrders', null, 'Active Orders') },
-            { id: 'HOLD', label: t('orders.holdOrders', null, 'Hold Orders') },
-            { id: ORDER_STATUS.KOT_SENT, label: t('orders.kotSent', null, 'KOT Sent') },
-            { id: ORDER_STATUS.PREPARING, label: t('common.preparing', null, 'In Kitchen') },
-            { id: ORDER_STATUS.READY, label: t('common.ready', null, 'Ready to Serve') },
-            { id: ORDER_STATUS.SERVED, label: t('common.served', null, 'Served') },
-            { id: ORDER_STATUS.COMPLETED, label: t('orders.completedOrders', null, 'Completed') },
-            { id: ORDER_STATUS.CANCELLED, label: t('orders.cancelledOrders', null, 'Cancelled') },
-            { id: ORDER_STATUS.REJECTED, label: t('orders.rejectedOrders', null, 'Rejected Orders') },
-            { id: 'ALL', label: t('common.all', null, 'All History') }
-          ].map((tab) => (
-            <button
-              key={tab.id}
-              onClick={() => setStatusFilter(tab.id)}
-              className={`px-3 py-1.5 rounded-xl font-bold whitespace-nowrap transition-all ${
-                statusFilter === tab.id
-                  ? 'bg-blue-600 text-white shadow-xs'
-                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-              }`}
-            >
-              {tab.label}
-            </button>
-          ))}
+      {/* Filter Tabs & Quick Search */}
+      <div className="bg-white p-3 sm:p-4 rounded-2xl border border-slate-200 shadow-xs space-y-3">
+        {/* Mobile Filter Toggle Header */}
+        <div className="flex items-center justify-between gap-2 md:hidden">
+          <button
+            type="button"
+            onClick={() => setIsMobileFiltersOpen((prev) => !prev)}
+            className="flex-1 flex items-center justify-between px-3 py-2 bg-slate-50 hover:bg-slate-100 rounded-xl border border-slate-200 text-xs font-bold text-slate-700 transition-colors"
+          >
+            <div className="flex items-center gap-2 truncate">
+              <Filter className="w-3.5 h-3.5 text-blue-600 shrink-0" />
+              <span className="truncate">
+                Filter: <span className="text-blue-700">{statusFilter === 'ALL' ? 'All History' : statusFilter}</span>
+                {orderTypeFilter !== 'ALL' && ` • ${orderTypeFilter}`}
+              </span>
+            </div>
+            <div className="flex items-center gap-1 shrink-0 text-slate-400">
+              <span className="text-[11px] font-semibold">{isMobileFiltersOpen ? 'Collapse' : 'Expand'}</span>
+              {isMobileFiltersOpen ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+            </div>
+          </button>
         </div>
 
-        {/* Order Type & Search */}
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full md:w-auto">
-          <select
-            value={orderTypeFilter}
-            onChange={(e) => setOrderTypeFilter(e.target.value)}
-            className="text-xs font-bold border border-slate-200 rounded-xl px-3 py-2 bg-slate-50 text-slate-700 hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-100 cursor-pointer"
-          >
-            <option value="ALL">{t('common.all', null, 'All Order Types')}</option>
-            <option value="DINE_IN">{t('common.dineIn', null, 'Dine In (Tables)')}</option>
-            <option value="TAKEAWAY">{t('common.takeaway', null, 'Take Away')}</option>
-            <option value="ZOMATO">Zomato</option>
-            <option value="SWIGGY">Swiggy</option>
-            <option value="ONLINE_OTHER">Online Other</option>
-          </select>
+        {/* Collapsible Content on Mobile (Always visible on md:flex) */}
+        <div className={`${isMobileFiltersOpen ? 'flex' : 'hidden'} md:flex flex-col md:flex-row md:items-center justify-between gap-3 sm:gap-4`}>
+          {/* Status Switcher Tabs */}
+          <div className="grid grid-cols-2 gap-1.5 sm:flex sm:items-center sm:gap-1.5 sm:overflow-x-auto pb-1 text-xs no-scrollbar pos-tag-grid">
+            {[
+              { id: 'ACTIVE', label: t('dashboard.activeOrders', null, 'Active Orders') },
+              { id: 'HOLD', label: t('orders.holdOrders', null, 'Hold Orders') },
+              { id: ORDER_STATUS.WAITING_CONFIRMATION, label: t('dashboard.waitingApproval', null, 'Waiting Approval') },
+              { id: ORDER_STATUS.KOT_SENT, label: t('orders.kotSent', null, 'KOT Sent') },
+              { id: ORDER_STATUS.PREPARING, label: t('common.preparing', null, 'In Kitchen') },
+              { id: ORDER_STATUS.READY, label: t('common.ready', null, 'Ready to Serve') },
+              { id: ORDER_STATUS.SERVED, label: t('common.served', null, 'Served') },
+              { id: ORDER_STATUS.COMPLETED, label: t('orders.completedOrders', null, 'Completed') },
+              { id: ORDER_STATUS.CANCELLED, label: t('orders.cancelledOrders', null, 'Cancelled') },
+              { id: ORDER_STATUS.REJECTED, label: t('orders.rejectedOrders', null, 'Rejected Orders') },
+              { id: 'ALL', label: t('common.all', null, 'All History') }
+            ].map((tab) => (
+              <button
+                key={tab.id}
+                onClick={() => setStatusFilter(tab.id)}
+                className={`px-3 py-1.5 rounded-xl font-bold whitespace-nowrap transition-all ${
+                  statusFilter === tab.id
+                    ? 'bg-blue-600 text-white shadow-xs'
+                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                }`}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
 
-          <div className="w-full sm:w-64">
+          {/* Order Type & Search (Visible when expanded or on desktop) */}
+          <div className="grid grid-cols-2 gap-2 w-full md:w-auto md:flex md:items-center pos-filter-grid">
+            <select
+              value={orderTypeFilter}
+              onChange={(e) => setOrderTypeFilter(e.target.value)}
+              className="w-full text-xs font-bold border border-slate-200 rounded-xl px-3 py-2 bg-slate-50 text-slate-700 hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-100 cursor-pointer"
+            >
+              <option value="ALL">{t('common.all', null, 'All Order Types')}</option>
+              <option value="DINE_IN">{t('common.dineIn', null, 'Dine In (Tables)')}</option>
+              <option value="TAKEAWAY">{t('common.takeaway', null, 'Take Away')}</option>
+              <option value="ZOMATO">Zomato</option>
+              <option value="SWIGGY">Swiggy</option>
+              <option value="ONLINE_OTHER">Online Other</option>
+            </select>
+
+            <div className="w-full sm:w-64">
+              <Input
+                icon={Search}
+                placeholder={t('orders.searchMenu', null, 'Search order #, table, captain...')}
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* Quick Search Bar when Collapsed on Mobile */}
+        {!isMobileFiltersOpen && (
+          <div className="block md:hidden">
             <Input
               icon={Search}
               placeholder={t('orders.searchMenu', null, 'Search order #, table, captain...')}
@@ -829,7 +881,7 @@ export const OrdersPage = () => {
               onChange={(e) => setSearch(e.target.value)}
             />
           </div>
-        </div>
+        )}
       </div>
 
       {/* Desktop / Tablet List/Table View */}
@@ -888,14 +940,25 @@ export const OrdersPage = () => {
                   return (
                     <div
                       key={row.id}
-                      className="bg-white rounded-2xl border border-slate-200 p-3.5 shadow-xs flex flex-col justify-between transition-all hover:border-blue-400 hover:shadow-md"
+                      onClick={() => handleOpenDetails(row)}
+                      role="button"
+                      tabIndex={0}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          handleOpenDetails(row);
+                        }
+                      }}
+                      title="Tap order to view full details & KOT tickets"
+                      className="bg-white rounded-2xl border border-slate-200 p-3.5 shadow-xs flex flex-col justify-between transition-all hover:border-blue-400 hover:shadow-md cursor-pointer active:scale-[0.99] select-none"
                     >
                       <div>
                         {/* Top Bar: Order Sequence + Table / Channel Badge + Time */}
                         <div className="flex items-center justify-between gap-2 pb-2.5 border-b border-slate-100">
                           <div className="flex items-center gap-1.5 flex-wrap">
-                            <span className="font-mono font-bold text-xs px-2 py-0.5 rounded bg-slate-100 text-slate-700">
+                            <span className="font-mono font-bold text-xs px-2 py-0.5 rounded bg-slate-100 text-slate-700 flex items-center gap-1">
                               {formatReceiptSequence(row.orderNo)}
+                              <ChevronRight className="w-3 h-3 text-slate-400" />
                             </span>
                             {row.orderType && row.orderType !== 'DINE_IN' ? (
                               <span className="text-[11px] font-bold px-2 py-0.5 rounded bg-amber-100 text-amber-900 border border-amber-200">
@@ -922,7 +985,10 @@ export const OrdersPage = () => {
                           <button
                             type="button"
                             disabled={isCompleted}
-                            onClick={() => handleOpenStatusModal(row)}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleOpenStatusModal(row);
+                            }}
                             title={isCompleted ? undefined : 'Tap to change order status'}
                             className={`inline-flex items-center gap-1.5 text-xs font-bold px-2.5 py-1 rounded-full transition-transform active:scale-95 ${
                               row.status === ORDER_STATUS.HOLD
@@ -996,15 +1062,19 @@ export const OrdersPage = () => {
                       {/* Touch-Friendly Action Buttons */}
                       <div className="pt-2 border-t border-slate-100 space-y-2">
                         {/* Priority Prominent Button */}
-                        {isHold && (
+                        {(isHold || row.status === ORDER_STATUS.WAITING_CONFIRMATION) && (
                           <Button
                             variant="primary"
                             size="sm"
                             icon={Play}
-                            onClick={() => handleActivateHoldOrder(row)}
+                            loading={activatingOrderId === (row.id || row._id || row.orderNo)}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleActivateAndSendKot(row);
+                            }}
                             className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 shadow-xs"
                           >
-                            {t('orders.activateHoldOrder', null, 'Activate & Send KOT')}
+                            {row.status === ORDER_STATUS.WAITING_CONFIRMATION ? 'Approve & Send KOT' : t('orders.activateHoldOrder', null, 'Activate & Send KOT')}
                           </Button>
                         )}
 
@@ -1013,7 +1083,10 @@ export const OrdersPage = () => {
                             variant="primary"
                             size="sm"
                             icon={CheckCircle}
-                            onClick={() => handleMarkServed(row)}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleMarkServed(row);
+                            }}
                             className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2 shadow-xs"
                           >
                             Mark Served
@@ -1025,7 +1098,8 @@ export const OrdersPage = () => {
                             variant="primary"
                             size="sm"
                             icon={Receipt}
-                            onClick={() => {
+                            onClick={(e) => {
+                              e.stopPropagation();
                               const tId = row.tableId;
                               const oId = row.id;
                               if (tId) {
@@ -1041,7 +1115,7 @@ export const OrdersPage = () => {
                         )}
 
                         {/* Secondary Actions Toolbar */}
-                        <div className="flex items-center justify-between gap-1.5">
+                        <div className="flex items-center justify-between gap-1.5" onClick={(e) => e.stopPropagation()}>
                           <Button
                             variant="secondary"
                             size="sm"
@@ -1157,17 +1231,17 @@ export const OrdersPage = () => {
 
                 return (
                   <div className="space-y-3">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 sm:gap-2">
+                      <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
+                        <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700 whitespace-nowrap">
                           Order Dishes
                         </h4>
-                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-50 text-blue-700 border border-blue-200">
+                        <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-blue-50 text-blue-700 border border-blue-200 whitespace-nowrap shrink-0">
                           {activeDishes.length} Active {activeDishes.length === 1 ? 'Dish' : 'Dishes'}
                         </span>
                       </div>
                       {!isSettled && (
-                        <span className="text-[11px] text-slate-500 font-medium">
+                        <span className="text-[11px] text-slate-400 font-medium">
                           Remove dish recalculates total &amp; pending bill
                         </span>
                       )}
@@ -1252,30 +1326,58 @@ export const OrdersPage = () => {
                 <p className="text-xs text-slate-400">No KOT tickets issued yet (Order may be in draft/waiting state or KOT not required).</p>
               ) : (
                 <div className="space-y-2 max-h-48 overflow-y-auto">
-                  {orderKOTs.map((kot) => (
-                    <div key={kot.id} className="p-3 rounded-xl border border-slate-200 bg-slate-50/50 flex items-center justify-between text-xs">
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <span className="font-black text-blue-700 font-mono">{kot.kotNo}</span>
-                          <span className="font-semibold text-slate-600 bg-white px-2 py-0.5 rounded border border-slate-200 text-[10px]">
-                            {kot.type} Rev #{kot.revision}
-                          </span>
-                          <span className="text-slate-500 font-bold capitalize">[{kot.status}]</span>
-                        </div>
-                        <p className="text-slate-500 mt-1">
-                          {kot.items.map((i) => `${i.quantity}x ${i.name}`).join(', ')}
-                        </p>
-                      </div>
-
-                      <button
-                        onClick={() => printService.printKOT(kot, selectedOrder, { tableNo: selectedOrder.tableNo })}
-                        className="text-xs font-bold text-blue-600 hover:text-blue-700 inline-flex items-center gap-1 bg-white p-2 rounded-lg border border-slate-200"
+                  {orderKOTs.map((kot) => {
+                    const isKotCancelled = kot.status === 'CANCELLED' || kot.type === 'CANCELLATION';
+                    return (
+                      <div
+                        key={kot.id}
+                        className={`p-3 rounded-xl border flex items-center justify-between text-xs ${
+                          isKotCancelled
+                            ? 'border-rose-200 bg-rose-50/30'
+                            : 'border-slate-200 bg-slate-50/50'
+                        }`}
                       >
-                        <Printer className="w-3.5 h-3.5" />
-                        Print
-                      </button>
-                    </div>
-                  ))}
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span className={`font-black font-mono ${isKotCancelled ? 'text-rose-700' : 'text-blue-700'}`}>
+                              {kot.kotNo}
+                            </span>
+                            <span className="font-semibold text-slate-600 bg-white px-2 py-0.5 rounded border border-slate-200 text-[10px]">
+                              {kot.type} Rev #{kot.revision}
+                            </span>
+                            <span
+                              className={`font-bold px-1.5 py-0.5 rounded text-[10px] ${
+                                isKotCancelled
+                                  ? 'bg-rose-100 text-rose-800 border border-rose-200'
+                                  : 'text-slate-600'
+                              }`}
+                            >
+                              [{kot.status}]
+                            </span>
+                          </div>
+                          <p className="text-slate-500 mt-1">
+                            {kot.items.map((i) => {
+                              const isItemCancelled = isKotCancelled || i.status === 'CANCELLED' || i.cancelled;
+                              return (
+                                <span key={i.productId || i.name} className={`mr-2 ${isItemCancelled ? 'line-through text-slate-400' : ''}`}>
+                                  {i.quantity}x {i.name || i.productName}
+                                  {isItemCancelled && ' [Cancelled]'}
+                                </span>
+                              );
+                            })}
+                          </p>
+                        </div>
+
+                        <button
+                          onClick={() => printService.printKOT(kot, selectedOrder, { tableNo: selectedOrder.tableNo })}
+                          className="text-xs font-bold text-blue-600 hover:text-blue-700 inline-flex items-center gap-1 bg-white p-2 rounded-lg border border-slate-200 shrink-0"
+                        >
+                          <Printer className="w-3.5 h-3.5" />
+                          Print
+                        </button>
+                      </div>
+                    );
+                  })}
                 </div>
               )}
             </div>
@@ -1302,11 +1404,9 @@ export const OrdersPage = () => {
                     Proceed to Billing & Pay
                   </Button>
                 )}
-              <div className="sm:ml-auto">
-                <Button variant="secondary" className="w-full sm:w-auto" onClick={() => setSelectedOrder(null)}>
-                  Close
-                </Button>
-              </div>
+              <Button variant="secondary" className="w-full sm:w-auto sm:ml-auto" onClick={() => setSelectedOrder(null)}>
+                Close
+              </Button>
             </div>
           </div>
         )}
@@ -1425,12 +1525,12 @@ export const OrdersPage = () => {
             <div className="lg:col-span-5 border border-slate-200 rounded-2xl p-3.5 bg-slate-50/70 space-y-3">
               <div className="flex items-center justify-between pb-2 border-b border-slate-200/80">
                 <div className="flex items-center gap-2">
-                  <h4 className="text-xs font-black uppercase tracking-wider text-slate-700">Order Dishes</h4>
-                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-white text-slate-600 border border-slate-200">
+                  <h4 className="text-xs font-black uppercase tracking-wider text-slate-700 whitespace-nowrap">Order Dishes</h4>
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-white text-slate-600 border border-slate-200 whitespace-nowrap">
                     {modifiedItems.length} {modifiedItems.length === 1 ? 'dish' : 'dishes'}
                   </span>
                 </div>
-                <span className="text-xs font-extrabold text-blue-700">
+                <span className="text-xs font-extrabold text-blue-700 whitespace-nowrap">
                   ₹{modifiedItems.reduce((acc, i) => acc + (i.quantity * i.unitPrice), 0)}
                 </span>
               </div>
@@ -1735,37 +1835,35 @@ export const OrdersPage = () => {
             ></textarea>
           </div>
 
-          <div className="flex flex-col-reverse sm:flex-row justify-between items-center gap-2 pt-2 border-t border-slate-100 pos-modal-actions">
-            <div className="text-xs text-slate-500">
+          <div className="text-xs text-slate-500 pt-1 pb-0.5">
+            {(() => {
+              const changes = getModificationChanges();
+              if (changes.deltaCount === 0) {
+                return <span className="text-slate-400">No dish changes made yet.</span>;
+              }
+              return (
+                <span className="font-medium text-blue-700">
+                  Delta: {changes.added > 0 && `${changes.added} added `}
+                  {changes.updated > 0 && `${changes.updated} updated `}
+                  {changes.removed > 0 && `${changes.removed} removed `}
+                  {!changes.requiresKot && (
+                    <span className="ml-1 text-slate-500 font-normal">(No KOT ticket needed)</span>
+                  )}
+                </span>
+              );
+            })()}
+          </div>
+
+          <div className="flex flex-col-reverse sm:flex-row justify-end items-center gap-2 pt-2 border-t border-slate-100 pos-modal-actions">
+            <Button variant="secondary" onClick={() => setModifyingOrder(null)}>
+              Cancel
+            </Button>
+            <Button type="submit" loading={modLoading}>
               {(() => {
                 const changes = getModificationChanges();
-                if (changes.deltaCount === 0) {
-                  return <span className="text-slate-400">No dish changes made yet.</span>;
-                }
-                return (
-                  <span className="font-medium text-blue-700">
-                    Delta: {changes.added > 0 && `${changes.added} added `}
-                    {changes.updated > 0 && `${changes.updated} updated `}
-                    {changes.removed > 0 && `${changes.removed} removed `}
-                    {!changes.requiresKot && (
-                      <span className="ml-1 text-slate-500 font-normal">(No KOT ticket needed)</span>
-                    )}
-                  </span>
-                );
+                return changes.requiresKot ? 'Dispatch Delta KOT' : 'Update Order Items';
               })()}
-            </div>
-
-            <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
-              <Button variant="secondary" onClick={() => setModifyingOrder(null)}>
-                Cancel
-              </Button>
-              <Button type="submit" loading={modLoading}>
-                {(() => {
-                  const changes = getModificationChanges();
-                  return changes.requiresKot ? 'Dispatch Delta KOT' : 'Update Order Items';
-                })()}
-              </Button>
-            </div>
+            </Button>
           </div>
         </form>
       </Modal>
@@ -2026,36 +2124,34 @@ export const OrdersPage = () => {
 
             {/* Critical actions: Approve, Reject, Cancel */}
             <div className="pt-3 border-t border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2 pos-modal-actions">
-              <div className="flex items-center gap-2 w-full sm:w-auto">
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  onClick={() => {
-                    const tgt = statusActionTarget;
-                    setStatusActionTarget(null);
-                    handleOpenReject(tgt);
-                  }}
-                  className="flex-1 sm:flex-none text-rose-700 border-rose-200 hover:bg-rose-50 font-bold"
-                >
-                  <XCircle className="w-3.5 h-3.5 mr-1" />
-                  Reject Order
-                </Button>
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  onClick={() => {
-                    const tgt = statusActionTarget;
-                    setStatusActionTarget(null);
-                    handleOpenCancel(tgt);
-                  }}
-                  className="flex-1 sm:flex-none text-red-700 border-red-200 hover:bg-red-50 font-bold"
-                >
-                  <Trash2 className="w-3.5 h-3.5 mr-1" />
-                  Cancel Order
-                </Button>
-              </div>
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => {
+                  const tgt = statusActionTarget;
+                  setStatusActionTarget(null);
+                  handleOpenReject(tgt);
+                }}
+                className="flex-1 sm:flex-none text-rose-700 border-rose-200 hover:bg-rose-50 font-bold"
+              >
+                <XCircle className="w-3.5 h-3.5 mr-1" />
+                Reject Order
+              </Button>
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => {
+                  const tgt = statusActionTarget;
+                  setStatusActionTarget(null);
+                  handleOpenCancel(tgt);
+                }}
+                className="flex-1 sm:flex-none text-red-700 border-red-200 hover:bg-red-50 font-bold"
+              >
+                <Trash2 className="w-3.5 h-3.5 mr-1" />
+                Cancel Order
+              </Button>
 
-              <Button variant="ghost" size="sm" className="w-full sm:w-auto" onClick={() => setStatusActionTarget(null)}>
+              <Button variant="ghost" size="sm" className="w-full sm:w-auto sm:ml-auto" onClick={() => setStatusActionTarget(null)}>
                 Close
               </Button>
             </div>

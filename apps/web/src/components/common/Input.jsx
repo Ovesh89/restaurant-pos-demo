@@ -3,6 +3,7 @@ import { Eye, EyeOff } from 'lucide-react';
 
 export const Input = ({
   label,
+  labelClassName = '',
   error,
   helperText,
   icon: Icon,
@@ -19,7 +20,7 @@ export const Input = ({
   return (
     <div className="w-full">
       {label && (
-        <label htmlFor={inputId} className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">
+        <label htmlFor={inputId} className={`block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5 ${labelClassName}`}>
           {label}
         </label>
       )}

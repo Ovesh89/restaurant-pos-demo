@@ -271,7 +271,7 @@ export const ShiftsPage = () => {
               </div>
             </div>
 
-            <div className="flex flex-wrap items-center gap-2 sm:gap-2.5">
+            <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center sm:gap-2.5 pos-header-actions w-full sm:w-auto">
               <Button
                 variant="secondary"
                 icon={Plus}
@@ -304,7 +304,7 @@ export const ShiftsPage = () => {
 
           {/* Shift Metrics */}
           {shiftSummary && (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-4">
               <StatCard
                 title={t('shifts.expectedCash', 'Expected Cash in Drawer')}
                 value={formatCurrency(shiftSummary.expectedCash)}

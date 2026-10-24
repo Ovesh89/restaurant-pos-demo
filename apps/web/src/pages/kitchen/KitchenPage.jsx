@@ -12,7 +12,9 @@ import {
   CheckSquare,
   Square,
   Sparkles,
-  ArrowRight
+  ArrowRight,
+  ChevronDown,
+  ChevronUp
 } from 'lucide-react';
 import { kotRepository } from '../../services/repositories/kotRepository';
 import { orderRepository } from '../../services/repositories/orderRepository';
@@ -33,6 +35,7 @@ export const KitchenPage = () => {
   const [kots, setKots] = useState([]);
   const [selectedStation, setSelectedStation] = useState('ALL');
   const [statusFilter, setStatusFilter] = useState('ACTIVE'); // ACTIVE (New/Preparing), or ALL, or READY
+  const [isMobileFiltersOpen, setIsMobileFiltersOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [actionLoadingId, setActionLoadingId] = useState(null);
 
@@ -46,15 +49,15 @@ export const KitchenPage = () => {
       const data = await kotRepository.getKOTs({
         station: selectedStation === 'ALL' ? undefined : selectedStation
       });
-      // Safety filter: exclude any cancelled, served, or already completed/billed orders
+      // Safety filter: exclude served or completed orders, but preserve cancelled KOTs so they appear in the Cancelled tab
       const cleanData = (data || []).filter((k) => {
-        if (k.status === KOT_STATUS.CANCELLED || k.status === KOT_STATUS.SERVED || k.type === KOT_TYPE.CANCELLATION) {
+        if (k.status === KOT_STATUS.SERVED) {
           return false;
         }
         if (k.isOrderCompleted) {
           return false;
         }
-        if (['COMPLETED', 'PAID', 'CANCELLED', 'REJECTED', 'SERVED'].includes(k.orderStatus)) {
+        if (['COMPLETED', 'PAID', 'SERVED'].includes(k.orderStatus)) {
           return false;
         }
         return true;
@@ -156,20 +159,23 @@ export const KitchenPage = () => {
 
   // Filter KOTs
   const displayedKOTs = kots.filter((k) => {
-    if (
+    const isCancelled =
       k.status === KOT_STATUS.CANCELLED ||
-      k.status === KOT_STATUS.SERVED ||
       k.type === KOT_TYPE.CANCELLATION ||
-      k.isOrderCompleted ||
-      ['COMPLETED', 'PAID', 'CANCELLED', 'REJECTED', 'SERVED'].includes(k.orderStatus)
-    ) {
-      return false;
-    }
+      k.orderStatus === 'CANCELLED' ||
+      k.orderStatus === 'REJECTED';
+
     if (statusFilter === 'ACTIVE') {
-      return k.status === KOT_STATUS.NEW || k.status === KOT_STATUS.PREPARING;
+      return !isCancelled && (k.status === KOT_STATUS.NEW || k.status === KOT_STATUS.PREPARING);
     }
     if (statusFilter === 'READY') {
-      return k.status === KOT_STATUS.READY;
+      return !isCancelled && k.status === KOT_STATUS.READY;
+    }
+    if (statusFilter === 'CANCELLED') {
+      return isCancelled;
+    }
+    if (statusFilter === 'ALL') {
+      return true;
     }
     return true;
   });
@@ -199,10 +205,40 @@ export const KitchenPage = () => {
         </Button>
       </PageHeader>
 
+      {/* Mobile Filter Toggle Header */}
+      <div className="md:hidden flex items-center justify-between p-3 bg-white rounded-2xl border border-slate-200 shadow-xs">
+        <div className="flex items-center gap-2.5 min-w-0">
+          <div className="w-8 h-8 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
+            <Filter className="w-4 h-4" />
+          </div>
+          <div className="min-w-0">
+            <div className="text-xs font-bold text-slate-800 truncate">
+              {selectedStation === 'ALL' ? t('kitchen.allStations', null, 'All Stations') : selectedStation}
+            </div>
+            <div className="text-[10px] text-slate-500 font-medium truncate">
+              {statusFilter === 'ACTIVE'
+                ? t('kitchen.pendingKots', null, 'Active Tickets')
+                : statusFilter === 'READY'
+                ? t('common.ready', null, 'Ready')
+                : t('common.all', null, 'All Tickets')}{' '}
+              • {formatNumber(displayedKOTs.length)} {t('orders.orders', null, 'tickets')}
+            </div>
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={() => setIsMobileFiltersOpen(!isMobileFiltersOpen)}
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition-all shrink-0"
+        >
+          <span>{isMobileFiltersOpen ? t('common.collapse', null, 'Collapse') : t('common.filter', null, 'Filters')}</span>
+          {isMobileFiltersOpen ? <ChevronUp className="w-4 h-4 text-slate-500" /> : <ChevronDown className="w-4 h-4 text-slate-500" />}
+        </button>
+      </div>
+
       {/* Filter Tabs: Station & Status */}
-      <div className="bg-white p-3 sm:p-4 rounded-2xl border border-slate-200 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-3 sm:gap-4">
+      <div className={`bg-white p-3 sm:p-4 rounded-2xl border border-slate-200 shadow-xs flex-col md:flex md:flex-row md:items-center justify-between gap-3 sm:gap-4 ${isMobileFiltersOpen ? 'flex' : 'hidden md:flex'}`}>
         {/* Stations */}
-        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 text-xs no-scrollbar">
+        <div className="grid grid-cols-2 gap-1.5 sm:flex sm:items-center sm:gap-1.5 sm:overflow-x-auto pb-1 text-xs no-scrollbar pos-tag-grid">
           <button
             onClick={() => setSelectedStation('ALL')}
             className={`px-3 py-1.5 rounded-xl font-bold whitespace-nowrap transition-all ${
@@ -229,7 +265,7 @@ export const KitchenPage = () => {
         </div>
 
         {/* Status Switcher */}
-        <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl overflow-x-auto no-scrollbar shrink-0 text-xs">
+        <div className="grid grid-cols-2 gap-1 bg-slate-100 p-1 rounded-xl sm:flex sm:items-center shrink-0 text-xs pos-tag-grid">
           <button
             onClick={() => setStatusFilter('ACTIVE')}
             className={`px-3 py-1.5 rounded-lg font-bold whitespace-nowrap transition-all ${
@@ -244,7 +280,15 @@ export const KitchenPage = () => {
               statusFilter === 'READY' ? 'bg-white text-slate-800 shadow-xs' : 'text-slate-500 hover:text-slate-800'
             }`}
           >
-            {t('common.ready', null, 'Ready')} ({formatNumber(kots.filter((k) => k.status === KOT_STATUS.READY).length)})
+            {t('common.ready', null, 'Ready')} ({formatNumber(kots.filter((k) => (k.status === KOT_STATUS.READY) && !(k.status === KOT_STATUS.CANCELLED || k.type === KOT_TYPE.CANCELLATION || k.orderStatus === 'CANCELLED' || k.orderStatus === 'REJECTED')).length)})
+          </button>
+          <button
+            onClick={() => setStatusFilter('CANCELLED')}
+            className={`px-3 py-1.5 rounded-lg font-bold whitespace-nowrap transition-all ${
+              statusFilter === 'CANCELLED' ? 'bg-white text-rose-700 shadow-xs' : 'text-slate-500 hover:text-slate-800'
+            }`}
+          >
+            {t('common.cancelled', null, 'Cancelled')} ({formatNumber(kots.filter((k) => k.status === KOT_STATUS.CANCELLED || k.type === KOT_TYPE.CANCELLATION || k.orderStatus === 'CANCELLED' || k.orderStatus === 'REJECTED').length)})
           </button>
           <button
             onClick={() => setStatusFilter('ALL')}
@@ -276,6 +320,11 @@ export const KitchenPage = () => {
             const elapsed = getElapsedTimeMinutes(kot.createdAt);
             const isCooking = kot.status === KOT_STATUS.PREPARING;
             const isReady = kot.status === KOT_STATUS.READY;
+            const isCancelled =
+              kot.status === KOT_STATUS.CANCELLED ||
+              kot.type === KOT_TYPE.CANCELLATION ||
+              kot.orderStatus === 'CANCELLED' ||
+              kot.orderStatus === 'REJECTED';
 
             const kotPrepMap = preparedItemsByKot[kot.id] || {};
             const prepCount = (kot.items || []).filter((_, i) => kotPrepMap[i]).length;
@@ -286,7 +335,9 @@ export const KitchenPage = () => {
                 key={kot.id}
                 onClick={() => setSelectedKotDetail(kot)}
                 className={`bg-white rounded-2xl border shadow-xs hover:shadow-lg transition-all flex flex-col justify-between overflow-hidden cursor-pointer ${
-                  kot.status === KOT_STATUS.NEW
+                  isCancelled
+                    ? 'border-rose-300 ring-2 ring-rose-100 bg-rose-50/15 hover:border-rose-400'
+                    : kot.status === KOT_STATUS.NEW
                     ? 'border-blue-300 ring-2 ring-blue-100 hover:border-blue-500'
                     : isCooking
                     ? 'border-orange-300 ring-2 ring-orange-100 hover:border-orange-500'
@@ -296,7 +347,9 @@ export const KitchenPage = () => {
                 {/* Top Status Bar */}
                 <div
                   className={`px-4 py-2 text-xs font-bold flex items-center justify-between ${
-                    kot.status === KOT_STATUS.NEW
+                    isCancelled
+                      ? 'bg-rose-600 text-white'
+                      : kot.status === KOT_STATUS.NEW
                       ? 'bg-blue-600 text-white'
                       : isCooking
                       ? 'bg-orange-500 text-white'
@@ -304,9 +357,20 @@ export const KitchenPage = () => {
                   }`}
                 >
                   <span className="flex items-center gap-1.5">
-                    {isCooking ? <Flame className="w-4 h-4 animate-bounce" /> : <ChefHat className="w-4 h-4" />}
+                    {isCancelled ? (
+                      <AlertCircle className="w-4 h-4" />
+                    ) : isCooking ? (
+                      <Flame className="w-4 h-4 animate-bounce" />
+                    ) : (
+                      <ChefHat className="w-4 h-4" />
+                    )}
                     <span>{kot.kotNo}</span>
-                    {kot.revision > 1 && (
+                    {isCancelled && (
+                      <span className="bg-white/20 px-1.5 py-0.2 rounded text-[10px] font-black uppercase">
+                        CANCELLED
+                      </span>
+                    )}
+                    {kot.revision > 1 && !isCancelled && (
                       <span className="bg-white/20 px-1.5 py-0.2 rounded text-[10px]">
                         REV #{kot.revision}
                       </span>
@@ -366,16 +430,23 @@ export const KitchenPage = () => {
                   <div className="divide-y divide-slate-100 text-xs space-y-2 py-1">
                     {(kot.items || []).map((itm, iIdx) => {
                       const isPrepared = Boolean(kotPrepMap[iIdx]);
+                      const isItemCancelled = isCancelled || itm.status === 'CANCELLED' || itm.cancelled;
+
                       return (
                         <div key={iIdx} className="pt-2 first:pt-0">
                           <div className="flex items-start justify-between gap-2">
-                            <span className="text-base font-black text-blue-600 w-8 shrink-0">
+                            <span className={`text-base font-black w-8 shrink-0 ${isItemCancelled ? 'text-slate-400 line-through' : 'text-blue-600'}`}>
                               {itm.quantity}x
                             </span>
-                            <span className={`font-bold text-sm flex-1 leading-tight ${isPrepared ? 'line-through text-slate-400' : 'text-slate-800'}`}>
+                            <span className={`font-bold text-sm flex-1 leading-tight ${isItemCancelled ? 'line-through text-slate-400' : isPrepared ? 'line-through text-slate-400' : 'text-slate-800'}`}>
                               {itm.name || itm.productName}
+                              {isItemCancelled && (
+                                <span className="ml-2 px-1.5 py-0.5 rounded text-[10px] bg-rose-50 text-rose-700 border border-rose-200 font-bold not-italic no-underline inline-block">
+                                  Cancelled
+                                </span>
+                              )}
                             </span>
-                            {isCooking && (
+                            {isCooking && !isItemCancelled && (
                               <button
                                 type="button"
                                 onClick={(e) => {
@@ -423,7 +494,12 @@ export const KitchenPage = () => {
 
                 {/* Bottom Workflow Action Buttons */}
                 <div className="p-3 bg-slate-50 border-t border-slate-100">
-                  {kot.status === KOT_STATUS.NEW ? (
+                  {isCancelled ? (
+                    <div className="text-center py-2 text-xs font-bold text-rose-700 bg-rose-50 rounded-xl border border-rose-200 flex items-center justify-center gap-1.5">
+                      <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+                      <span>Ticket Cancelled — Do Not Prepare</span>
+                    </div>
+                  ) : kot.status === KOT_STATUS.NEW ? (
                     <Button
                       variant="primary"
                       className="w-full bg-orange-600 hover:bg-orange-700"
@@ -504,6 +580,17 @@ export const KitchenPage = () => {
               </div>
             )}
 
+            {/* Cancelled KOT Banner */}
+            {(selectedKotDetail.status === KOT_STATUS.CANCELLED || selectedKotDetail.type === KOT_TYPE.CANCELLATION || selectedKotDetail.orderStatus === 'CANCELLED' || selectedKotDetail.orderStatus === 'REJECTED') && (
+              <div className="p-3.5 rounded-xl bg-rose-50 border border-rose-200 text-xs text-rose-900 font-bold flex items-center gap-2.5">
+                <AlertCircle className="w-5 h-5 text-rose-600 shrink-0" />
+                <div>
+                  <p className="font-extrabold text-rose-800">THIS KOT TICKET HAS BEEN CANCELLED</p>
+                  <p className="font-medium text-rose-700 mt-0.5">{selectedKotDetail.notes || 'All items were removed/cancelled from the order. Do not prepare.'}</p>
+                </div>
+              </div>
+            )}
+
             {/* Preparation Progress Bar if in PREPARING */}
             {selectedKotDetail.status === KOT_STATUS.PREPARING && (
               <div className="bg-orange-50 p-4 rounded-xl border border-orange-200 space-y-2">
@@ -539,74 +626,88 @@ export const KitchenPage = () => {
               </div>
 
               <div className="border border-slate-200 rounded-xl overflow-hidden divide-y divide-slate-100 bg-white">
-                {(selectedKotDetail.items || []).map((itm, idx) => {
-                  const isChecked = Boolean(currentKotPreparedMap[idx]);
-                  const canCheck = selectedKotDetail.status === KOT_STATUS.PREPARING;
+                {(() => {
+                  const isModalKotCancelled =
+                    selectedKotDetail.status === KOT_STATUS.CANCELLED ||
+                    selectedKotDetail.type === KOT_TYPE.CANCELLATION ||
+                    selectedKotDetail.orderStatus === 'CANCELLED' ||
+                    selectedKotDetail.orderStatus === 'REJECTED';
 
-                  return (
-                    <div
-                      key={idx}
-                      onClick={() => {
-                        if (canCheck) handleToggleItemPrepared(selectedKotDetail, idx);
-                      }}
-                      className={`p-3.5 flex items-center justify-between gap-3 transition-colors ${
-                        canCheck ? 'cursor-pointer hover:bg-slate-50' : ''
-                      } ${isChecked ? 'bg-emerald-50/40' : ''}`}
-                    >
-                      <div className="flex items-center gap-3 flex-1 min-w-0">
-                        {canCheck ? (
-                          <button
-                            type="button"
-                            className="text-slate-400 hover:text-emerald-600 shrink-0"
-                          >
-                            {isChecked ? (
-                              <CheckSquare className="w-5 h-5 text-emerald-600" />
-                            ) : (
-                              <Square className="w-5 h-5 text-slate-300" />
-                            )}
-                          </button>
-                        ) : (
-                          <div className="w-5 h-5 rounded-full bg-slate-100 flex items-center justify-center text-slate-400 text-xs font-bold shrink-0">
-                            {formatNumber(idx + 1)}
-                          </div>
-                        )}
+                  return (selectedKotDetail.items || []).map((itm, idx) => {
+                    const isChecked = Boolean(currentKotPreparedMap[idx]);
+                    const isItemCancelled = isModalKotCancelled || itm.status === 'CANCELLED' || itm.cancelled;
+                    const canCheck = !isItemCancelled && selectedKotDetail.status === KOT_STATUS.PREPARING;
 
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <span className="text-sm font-extrabold text-blue-700 bg-blue-50 px-2 py-0.5 rounded-lg border border-blue-200 shrink-0">
-                              {itm.quantity}x
-                            </span>
-                            <h5
-                              className={`text-sm font-bold truncate ${
-                                isChecked ? 'line-through text-slate-400 font-normal' : 'text-slate-800'
-                              }`}
+                    return (
+                      <div
+                        key={idx}
+                        onClick={() => {
+                          if (canCheck) handleToggleItemPrepared(selectedKotDetail, idx);
+                        }}
+                        className={`p-3.5 flex items-center justify-between gap-3 transition-colors ${
+                          canCheck ? 'cursor-pointer hover:bg-slate-50' : ''
+                        } ${isChecked ? 'bg-emerald-50/40' : ''} ${isItemCancelled ? 'bg-rose-50/20' : ''}`}
+                      >
+                        <div className="flex items-center gap-3 flex-1 min-w-0">
+                          {canCheck ? (
+                            <button
+                              type="button"
+                              className="text-slate-400 hover:text-emerald-600 shrink-0"
                             >
-                              {itm.name || itm.productName}
-                            </h5>
-                          </div>
-
-                          {itm.notes && (
-                            <div className="mt-1 text-xs font-semibold text-rose-700 bg-rose-50 px-2 py-0.5 rounded border border-rose-100 inline-block">
-                              {t('kitchen.chefNote', null, 'Chef Note:')} {itm.notes}
+                              {isChecked ? (
+                                <CheckSquare className="w-5 h-5 text-emerald-600" />
+                              ) : (
+                                <Square className="w-5 h-5 text-slate-300" />
+                              )}
+                            </button>
+                          ) : (
+                            <div className={`w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold shrink-0 ${isItemCancelled ? 'bg-rose-100 text-rose-600' : 'bg-slate-100 text-slate-400'}`}>
+                              {formatNumber(idx + 1)}
                             </div>
                           )}
-                        </div>
-                      </div>
 
-                      {canCheck && (
-                        <span
-                          className={`text-xs font-bold px-2.5 py-1 rounded-lg border shrink-0 transition-colors ${
-                            isChecked
-                              ? 'bg-emerald-100 text-emerald-800 border-emerald-300'
-                              : 'bg-slate-100 text-slate-600 border-slate-200'
-                          }`}
-                        >
-                          {isChecked ? t('common.ready', null, 'Ready') : t('kitchen.inPrep', null, 'In Prep')}
-                        </span>
-                      )}
-                    </div>
-                  );
-                })}
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className={`text-sm font-extrabold px-2 py-0.5 rounded-lg border shrink-0 ${isItemCancelled ? 'bg-slate-100 text-slate-400 border-slate-200 line-through' : 'bg-blue-50 text-blue-700 border-blue-200'}`}>
+                                {itm.quantity}x
+                              </span>
+                              <h5
+                                className={`text-sm font-bold truncate ${
+                                  isItemCancelled ? 'line-through text-slate-400 font-normal' : isChecked ? 'line-through text-slate-400 font-normal' : 'text-slate-800'
+                                }`}
+                              >
+                                {itm.name || itm.productName}
+                              </h5>
+                              {isItemCancelled && (
+                                <span className="px-1.5 py-0.5 rounded text-[10px] bg-rose-50 text-rose-700 border border-rose-200 font-bold">
+                                  Cancelled
+                                </span>
+                              )}
+                            </div>
+
+                            {itm.notes && (
+                              <div className="mt-1 text-xs font-semibold text-rose-700 bg-rose-50 px-2 py-0.5 rounded border border-rose-100 inline-block">
+                                {t('kitchen.chefNote', null, 'Chef Note:')} {itm.notes}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+
+                        {canCheck && (
+                          <span
+                            className={`text-xs font-bold px-2.5 py-1 rounded-lg border shrink-0 transition-colors ${
+                              isChecked
+                                ? 'bg-emerald-100 text-emerald-800 border-emerald-300'
+                                : 'bg-slate-100 text-slate-600 border-slate-200'
+                            }`}
+                          >
+                            {isChecked ? t('common.ready', null, 'Ready') : t('kitchen.inPrep', null, 'In Prep')}
+                          </span>
+                        )}
+                      </div>
+                    );
+                  });
+                })()}
               </div>
             </div>
 
@@ -616,41 +717,46 @@ export const KitchenPage = () => {
                 variant="secondary"
                 icon={Printer}
                 onClick={() => handlePrint(selectedKotDetail)}
+                className="w-full sm:w-auto"
               >
                 {t('billing.printKot', null, 'Print Ticket')}
               </Button>
 
-              <div className="flex items-center gap-2 w-full sm:w-auto">
-                {selectedKotDetail.status === KOT_STATUS.NEW ? (
-                  <Button
-                    variant="primary"
-                    className="w-full sm:w-auto bg-orange-600 hover:bg-orange-700"
-                    icon={Flame}
-                    loading={actionLoadingId === selectedKotDetail.id}
-                    onClick={() => handleUpdateStatus(selectedKotDetail, KOT_STATUS.PREPARING)}
-                  >
-                    {t('kitchen.startPreparing', null, 'Start Preparation')}
-                  </Button>
-                ) : selectedKotDetail.status === KOT_STATUS.PREPARING ? (
-                  <Button
-                    variant="success"
-                    className="w-full sm:w-auto ring-2 ring-emerald-300 shadow-md font-bold"
-                    icon={CheckCircle2}
-                    loading={actionLoadingId === selectedKotDetail.id}
-                    onClick={() => handleUpdateStatus(selectedKotDetail, KOT_STATUS.READY)}
-                  >
-                    {allCurrentItemsPrepared ? `✓ ${t('kitchen.allPreparedMarkReady', null, 'All Items Prepared — Mark Ready for Serve')}` : t('kitchen.markReady', null, 'Mark KOT Ready for Serve')}
-                  </Button>
-                ) : (
-                  <div className="text-emerald-700 font-bold text-xs flex items-center gap-1.5 px-3 py-2 bg-emerald-50 rounded-xl border border-emerald-200">
-                    <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-                    <span>{t('kitchen.readyForPickup', null, 'KOT Ready for Pickup by Captain')}</span>
-                  </div>
-                )}
-                <Button variant="secondary" onClick={() => setSelectedKotDetail(null)}>
-                  {t('common.close', null, 'Close')}
+              {(selectedKotDetail.status === KOT_STATUS.CANCELLED || selectedKotDetail.type === KOT_TYPE.CANCELLATION || selectedKotDetail.orderStatus === 'CANCELLED' || selectedKotDetail.orderStatus === 'REJECTED') ? (
+                <div className="text-rose-700 font-bold text-xs flex items-center justify-center gap-1.5 px-3 py-2 bg-rose-50 rounded-xl border border-rose-200 w-full sm:w-auto">
+                  <AlertCircle className="w-4 h-4 text-rose-600" />
+                  <span>Ticket Cancelled — Cannot Advance Status</span>
+                </div>
+              ) : selectedKotDetail.status === KOT_STATUS.NEW ? (
+                <Button
+                  variant="primary"
+                  className="w-full sm:w-auto bg-orange-600 hover:bg-orange-700"
+                  icon={Flame}
+                  loading={actionLoadingId === selectedKotDetail.id}
+                  onClick={() => handleUpdateStatus(selectedKotDetail, KOT_STATUS.PREPARING)}
+                >
+                  {t('kitchen.startPreparing', null, 'Start Preparation')}
                 </Button>
-              </div>
+              ) : selectedKotDetail.status === KOT_STATUS.PREPARING ? (
+                <Button
+                  variant="success"
+                  className="w-full sm:w-auto ring-2 ring-emerald-300 shadow-md font-bold"
+                  icon={CheckCircle2}
+                  loading={actionLoadingId === selectedKotDetail.id}
+                  onClick={() => handleUpdateStatus(selectedKotDetail, KOT_STATUS.READY)}
+                >
+                  {allCurrentItemsPrepared ? `✓ ${t('kitchen.allPreparedMarkReady', null, 'All Items Prepared — Mark Ready for Serve')}` : t('kitchen.markReady', null, 'Mark KOT Ready for Serve')}
+                </Button>
+              ) : (
+                <div className="text-emerald-700 font-bold text-xs flex items-center justify-center gap-1.5 px-3 py-2 bg-emerald-50 rounded-xl border border-emerald-200 w-full sm:w-auto">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                  <span>{t('kitchen.readyForPickup', null, 'KOT Ready for Pickup by Captain')}</span>
+                </div>
+              )}
+
+              <Button variant="secondary" className="w-full sm:w-auto" onClick={() => setSelectedKotDetail(null)}>
+                {t('common.close', null, 'Close')}
+              </Button>
             </div>
           </div>
         </Modal>

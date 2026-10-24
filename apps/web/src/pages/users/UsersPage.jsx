@@ -306,7 +306,7 @@ export const UsersPage = () => {
       </PageHeader>
 
       {/* Filter / Search Bar */}
-      <div className="bg-white p-3.5 sm:p-4 rounded-xl border border-slate-200 shadow-xs flex flex-col sm:flex-row flex-wrap items-stretch sm:items-center gap-3">
+      <div className="bg-white p-3.5 sm:p-4 rounded-xl border border-slate-200 shadow-xs grid grid-cols-2 sm:flex sm:flex-row flex-wrap items-center gap-2.5 sm:gap-3 pos-filter-grid">
         <div className="w-full sm:w-64">
           <Input
             icon={Search}
@@ -330,7 +330,7 @@ export const UsersPage = () => {
           />
         </div>
 
-        <div className="sm:ml-auto text-xs text-slate-500 font-semibold text-right sm:text-left">
+        <div className="sm:ml-auto text-xs text-slate-500 font-semibold text-right sm:text-left col-span-2 sm:col-span-1">
           {t('common.total', 'Total')}: {formatNumber(pagination?.total ?? users.length)}
         </div>
       </div>

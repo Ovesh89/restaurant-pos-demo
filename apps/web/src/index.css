@@ -98,10 +98,134 @@
       padding-right: 1rem !important;
       border-top: 1px solid #e2e8f0 !important;
       box-shadow: 0 -8px 24px rgba(15, 23, 42, 0.08) !important;
+
+      /* Keep 2 buttons per line (Horizontal): 1st & 2nd in line 1, 3rd & 4th in line 2 */
+      display: grid !important;
+      grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+      gap: 0.5rem !important;
+      align-items: stretch !important;
+    }
+
+    /* Transparently project buttons out of wrapper divs into the grid */
+    .pos-modal-actions > div:has(button),
+    .pos-modal-footer > div:has(button) {
+      display: contents !important;
+    }
+
+    /* All buttons inside modal footer fill their column and center text */
+    .pos-modal-actions button,
+    .pos-modal-actions .btn,
+    .pos-modal-footer button,
+    .pos-modal-footer .btn {
+      width: 100% !important;
+      min-width: 0 !important;
+      margin: 0 !important;
+      display: inline-flex !important;
+      align-items: center !important;
+      justify-content: center !important;
+      text-align: center !important;
+      padding-left: 0.5rem !important;
+      padding-right: 0.5rem !important;
+      font-size: 0.8125rem !important;
+      line-height: 1.15rem !important;
+    }
+
+    /* Single only-child button spans both columns */
+    .pos-modal-actions > button:only-child,
+    .pos-modal-actions > :only-child,
+    .pos-modal-footer > button:only-child,
+    .pos-modal-footer > :only-child {
+      grid-column: span 2 / span 2 !important;
+    }
+
+    /* If 3 buttons: 3rd button spans 2 columns in line 2 */
+    .pos-modal-actions > button:nth-child(3):last-child,
+    .pos-modal-actions > :nth-child(3):last-child,
+    .pos-modal-footer > button:nth-child(3):last-child,
+    .pos-modal-footer > :nth-child(3):last-child {
+      grid-column: span 2 / span 2 !important;
     }
 
     .pos-modal-body {
-      scroll-padding-bottom: 5rem;
+      scroll-padding-bottom: 5.5rem;
+    }
+
+    /* Mobile 2*2 Grid for PageHeader Action Buttons */
+    .pos-header-actions {
+      display: grid !important;
+      grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+      gap: 0.5rem !important;
+      width: 100% !important;
+    }
+    .pos-header-actions > * {
+      width: 100% !important;
+      min-width: 0 !important;
+      justify-content: center !important;
+      text-align: center !important;
+    }
+    .pos-header-actions > *:only-child {
+      grid-column: span 2 / span 2 !important;
+    }
+    .pos-header-actions > *:nth-child(odd):last-child {
+      grid-column: span 2 / span 2 !important;
+    }
+
+    /* Mobile 2*2 Grid for Filter Fields & Search Bars */
+    .pos-filter-grid {
+      display: grid !important;
+      grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+      gap: 0.5rem !important;
+      width: 100% !important;
+    }
+    .pos-filter-grid > * {
+      width: 100% !important;
+      min-width: 0 !important;
+      margin: 0 !important;
+    }
+    .pos-filter-grid > *:only-child {
+      grid-column: span 2 / span 2 !important;
+    }
+    .pos-filter-grid > *:nth-child(odd):last-child {
+      grid-column: span 2 / span 2 !important;
+    }
+
+    /* Mobile 2*2 Grid for Category Pills, Status Tabs & Tags */
+    .pos-tag-grid {
+      display: grid !important;
+      grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+      gap: 0.375rem !important;
+      width: 100% !important;
+    }
+    .pos-tag-grid > * {
+      width: 100% !important;
+      text-align: center !important;
+      justify-content: center !important;
+      min-width: 0 !important;
+      padding-left: 0.5rem !important;
+      padding-right: 0.5rem !important;
+      white-space: nowrap !important;
+      overflow: hidden !important;
+      text-overflow: ellipsis !important;
+    }
+    .pos-tag-grid > *:only-child {
+      grid-column: span 2 / span 2 !important;
+    }
+    .pos-tag-grid > *:nth-child(odd):last-child {
+      grid-column: span 2 / span 2 !important;
+    }
+  }
+
+  /* Desktop / Normal Web View: Header Action Buttons MUST be horizontal */
+  @media (min-width: 640px) {
+    .pos-header-actions {
+      display: flex !important;
+      flex-direction: row !important;
+      align-items: center !important;
+      width: auto !important;
+      gap: 0.625rem !important;
+    }
+    .pos-header-actions > * {
+      width: auto !important;
     }
   }
 }

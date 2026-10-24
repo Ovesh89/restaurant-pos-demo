@@ -61,6 +61,7 @@ router.get(
         logoReceipt: '/logo-receipt.png',
         logoRedReceipt: '/logo-red-receipt.png',
         favicon: '/favicon.png',
+        requireOrderApproval: true,
       });
     }
     return successResponse(res, {
@@ -77,6 +78,7 @@ router.get(
       logoReceipt: branch.logoReceipt || '/logo-receipt.png',
       logoRedReceipt: branch.logoRedReceipt || '/logo-red-receipt.png',
       favicon: branch.favicon || '/favicon.png',
+      requireOrderApproval: branch.requireOrderApproval !== undefined ? Boolean(branch.requireOrderApproval) : true,
     });
   })
 );

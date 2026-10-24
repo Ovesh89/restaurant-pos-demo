@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Search, User, Phone, MapPin, Calendar, DollarSign, Award, Clock } from 'lucide-react';
+import { Plus, Search, User, Phone, MapPin, Calendar, DollarSign, Award, Clock, Receipt, ShoppingBag } from 'lucide-react';
 import { customerRepository } from '../../services/repositories/customerRepository';
+import { orderRepository } from '../../services/repositories/orderRepository';
 import { useAuth } from '../../hooks/useAuth';
 import { PageHeader } from '../../components/common/PageHeader';
 import { Button } from '../../components/common/Button';
@@ -26,6 +27,34 @@ export const CustomersPage = () => {
   const [formData, setFormData] = useState({ name: '', mobile: '', email: '', address: '', notes: '' });
   const [formError, setFormError] = useState('');
   const [formLoading, setFormLoading] = useState(false);
+
+  // Customer Orders List Modal
+  const [selectedCustomerForOrders, setSelectedCustomerForOrders] = useState(null);
+  const [customerOrders, setCustomerOrders] = useState([]);
+  const [customerOrdersLoading, setCustomerOrdersLoading] = useState(false);
+  const [customerOrdersError, setCustomerOrdersError] = useState('');
+
+  const handleOpenCustomerOrders = async (customer) => {
+    setSelectedCustomerForOrders(customer);
+    setCustomerOrders([]);
+    setCustomerOrdersLoading(true);
+    setCustomerOrdersError('');
+
+    try {
+      const custId = customer.id || customer._id;
+      const res = await orderRepository.getOrderHistory({
+        customerId: custId,
+        limit: 100,
+      });
+      const list = Array.isArray(res) ? res : (res?.orders || res?.items || []);
+      setCustomerOrders(list);
+    } catch (err) {
+      console.error('Failed to load customer orders:', err);
+      setCustomerOrdersError(err.message || 'Failed to load orders for this customer.');
+    } finally {
+      setCustomerOrdersLoading(false);
+    }
+  };
 
   const loadCustomers = async (overridePage = page, overrideLimit = limit) => {
     try {
@@ -122,6 +151,21 @@ export const CustomersPage = () => {
       accessor: 'lastVisitAt',
       className: 'text-xs text-slate-400 font-mono',
       render: (row) => (row.lastVisitAt ? new Date(row.lastVisitAt).toLocaleDateString() : t('common.never', 'Never'))
+    },
+    {
+      header: t('common.actions', 'Actions'),
+      align: 'right',
+      render: (row) => (
+        <Button
+          variant="secondary"
+          size="sm"
+          icon={Receipt}
+          onClick={() => handleOpenCustomerOrders(row)}
+          className="text-xs font-bold whitespace-nowrap"
+        >
+          {t('orders.orders', 'Orders List')}
+        </Button>
+      )
     }
   ];
 
@@ -137,8 +181,8 @@ export const CustomersPage = () => {
       </PageHeader>
 
       {/* Filter / Search Bar */}
-      <div className="bg-white p-3.5 sm:p-4 rounded-xl border border-slate-200 shadow-xs flex flex-col sm:flex-row items-stretch sm:items-center gap-3 sm:gap-4">
-        <div className="w-full sm:max-w-sm">
+      <div className="bg-white p-3.5 sm:p-4 rounded-xl border border-slate-200 shadow-xs grid grid-cols-2 sm:flex sm:flex-row items-center gap-2.5 sm:gap-4 pos-filter-grid">
+        <div className="w-full col-span-2 sm:col-span-1 sm:max-w-sm">
           <Input
             icon={Search}
             placeholder={t('common.search', 'Search by guest name or mobile...')}
@@ -146,7 +190,7 @@ export const CustomersPage = () => {
             onChange={(e) => setSearch(e.target.value)}
           />
         </div>
-        <div className="sm:ml-auto text-xs text-slate-500 font-semibold text-right sm:text-left">
+        <div className="sm:ml-auto text-xs text-slate-500 font-semibold text-right sm:text-left col-span-2 sm:col-span-1">
           {t('common.total', 'Total')}: {formatNumber(pagination?.total ?? customers.length)}
         </div>
       </div>
@@ -269,6 +313,18 @@ export const CustomersPage = () => {
                           </p>
                         )}
                       </div>
+                      {/* Customer Orders Action */}
+                      <div className="pt-2 border-t border-slate-100 mt-2">
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          icon={Receipt}
+                          onClick={() => handleOpenCustomerOrders(row)}
+                          className="w-full text-xs font-bold justify-center"
+                        >
+                          {t('orders.orders', 'View Orders List')}
+                        </Button>
+                      </div>
                     </div>
                   </div>
                 );
@@ -360,6 +416,94 @@ export const CustomersPage = () => {
             </Button>
           </div>
         </form>
+      </Modal>
+
+      {/* Customer Orders List Modal */}
+      <Modal
+        isOpen={Boolean(selectedCustomerForOrders)}
+        onClose={() => setSelectedCustomerForOrders(null)}
+        title={`Orders: ${selectedCustomerForOrders?.name || 'Customer'}`}
+        subtitle={
+          selectedCustomerForOrders?.mobile
+            ? `Phone: ${selectedCustomerForOrders.mobile} • Total Spend: ${formatCurrency(selectedCustomerForOrders.totalSpend || 0)}`
+            : `Total Spend: ${formatCurrency(selectedCustomerForOrders?.totalSpend || 0)}`
+        }
+      >
+        <div className="space-y-3">
+          {customerOrdersLoading ? (
+            <div className="p-8 text-center text-slate-500 text-xs">
+              <div className="inline-block animate-spin rounded-full h-7 w-7 border-4 border-slate-200 border-t-blue-600 mb-2"></div>
+              <p>{t('common.loading', 'Loading customer orders...')}</p>
+            </div>
+          ) : customerOrdersError ? (
+            <div className="p-3 bg-red-50 text-red-700 rounded-xl text-xs">
+              {customerOrdersError}
+            </div>
+          ) : customerOrders.length === 0 ? (
+            <div className="p-8 text-center bg-slate-50 border border-dashed border-slate-200 rounded-xl text-xs text-slate-500 font-medium">
+              No orders found for this customer yet.
+            </div>
+          ) : (
+            <div className="space-y-2.5 max-h-[60vh] overflow-y-auto pr-1">
+              <div className="flex items-center justify-between text-xs text-slate-500 font-bold px-1 pb-1 border-b border-slate-100">
+                <span>{customerOrders.length} Order(s) Recorded</span>
+                <span>Cumulative: {formatCurrency(customerOrders.reduce((sum, o) => sum + Number(o.grandTotal || o.subtotal || 0), 0))}</span>
+              </div>
+              {customerOrders.map((ord) => {
+                const amount = Number(ord.grandTotal !== undefined ? ord.grandTotal : (ord.subtotal || 0));
+                const dateStr = ord.createdAt
+                  ? new Date(ord.createdAt).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })
+                  : '—';
+                const itemsCount = ord.items?.reduce((acc, it) => acc + (it.quantity || 1), 0) || ord.items?.length || 0;
+
+                return (
+                  <div
+                    key={ord.id || ord._id}
+                    className="p-3 bg-white rounded-xl border border-slate-200 hover:border-blue-400 transition-all shadow-2xs space-y-2"
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono font-bold text-xs px-2 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200">
+                          {ord.orderNo || ord.orderNumber || 'ORD'}
+                        </span>
+                        <span className="text-xs font-bold text-slate-800">
+                          {ord.tableNo ? `Table ${ord.tableNo}` : (ord.orderType || 'Order')}
+                        </span>
+                      </div>
+                      <div className="text-right">
+                        <span className="text-sm font-extrabold text-slate-900 block font-mono">
+                          {formatCurrency(amount)}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center justify-between text-[11px] text-slate-500 pt-1 border-t border-slate-100 gap-2">
+                      <span className="shrink-0">{dateStr}</span>
+                      <span className="font-medium text-slate-600 truncate text-right">
+                        {itemsCount} item(s): {ord.items?.map((i) => `${i.productName || i.name} (x${i.quantity})`).slice(0, 3).join(', ')}{ord.items?.length > 3 ? '...' : ''}
+                      </span>
+                      <span className={`px-2 py-0.5 rounded-full font-bold text-[10px] shrink-0 ${
+                        ord.status === 'COMPLETED' || ord.status === 'PAID'
+                          ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                          : ord.status === 'CANCELLED' || ord.status === 'REJECTED'
+                          ? 'bg-red-50 text-red-700 border border-red-200'
+                          : 'bg-amber-50 text-amber-700 border border-amber-200'
+                      }`}>
+                        {ord.status || 'ACTIVE'}
+                      </span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          <div className="flex justify-end pt-2 border-t border-slate-100 pos-modal-actions">
+            <Button variant="secondary" onClick={() => setSelectedCustomerForOrders(null)} className="w-full sm:w-auto">
+              {t('common.close', 'Close')}
+            </Button>
+          </div>
+        </div>
       </Modal>
     </div>
   );

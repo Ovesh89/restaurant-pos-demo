@@ -207,8 +207,8 @@ export const CategoriesPage = () => {
       </PageHeader>
 
       {/* Filter / Search Bar */}
-      <div className="bg-white p-3.5 sm:p-4 rounded-xl border border-slate-200 shadow-xs flex flex-col sm:flex-row items-stretch sm:items-center gap-3 sm:gap-4">
-        <div className="w-full sm:max-w-sm">
+      <div className="bg-white p-3.5 sm:p-4 rounded-xl border border-slate-200 shadow-xs grid grid-cols-2 sm:flex sm:flex-row items-center gap-2.5 sm:gap-4 pos-filter-grid">
+        <div className="w-full col-span-2 sm:col-span-1 sm:max-w-sm">
           <Input
             icon={Search}
             placeholder={t('common.search', 'Search categories by name or code...')}
@@ -216,7 +216,7 @@ export const CategoriesPage = () => {
             onChange={(e) => setSearch(e.target.value)}
           />
         </div>
-        <div className="sm:ml-auto text-xs text-slate-500 font-semibold text-right sm:text-left">
+        <div className="sm:ml-auto text-xs text-slate-500 font-semibold text-right sm:text-left col-span-2 sm:col-span-1">
           {t('common.total', 'Total')}: {formatNumber(filteredCategories.length)}
         </div>
       </div>

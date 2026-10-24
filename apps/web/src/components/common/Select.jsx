@@ -2,6 +2,7 @@ import React from 'react';
 
 export const Select = ({
   label,
+  labelClassName = '',
   options = [],
   error,
   helperText,
@@ -14,7 +15,7 @@ export const Select = ({
   return (
     <div className="w-full">
       {label && (
-        <label htmlFor={selectId} className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">
+        <label htmlFor={selectId} className={`block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5 ${labelClassName}`}>
           {label}
         </label>
       )}

@@ -18,6 +18,10 @@ class SettingsApiRepository {
       const gstin = branch.taxConfig?.gstin || DEFAULT_SETTINGS.gstin;
       const invoicePrefix = branch.invoiceConfig?.prefix || DEFAULT_SETTINGS.invoicePrefix;
       const receiptFooter = branch.invoiceConfig?.terms || DEFAULT_SETTINGS.receiptFooter;
+      const cached = storageAdapter.getItem(STORAGE_KEYS.SETTINGS);
+      const requireOrderApproval = branch.requireOrderApproval !== undefined
+        ? Boolean(branch.requireOrderApproval)
+        : (cached?.requireOrderApproval !== undefined ? Boolean(cached.requireOrderApproval) : DEFAULT_SETTINGS.requireOrderApproval);
 
       const merged = {
         ...DEFAULT_SETTINGS,
@@ -32,6 +36,7 @@ class SettingsApiRepository {
         defaultTaxRate: taxRate,
         invoicePrefix,
         receiptFooter,
+        requireOrderApproval,
         logo: branch.logo || DEFAULT_SETTINGS.logo,
         logoWhite: branch.logoWhite || DEFAULT_SETTINGS.logoWhite,
         logoBlack: branch.logoBlack || DEFAULT_SETTINGS.logoBlack,
@@ -67,6 +72,9 @@ class SettingsApiRepository {
       logoReceipt: newSettings.logoReceipt,
       logoRedReceipt: newSettings.logoRedReceipt,
       favicon: newSettings.favicon,
+      requireOrderApproval: newSettings.requireOrderApproval !== undefined
+        ? Boolean(newSettings.requireOrderApproval)
+        : true,
       taxConfig: {
         rate: String(newSettings.defaultTaxRate || 5),
         gstin: newSettings.gstin || '',

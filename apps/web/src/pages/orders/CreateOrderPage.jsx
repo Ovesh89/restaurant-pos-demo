@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../../hooks/useAuth';
 import { useTranslation } from '../../hooks/useTranslation';
+import { useRestaurant } from '../../context/RestaurantContext';
 import { tableRepository } from '../../services/repositories/tableRepository';
 import { productRepository } from '../../services/repositories/productRepository';
 import { categoryRepository } from '../../services/repositories/categoryRepository';
@@ -32,9 +33,12 @@ import { Badge } from '../../components/common/Badge';
 export const CreateOrderPage = () => {
   const { user } = useAuth();
   const { t, formatNumber } = useTranslation();
+  const { settings } = useRestaurant();
+  const requireOrderApproval = settings?.requireOrderApproval !== false;
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const preselectedTableId = searchParams.get('tableId');
+  const isFromTables = Boolean(preselectedTableId || searchParams.get('from') === 'tables');
 
   const [tables, setTables] = useState([]);
   const [categories, setCategories] = useState([]);
@@ -235,15 +239,19 @@ export const CreateOrderPage = () => {
         items: cart,
         notes: finalOrderNotes,
         isDraft,
-        autoApprove: !isDraft,
+        autoApprove: !isDraft && !requireOrderApproval,
         orderType,
         customerName: customerName.trim(),
         customerPhone: customerPhone.trim(),
         onlineOrderRef: onlineOrderRef.trim(),
       });
 
-      // Navigate to orders list or reception
-      navigate('/orders');
+      // Navigate back to Tables page if order originated there, otherwise to Live Orders
+      if (isFromTables) {
+        navigate('/tables');
+      } else {
+        navigate('/orders');
+      }
     } catch (err) {
       setActionError(err.message || 'Failed to submit order.');
     } finally {
@@ -269,7 +277,7 @@ export const CreateOrderPage = () => {
       <div className="bg-white border border-slate-200 rounded-2xl p-3 sm:p-4 mb-3 sm:mb-4 shadow-xs space-y-3">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
-            <Button variant="ghost" size="sm" icon={ArrowLeft} onClick={() => navigate('/orders')}>
+            <Button variant="ghost" size="sm" icon={ArrowLeft} onClick={() => navigate(isFromTables ? '/tables' : '/orders')}>
               {t('common.back', null, 'Back')}
             </Button>
             <div className="h-6 w-px bg-slate-200 hidden sm:block"></div>
@@ -467,7 +475,7 @@ export const CreateOrderPage = () => {
             </div>
 
             {/* Category Filter Pills (Wrapped for complete visibility across all categories) */}
-            <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 text-xs max-h-48 overflow-y-auto pr-1">
+            <div className="grid grid-cols-2 gap-1.5 sm:flex sm:flex-wrap sm:items-center sm:gap-2 text-xs max-h-48 overflow-y-auto pr-1 pos-tag-grid">
               <button
                 type="button"
                 onClick={() => setActiveCategory('ALL')}
@@ -679,7 +687,7 @@ export const CreateOrderPage = () => {
                   </button>
                 )}
               </div>
-              <div className="grid grid-cols-3 gap-1.5">
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5 pos-tag-grid">
                 {[
                   { id: 'Low spicy', label: 'Low spicy', base: 'border-emerald-300 text-emerald-800 bg-emerald-50 hover:bg-emerald-100', active: 'bg-emerald-600 text-white border-emerald-600 shadow-xs' },
                   { id: 'Medium spicy', label: 'Medium spicy', base: 'border-amber-300 text-amber-800 bg-amber-50 hover:bg-amber-100', active: 'bg-amber-600 text-white border-amber-600 shadow-xs' },
@@ -731,7 +739,9 @@ export const CreateOrderPage = () => {
                 loading={submitting}
                 onClick={() => handleProcessOrder(false)}
               >
-                {t('orders.submitOrder', null, 'Send to Kitchen')}
+                {requireOrderApproval
+                  ? t('orders.submitForApproval', null, 'Submit for Approval')
+                  : t('orders.sendDirectKot', null, 'Send to Kitchen')}
               </Button>
             </div>
           </div>
@@ -775,7 +785,7 @@ export const CreateOrderPage = () => {
               <Flame className="w-3.5 h-3.5 text-amber-500" />
               <span>Short Notes (Optional)</span>
             </label>
-            <div className="grid grid-cols-3 gap-2">
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 pos-tag-grid">
               {[
                 { id: 'Low spicy', label: 'Low spicy', base: 'border-emerald-300 text-emerald-800 bg-emerald-50 hover:bg-emerald-100', active: 'bg-emerald-600 text-white border-emerald-600 shadow-xs' },
                 { id: 'Medium spicy', label: 'Medium spicy', base: 'border-amber-300 text-amber-800 bg-amber-50 hover:bg-amber-100', active: 'bg-amber-600 text-white border-amber-600 shadow-xs' },

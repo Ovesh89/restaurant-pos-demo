@@ -133,6 +133,7 @@ class OrderLocalRepository {
     items,
     notes = '',
     isDraft = false,
+    autoApprove = false,
     orderType = 'DINE_IN',
     customerName = '',
     customerPhone = '',
@@ -181,7 +182,14 @@ class OrderLocalRepository {
 
     const subtotal = orderItems.reduce((acc, i) => acc + i.quantity * i.unitPrice, 0);
 
-    const initialStatus = isDraft ? ORDER_STATUS.DRAFT : ORDER_STATUS.WAITING_CONFIRMATION;
+    const settings = storageAdapter.getItem(STORAGE_KEYS.SETTINGS) || {};
+    const approvalRequired = settings.requireOrderApproval !== undefined
+      ? Boolean(settings.requireOrderApproval)
+      : true;
+    const shouldAutoApprove = !isDraft && (!approvalRequired || Boolean(autoApprove));
+    const initialStatus = isDraft
+      ? ORDER_STATUS.DRAFT
+      : (shouldAutoApprove ? ORDER_STATUS.KOT_SENT : ORDER_STATUS.WAITING_CONFIRMATION);
 
     const newOrder = {
       id: `ord-${Date.now()}`,
@@ -200,7 +208,9 @@ class OrderLocalRepository {
       notes: notes.trim(),
       status: initialStatus,
       rejectionReason: '',
-      kotRevision: 0,
+      kotRevision: shouldAutoApprove ? 1 : 0,
+      confirmedBy: shouldAutoApprove ? captainObj.name : null,
+      confirmedAt: shouldAutoApprove ? new Date().toISOString() : null,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
     };
@@ -208,11 +218,22 @@ class OrderLocalRepository {
     orders.unshift(newOrder);
     storageAdapter.setItem(STORAGE_KEYS.ORDERS, orders);
 
+    let kotTicket = null;
+    if (shouldAutoApprove) {
+      kotTicket = await kotRepository.createKOT({
+        order: newOrder,
+        items: newOrder.items,
+        type: KOT_TYPE.NEW,
+        revision: 1,
+        actor: captainObj,
+      });
+    }
+
     // Update Table status only if dine in table order
     if (isTableOrder && resolvedTableId && !isDraft) {
       await tableRepository.updateOperationalStatus(
         resolvedTableId,
-        TABLE_STATUS.OCCUPIED,
+        shouldAutoApprove ? TABLE_STATUS.KOT_SENT : TABLE_STATUS.OCCUPIED,
         newOrder.id,
         captainObj
       );
@@ -221,10 +242,10 @@ class OrderLocalRepository {
     await auditRepository.logEvent({
       actorId: captainObj.id,
       actorName: captainObj.name,
-      action: isDraft ? 'ORDER_HELD' : 'ORDER_SUBMITTED',
+      action: isDraft ? 'ORDER_HELD' : (shouldAutoApprove ? 'ORDER_CONFIRMED' : 'ORDER_SUBMITTED'),
       entityType: 'Order',
       entityId: newOrder.id,
-      details: `${newOrder.orderNo} (${newOrder.orderType}) for ${resolvedTableNo} with ${orderItems.length} items (Total: ₹${subtotal}) was ${isDraft ? 'saved as draft' : 'submitted to reception'}.`
+      details: `${newOrder.orderNo} (${newOrder.orderType}) for ${resolvedTableNo} with ${orderItems.length} items (Total: ₹${subtotal}) was ${isDraft ? 'saved as draft' : (shouldAutoApprove ? 'dispatched directly to kitchen (no approval required)' : 'submitted to reception')}.`
     });
 
     return newOrder;
@@ -241,8 +262,17 @@ class OrderLocalRepository {
     }
 
     const order = orders[index];
-    if (order.status !== ORDER_STATUS.DRAFT) {
+    if (order.status !== ORDER_STATUS.DRAFT && order.status !== ORDER_STATUS.HOLD) {
       throw new Error(`Cannot submit order with status "${order.status}".`);
+    }
+
+    const settings = storageAdapter.getItem(STORAGE_KEYS.SETTINGS) || {};
+    const approvalRequired = settings.requireOrderApproval !== undefined
+      ? Boolean(settings.requireOrderApproval)
+      : true;
+
+    if (!approvalRequired) {
+      return this.confirmOrder(orderId, actor);
     }
 
     order.status = ORDER_STATUS.WAITING_CONFIRMATION;
@@ -471,14 +501,68 @@ class OrderLocalRepository {
       }
     });
 
-    // Save updated items snapshot into canonical order
-    order.items = updatedItems;
-    order.subtotal = updatedItems.reduce((acc, i) => acc + i.quantity * i.unitPrice, 0);
+    // Save updated items snapshot into canonical order:
+    // Retain removed items with status: 'CANCELLED' so they show with a strike-through line
+    const activeProductIds = new Set(updatedItems.map((ui) => ui.productId || ui.id || ui._id));
+    const preservedCancelledItems = previousItems
+      .filter((pi) => !activeProductIds.has(pi.productId || pi.id || pi._id))
+      .map((pi) => ({
+        ...pi,
+        status: 'CANCELLED',
+        cancellationReason: modificationReason.trim(),
+        cancelledAt: new Date().toISOString(),
+      }));
+
+    const finalOrderItems = [
+      ...updatedItems.map((ui) => ({ ...ui, status: ui.status || 'ACTIVE' })),
+      ...preservedCancelledItems,
+    ];
+
+    order.items = finalOrderItems;
+    order.subtotal = updatedItems.reduce((acc, i) => acc + i.quantity * (i.unitPrice || i.price || 0), 0);
     order.kotRevision = (order.kotRevision || 1) + 1;
     order.updatedAt = new Date().toISOString();
 
     orders[index] = order;
     storageAdapter.setItem(STORAGE_KEYS.ORDERS, orders);
+
+    // Update operational KOTs if any items were removed
+    const removedProductIds = new Set(preservedCancelledItems.map((pi) => pi.productId || pi.id || pi._id));
+    if (removedProductIds.size > 0) {
+      const allKots = storageAdapter.getItem(STORAGE_KEYS.KOTS) || [];
+      const targetOrderIdStr = String(order.id || order._id || order.orderNo);
+      const updatedKots = allKots.map((k) => {
+        if (String(k.orderId) !== targetOrderIdStr) return k;
+        if (k.type === KOT_TYPE.CANCELLATION || k.status === KOT_STATUS.CANCELLED) return k;
+
+        let changed = false;
+        const kItems = (k.items || []).map((ki) => {
+          if (removedProductIds.has(ki.productId || ki.id || ki._id || ki.name)) {
+            changed = true;
+            return {
+              ...ki,
+              status: 'CANCELLED',
+              cancelled: true,
+              cancellationReason: modificationReason.trim(),
+            };
+          }
+          return ki;
+        });
+
+        if (changed) {
+          const allCancelled = kItems.every((ki) => ki.status === 'CANCELLED' || ki.cancelled === true);
+          return {
+            ...k,
+            items: kItems,
+            status: allCancelled ? KOT_STATUS.CANCELLED : k.status,
+            notes: allCancelled ? `KOT CANCELLED: All items were removed from order (${modificationReason.trim()})` : k.notes,
+            updatedAt: new Date().toISOString(),
+          };
+        }
+        return k;
+      });
+      storageAdapter.setItem(STORAGE_KEYS.KOTS, updatedKots);
+    }
 
     // Sync unsettled bill if exists
     if (linkedBill && !['COMPLETED', 'PAID', 'CANCELLED', 'VOIDED'].includes(linkedBill.status)) {
@@ -565,13 +649,60 @@ class OrderLocalRepository {
     }
 
     const removedItem = order.items[itemIdx];
-    order.items.splice(itemIdx, 1);
-    order.subtotal = order.items.reduce((acc, i) => acc + i.quantity * i.unitPrice, 0);
+    order.items[itemIdx] = {
+      ...removedItem,
+      status: 'CANCELLED',
+      cancellationReason: reason,
+      cancelledAt: new Date().toISOString(),
+    };
+    const activeItems = order.items.filter((it) => (it.status || 'ACTIVE') !== 'CANCELLED');
+    order.subtotal = activeItems.reduce((acc, i) => acc + i.quantity * (i.unitPrice || i.price || 0), 0);
     order.kotRevision = (order.kotRevision || 1) + 1;
     order.updatedAt = new Date().toISOString();
 
     orders[index] = order;
     storageAdapter.setItem(STORAGE_KEYS.ORDERS, orders);
+
+    // Update existing operational KOTs
+    const allKots = storageAdapter.getItem(STORAGE_KEYS.KOTS) || [];
+    const targetOrderIdStr = String(order.id || order._id || order.orderNo);
+    const updatedKots = allKots.map((k) => {
+      if (String(k.orderId) !== targetOrderIdStr) return k;
+      if (k.type === KOT_TYPE.CANCELLATION || k.status === KOT_STATUS.CANCELLED) return k;
+
+      let changed = false;
+      const kItems = (k.items || []).map((ki) => {
+        if (
+          ki.productId === removedItem.productId ||
+          ki.id === removedItem.productId ||
+          ki.name === removedItem.name ||
+          ki._id === removedItem.id ||
+          ki.id === removedItem.id
+        ) {
+          changed = true;
+          return {
+            ...ki,
+            status: 'CANCELLED',
+            cancelled: true,
+            cancellationReason: reason,
+          };
+        }
+        return ki;
+      });
+
+      if (changed) {
+        const allCancelled = kItems.every((ki) => ki.status === 'CANCELLED' || ki.cancelled === true);
+        return {
+          ...k,
+          items: kItems,
+          status: allCancelled ? KOT_STATUS.CANCELLED : k.status,
+          notes: allCancelled ? `KOT CANCELLED: All items were removed from order (${reason})` : k.notes,
+          updatedAt: new Date().toISOString(),
+        };
+      }
+      return k;
+    });
+    storageAdapter.setItem(STORAGE_KEYS.KOTS, updatedKots);
 
     // Sync unsettled bill if exists
     if (linkedBill && !['COMPLETED', 'PAID', 'CANCELLED', 'VOIDED'].includes(linkedBill.status)) {

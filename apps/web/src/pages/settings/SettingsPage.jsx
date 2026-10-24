@@ -13,6 +13,7 @@ import {
   Upload,
   Image as ImageIcon,
   Sparkles,
+  ClipboardCheck,
 } from 'lucide-react';
 import { settingsRepository, DEFAULT_SETTINGS } from '../../services/repositories/settingsRepository';
 import { useAuth } from '../../hooks/useAuth';
@@ -22,6 +23,7 @@ import { PageHeader } from '../../components/common/PageHeader';
 import { Button } from '../../components/common/Button';
 import { Input } from '../../components/common/Input';
 import { Select } from '../../components/common/Select';
+import { Badge } from '../../components/common/Badge';
 import { DiningAreaManager } from '../../components/restaurant/DiningAreaManager.jsx';
 import { KitchenStationManager } from '../../components/restaurant/KitchenStationManager.jsx';
 import { useTranslation } from '../../hooks/useTranslation';
@@ -239,6 +241,18 @@ export const SettingsPage = () => {
         >
           <Printer className="w-4 h-4" />
           {t('settings.invoicePrefix', 'Thermal Printing & Prefixes')}
+        </button>
+
+        <button
+          onClick={() => setActiveTab('WORKFLOW')}
+          className={`flex items-center gap-2 px-3.5 sm:px-4 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap shrink-0 ${
+            activeTab === 'WORKFLOW'
+              ? 'bg-blue-600 text-white shadow-sm'
+              : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
+          }`}
+        >
+          <ClipboardCheck className="w-4 h-4" />
+          {t('settings.orderWorkflow', 'Order Approvals & Workflow')}
         </button>
       </div>
 
@@ -514,7 +528,122 @@ export const SettingsPage = () => {
               </div>
             )}
 
-            {['PROFILE', 'TAXES', 'PRINTING'].includes(activeTab) && (
+            {activeTab === 'WORKFLOW' && (
+              <div className="space-y-6">
+                <div>
+                  <h3 className="text-base font-bold text-slate-800 border-b border-slate-100 pb-2 flex items-center justify-between">
+                    <span>{t('settings.orderWorkflow', 'Order Approval & Kitchen Dispatch Policy')}</span>
+                    <Badge variant={formData.requireOrderApproval !== false ? 'warning' : 'success'}>
+                      {formData.requireOrderApproval !== false ? 'Approval Required (Reception Review)' : 'Direct KOT (No Approval)'}
+                    </Badge>
+                  </h3>
+                  <p className="text-xs text-slate-500 mt-1">
+                    Choose whether table and takeaway orders placed by Captains or Web POS must be confirmed at Reception before printing KOT tickets to the kitchen.
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {/* Option 1: Approval Enabled */}
+                  <div
+                    onClick={() => handleChange('requireOrderApproval', true)}
+                    className={`p-4 rounded-2xl border-2 transition-all cursor-pointer flex flex-col justify-between ${
+                      formData.requireOrderApproval !== false
+                        ? 'border-blue-600 bg-blue-50/50 shadow-sm ring-1 ring-blue-500'
+                        : 'border-slate-200 bg-white hover:border-slate-300'
+                    }`}
+                  >
+                    <div>
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="font-bold text-slate-800 text-sm flex items-center gap-2">
+                          <span className={`w-4 h-4 rounded-full border-2 flex items-center justify-center shrink-0 ${
+                            formData.requireOrderApproval !== false ? 'border-blue-600 bg-blue-600' : 'border-slate-300'
+                          }`}>
+                            {formData.requireOrderApproval !== false && <span className="w-1.5 h-1.5 rounded-full bg-white" />}
+                          </span>
+                          Require Reception Order Approval (Enabled)
+                        </span>
+                        <Badge variant="warning" size="sm">Approval Required</Badge>
+                      </div>
+                      <p className="text-xs text-slate-600 leading-relaxed pl-6">
+                        Orders created by captains or staff enter the <b>Waiting Confirmation Queue</b>. Reception or cashier must review dishes, modifications, and table assignment before approving and dispatching tickets to the kitchen.
+                      </p>
+                      <ul className="text-[11px] text-slate-500 mt-3 space-y-1 pl-6 list-disc list-inside">
+                        <li>Prevents duplicate or accidental KOT printing</li>
+                        <li>Enables front-desk review of special items and table assignments</li>
+                        <li>Recommended for fine-dining and full-service restaurants</li>
+                      </ul>
+                    </div>
+                    <div className="mt-4 pt-3 border-t border-slate-200/60 pl-6 flex items-center gap-2 text-xs font-semibold text-blue-700">
+                      <span>Flow: Captain Order → Reception Queue → Approve &amp; Fire KOT → Kitchen</span>
+                    </div>
+                  </div>
+
+                  {/* Option 2: Approval Disabled */}
+                  <div
+                    onClick={() => handleChange('requireOrderApproval', false)}
+                    className={`p-4 rounded-2xl border-2 transition-all cursor-pointer flex flex-col justify-between ${
+                      formData.requireOrderApproval === false
+                        ? 'border-emerald-600 bg-emerald-50/50 shadow-sm ring-1 ring-emerald-500'
+                        : 'border-slate-200 bg-white hover:border-slate-300'
+                    }`}
+                  >
+                    <div>
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="font-bold text-slate-800 text-sm flex items-center gap-2">
+                          <span className={`w-4 h-4 rounded-full border-2 flex items-center justify-center shrink-0 ${
+                            formData.requireOrderApproval === false ? 'border-emerald-600 bg-emerald-600' : 'border-slate-300'
+                          }`}>
+                            {formData.requireOrderApproval === false && <span className="w-1.5 h-1.5 rounded-full bg-white" />}
+                          </span>
+                          Direct Kitchen Dispatch (Disabled)
+                        </span>
+                        <Badge variant="success" size="sm">Direct KOT</Badge>
+                      </div>
+                      <p className="text-xs text-slate-600 leading-relaxed pl-6">
+                        Orders placed by captains or staff <b>bypass reception approval</b> and automatically generate &amp; fire KOT tickets directly to assigned kitchen stations in real-time.
+                      </p>
+                      <ul className="text-[11px] text-slate-500 mt-3 space-y-1 pl-6 list-disc list-inside">
+                        <li>Instant dispatch to kitchen without reception intervention</li>
+                        <li>Table status immediately updates to KOT Sent</li>
+                        <li>Recommended for quick-service, fast casual, cafes, and rush hours</li>
+                      </ul>
+                    </div>
+                    <div className="mt-4 pt-3 border-t border-slate-200/60 pl-6 flex items-center gap-2 text-xs font-semibold text-emerald-700">
+                      <span>Flow: Captain Order → Direct KOT Dispatch → Kitchen Immediately</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Toggle Switch Bar */}
+                <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div>
+                    <span className="font-bold text-slate-800 text-sm block">Order Approval Mode</span>
+                    <span className="text-xs text-slate-500">
+                      {formData.requireOrderApproval !== false
+                        ? 'Order approval is currently ENABLED. Incoming orders require reception review.'
+                        : 'Order approval is currently DISABLED. Incoming orders fire KOT tickets directly.'}
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => handleChange('requireOrderApproval', formData.requireOrderApproval === false)}
+                    className={`relative inline-flex h-7 w-14 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 ${
+                      formData.requireOrderApproval !== false ? 'bg-blue-600' : 'bg-slate-300'
+                    }`}
+                    role="switch"
+                    aria-checked={formData.requireOrderApproval !== false}
+                  >
+                    <span
+                      className={`pointer-events-none inline-block h-6 w-6 transform rounded-full bg-white shadow-lg ring-0 transition duration-200 ease-in-out ${
+                        formData.requireOrderApproval !== false ? 'translate-x-7' : 'translate-x-0'
+                      }`}
+                    />
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {['PROFILE', 'WORKFLOW', 'TAXES', 'PRINTING'].includes(activeTab) && (
               <div className="pt-4 border-t border-slate-100 flex justify-end">
                 <Button type="submit" variant="primary" icon={Save} loading={saving}>
                   {t('settings.saveSettings', 'Save System Settings')}

@@ -17,6 +17,9 @@ import {
   Clock,
   UtensilsCrossed,
   ChevronRight,
+  ChevronDown,
+  ChevronUp,
+  Filter,
   X
 } from 'lucide-react';
 import { tableRepository } from '../../services/repositories/tableRepository';
@@ -508,14 +511,24 @@ export const TablesPage = () => {
         subtitle={t('tables.subtitle', 'Floor layout visualizer, dining sections, table seating capacity, and status overview')}
       >
         {canManage && (
-          <div className="flex items-center gap-2">
-            <Button variant="secondary" icon={Layers} onClick={() => setIsAreaModalOpen(true)}>
+          <>
+            <Button
+              variant="secondary"
+              icon={Layers}
+              onClick={() => setIsAreaModalOpen(true)}
+              className="h-11 sm:h-auto w-full justify-center text-xs font-bold"
+            >
               {t('tables.manageAreas', 'Manage Areas')}
             </Button>
-            <Button variant="primary" icon={Plus} onClick={handleOpenAdd}>
+            <Button
+              variant="primary"
+              icon={Plus}
+              onClick={handleOpenAdd}
+              className="h-11 sm:h-auto w-full justify-center text-xs font-bold"
+            >
               {t('tables.addTable', 'Add Table')}
             </Button>
-          </div>
+          </>
         )}
       </PageHeader>
 
@@ -529,8 +542,8 @@ export const TablesPage = () => {
 
       {/* Area Selector Tabs & Status Legend */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 sm:gap-4 border-b border-slate-200 pb-3 sm:pb-4">
-        {/* Tabs */}
-        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar">
+        {/* Tabs - Kept Open in Mobile */}
+        <div className="grid grid-cols-2 gap-1.5 sm:flex sm:items-center sm:gap-1.5 sm:overflow-x-auto pb-1 no-scrollbar pos-tag-grid">
           <button
             onClick={() => setSelectedAreaId('ALL')}
             className={`px-3 sm:px-3.5 py-1.5 sm:py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all ${
@@ -559,8 +572,8 @@ export const TablesPage = () => {
           })}
         </div>
 
-        {/* Legend */}
-        <div className="flex items-center gap-2.5 sm:gap-3 text-[10px] sm:text-[11px] font-semibold text-slate-600 flex-wrap">
+        {/* Legend - Desktop / Tablet Only (Hidden on Mobile) */}
+        <div className="hidden md:flex md:items-center md:gap-3 text-[10px] sm:text-[11px] font-semibold text-slate-600">
           <div className="flex items-center gap-1.5">
             <span className="w-2.5 h-2.5 rounded-full bg-emerald-500"></span>
             <span>{t('common.available', 'Available')}</span>
@@ -611,7 +624,7 @@ export const TablesPage = () => {
             const handleCardClick = () => {
               if (!tbl.isActive) return;
               if (tbl.status === TABLE_STATUS.AVAILABLE) {
-                navigate(`/orders/new?tableId=${tbl.id}`);
+                navigate(`/orders/new?tableId=${tbl.id}&from=tables`);
               } else {
                 handleOpenOrderDetails(tbl);
               }
@@ -660,7 +673,7 @@ export const TablesPage = () => {
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
-                        navigate(`/orders/new?tableId=${tbl.id}`);
+                        navigate(`/orders/new?tableId=${tbl.id}&from=tables`);
                       }}
                       className="text-[11px] font-bold text-blue-600 hover:text-blue-700 bg-blue-50 px-2 py-0.5 rounded-lg border border-blue-200"
                     >
@@ -799,7 +812,7 @@ export const TablesPage = () => {
       <Modal
         isOpen={isTransferModalOpen}
         onClose={() => setIsTransferModalOpen(false)}
-        title={`${t('tables.transferTable', 'Transfer Table')} T-${transferSourceTable?.tableNo}`}
+        title={`${t('tables.transferTable', 'Transfer Table')} T-${String(transferSourceTable?.tableNo || '').trim().replace(/^(T-?)+/i, '')}`}
         subtitle={t('tables.transferSubtitle', 'Relocate ongoing active order and kitchen tickets to another available table')}
       >
         <form onSubmit={handleConfirmTransfer} className="space-y-4">
@@ -810,9 +823,9 @@ export const TablesPage = () => {
           )}
 
           <div className="p-3 bg-blue-50/50 rounded-xl border border-blue-200 text-xs text-blue-900">
-            <p className="font-bold">Active Table: T-{transferSourceTable?.tableNo}</p>
+            <p className="font-bold">Active Table: T-{String(transferSourceTable?.tableNo || '').trim().replace(/^(T-?)+/i, '')}</p>
             <p className="mt-0.5">
-              The ongoing order, canonical dishes, and kitchen tickets will seamlessly transfer to the chosen table. Table T-{transferSourceTable?.tableNo} will be released back to AVAILABLE.
+              The ongoing order, canonical dishes, and kitchen tickets will seamlessly transfer to the chosen table. Table T-{String(transferSourceTable?.tableNo || '').trim().replace(/^(T-?)+/i, '')} will be released back to AVAILABLE.
             </p>
           </div>
 
@@ -904,41 +917,82 @@ export const TablesPage = () => {
 
             {/* Current Dishes List */}
             <div>
-              <div className="flex items-center justify-between mb-2">
-                <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500">
-                  Current Order Items ({(selectedOrder.items || []).filter((i) => (i.status || 'ACTIVE') !== 'CANCELLED').length})
-                </h4>
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  icon={Edit2}
-                  onClick={() => handleOpenModify(selectedOrder)}
-                  className="text-xs text-blue-700 bg-blue-50 border-blue-200 hover:bg-blue-100"
-                >
-                  Modify / Add Dishes
-                </Button>
-              </div>
+              {(() => {
+                const activeDishes = (selectedOrder.items || []).filter((i) => (i.status || 'ACTIVE') !== 'CANCELLED');
+                const cancelledDishes = (selectedOrder.items || []).filter((i) => (i.status || 'ACTIVE') === 'CANCELLED');
 
-              <div className="border border-slate-200 rounded-xl divide-y divide-slate-100 max-h-60 overflow-y-auto">
-                {(selectedOrder.items || [])
-                  .filter((i) => (i.status || 'ACTIVE') !== 'CANCELLED')
-                  .map((item, idx) => (
-                    <div key={item.lineId || item.productId || idx} className="p-3 flex items-center justify-between text-xs">
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <span className="font-bold text-slate-800">{item.name}</span>
-                          <span className="font-mono text-slate-500 font-bold bg-slate-100 px-1.5 py-0.5 rounded text-[11px]">
-                            x{item.quantity}
+                return (
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between mb-1">
+                      <div className="flex items-center gap-2">
+                        <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                          Current Order Items
+                        </h4>
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-50 text-blue-700 border border-blue-200">
+                          {activeDishes.length} Active
+                        </span>
+                      </div>
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        icon={Edit2}
+                        onClick={() => handleOpenModify(selectedOrder)}
+                        className="text-xs text-blue-700 bg-blue-50 border-blue-200 hover:bg-blue-100"
+                      >
+                        Modify / Add Dishes
+                      </Button>
+                    </div>
+
+                    <div className="border border-slate-200 rounded-xl divide-y divide-slate-100 max-h-60 overflow-y-auto">
+                      {activeDishes.map((item, idx) => (
+                        <div key={item.lineId || item.productId || idx} className="p-3 flex items-center justify-between text-xs">
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <span className="font-bold text-slate-800">{item.name || item.productName}</span>
+                              <span className="font-mono text-slate-500 font-bold bg-slate-100 px-1.5 py-0.5 rounded text-[11px]">
+                                x{item.quantity}
+                              </span>
+                            </div>
+                            {item.notes && <p className="text-[11px] text-blue-600 italic mt-0.5">* {item.notes}</p>}
+                          </div>
+                          <span className="font-extrabold text-slate-900">
+                            ₹{(item.quantity || 1) * (item.unitPrice || 0)}
                           </span>
                         </div>
-                        {item.notes && <p className="text-[11px] text-blue-600 italic mt-0.5">* {item.notes}</p>}
-                      </div>
-                      <span className="font-extrabold text-slate-900">
-                        ₹{(item.quantity || 1) * (item.unitPrice || 0)}
-                      </span>
+                      ))}
                     </div>
-                  ))}
-              </div>
+
+                    {cancelledDishes.length > 0 && (
+                      <div className="pt-2">
+                        <div className="flex items-center gap-2 mb-1.5">
+                          <h5 className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
+                            Cancelled / Removed Dishes
+                          </h5>
+                          <span className="px-1.5 py-0.2 rounded text-[10px] font-bold bg-rose-50 text-rose-600 border border-rose-200">
+                            {cancelledDishes.length}
+                          </span>
+                        </div>
+                        <div className="divide-y divide-slate-100 border border-rose-200 rounded-xl overflow-hidden text-xs bg-rose-50/20">
+                          {cancelledDishes.map((item, idx) => (
+                            <div key={item.lineId || item.productId || idx} className="p-2.5 flex items-center justify-between text-slate-400">
+                              <div className="flex-1">
+                                <span className="line-through font-medium text-slate-500">{item.name || item.productName}</span>
+                                <span className="text-[10px] ml-2 text-slate-400">({item.quantity}x @ ₹{item.unitPrice || 0})</span>
+                                {item.cancellationReason && (
+                                  <p className="text-[10px] text-rose-600 italic mt-0.5">Reason: {item.cancellationReason}</p>
+                                )}
+                              </div>
+                              <span className="text-[10px] font-bold bg-rose-50 text-rose-600 px-2 py-0.5 rounded border border-rose-200">
+                                CANCELLED
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
             </div>
 
             {/* Operational KOT Tickets */}
@@ -952,31 +1006,59 @@ export const TablesPage = () => {
                 <p className="text-xs text-slate-400">No KOT tickets issued yet.</p>
               ) : (
                 <div className="space-y-2 max-h-40 overflow-y-auto">
-                  {orderKOTs.map((kot) => (
-                    <div key={kot.id} className="p-2.5 rounded-xl border border-slate-200 bg-slate-50/50 flex items-center justify-between text-xs">
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <span className="font-black text-blue-700 font-mono">{kot.kotNo}</span>
-                          <span className="font-semibold text-slate-600 bg-white px-2 py-0.5 rounded border border-slate-200 text-[10px]">
-                            {kot.type} Rev #{kot.revision}
-                          </span>
-                          <span className="text-slate-500 font-bold capitalize">[{kot.status}]</span>
-                        </div>
-                        <p className="text-slate-500 mt-1">
-                          {kot.items.map((i) => `${i.quantity}x ${i.name}`).join(', ')}
-                        </p>
-                      </div>
-
-                      <button
-                        type="button"
-                        onClick={() => printService.printKOT(kot, selectedOrder, { tableNo: selectedOrder.tableNo || selectedTable?.tableNo })}
-                        className="text-xs font-bold text-blue-600 hover:text-blue-700 inline-flex items-center gap-1 bg-white p-2 rounded-lg border border-slate-200"
+                  {orderKOTs.map((kot) => {
+                    const isKotCancelled = kot.status === 'CANCELLED' || kot.type === 'CANCELLATION';
+                    return (
+                      <div
+                        key={kot.id}
+                        className={`p-2.5 rounded-xl border flex items-center justify-between text-xs ${
+                          isKotCancelled
+                            ? 'border-rose-200 bg-rose-50/30'
+                            : 'border-slate-200 bg-slate-50/50'
+                        }`}
                       >
-                        <Printer className="w-3.5 h-3.5" />
-                        Print
-                      </button>
-                    </div>
-                  ))}
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span className={`font-black font-mono ${isKotCancelled ? 'text-rose-700' : 'text-blue-700'}`}>
+                              {kot.kotNo}
+                            </span>
+                            <span className="font-semibold text-slate-600 bg-white px-2 py-0.5 rounded border border-slate-200 text-[10px]">
+                              {kot.type} Rev #{kot.revision}
+                            </span>
+                            <span
+                              className={`font-bold px-1.5 py-0.5 rounded text-[10px] ${
+                                isKotCancelled
+                                  ? 'bg-rose-100 text-rose-800 border border-rose-200'
+                                  : 'text-slate-600'
+                              }`}
+                            >
+                              [{kot.status}]
+                            </span>
+                          </div>
+                          <p className="text-slate-500 mt-1">
+                            {kot.items.map((i) => {
+                              const isItemCancelled = isKotCancelled || i.status === 'CANCELLED' || i.cancelled;
+                              return (
+                                <span key={i.productId || i.name} className={`mr-2 ${isItemCancelled ? 'line-through text-slate-400' : ''}`}>
+                                  {i.quantity}x {i.name || i.productName}
+                                  {isItemCancelled && ' [Cancelled]'}
+                                </span>
+                              );
+                            })}
+                          </p>
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() => printService.printKOT(kot, selectedOrder, { tableNo: selectedOrder.tableNo || selectedTable?.tableNo })}
+                          className="text-xs font-bold text-blue-600 hover:text-blue-700 inline-flex items-center gap-1 bg-white p-2 rounded-lg border border-slate-200 shrink-0"
+                        >
+                          <Printer className="w-3.5 h-3.5" />
+                          Print
+                        </button>
+                      </div>
+                    );
+                  })}
                 </div>
               )}
             </div>
@@ -987,41 +1069,39 @@ export const TablesPage = () => {
                 variant="primary"
                 icon={Edit2}
                 onClick={() => handleOpenModify(selectedOrder)}
-                className="bg-blue-600 hover:bg-blue-700 text-white font-bold"
+                className="bg-blue-600 hover:bg-blue-700 text-white font-bold sm:mr-auto"
               >
                 Modify Order &amp; Add Dishes
               </Button>
 
-              <div className="flex items-center gap-2">
-                {hasAnyPermission([PERMISSIONS.BILLING_GENERATE, PERMISSIONS.PAYMENT_COLLECT]) && (
-                  <Button
-                    variant="secondary"
-                    icon={Receipt}
-                    onClick={() => {
-                      const tId = selectedTable?.id || selectedOrder.tableId;
-                      setIsOrderDetailsOpen(false);
-                      if (tId) {
-                        navigate(`/billing?tableId=${tId}`);
-                      } else {
-                        navigate(`/billing?orderId=${selectedOrder.id}`);
-                      }
-                    }}
-                    className="text-emerald-700 border-emerald-300 hover:bg-emerald-50 font-bold"
-                  >
-                    Proceed to Billing
-                  </Button>
-                )}
-
+              {hasAnyPermission([PERMISSIONS.BILLING_GENERATE, PERMISSIONS.PAYMENT_COLLECT]) && (
                 <Button
                   variant="secondary"
+                  icon={Receipt}
                   onClick={() => {
+                    const tId = selectedTable?.id || selectedOrder.tableId;
                     setIsOrderDetailsOpen(false);
-                    setSelectedOrder(null);
+                    if (tId) {
+                      navigate(`/billing?tableId=${tId}`);
+                    } else {
+                      navigate(`/billing?orderId=${selectedOrder.id}`);
+                    }
                   }}
+                  className="text-emerald-700 border-emerald-300 hover:bg-emerald-50 font-bold"
                 >
-                  Close
+                  Proceed to Billing
                 </Button>
-              </div>
+              )}
+
+              <Button
+                variant="secondary"
+                onClick={() => {
+                  setIsOrderDetailsOpen(false);
+                  setSelectedOrder(null);
+                }}
+              >
+                Close
+              </Button>
             </div>
           </div>
         )}
@@ -1047,12 +1127,12 @@ export const TablesPage = () => {
             <div className="lg:col-span-5 border border-slate-200 rounded-2xl p-3.5 bg-slate-50/70 space-y-3">
               <div className="flex items-center justify-between pb-2 border-b border-slate-200/80">
                 <div className="flex items-center gap-2">
-                  <h4 className="text-xs font-black uppercase tracking-wider text-slate-700">Order Dishes</h4>
-                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-white text-slate-600 border border-slate-200">
+                  <h4 className="text-xs font-black uppercase tracking-wider text-slate-700 whitespace-nowrap">Order Dishes</h4>
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-white text-slate-600 border border-slate-200 whitespace-nowrap">
                     {modifiedItems.length} {modifiedItems.length === 1 ? 'dish' : 'dishes'}
                   </span>
                 </div>
-                <span className="text-xs font-extrabold text-blue-700">
+                <span className="text-xs font-extrabold text-blue-700 whitespace-nowrap">
                   ₹{modifiedItems.reduce((acc, i) => acc + i.quantity * i.unitPrice, 0)}
                 </span>
               </div>

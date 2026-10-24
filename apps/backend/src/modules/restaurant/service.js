@@ -99,6 +99,7 @@ export class RestaurantService {
         prefix: 'INV-',
         terms: 'Thank you for dining with us.',
       },
+      requireOrderApproval: data.requireOrderApproval !== undefined ? Boolean(data.requireOrderApproval) : true,
       isActive: data.isActive !== undefined ? Boolean(data.isActive) : true,
     };
 
@@ -143,6 +144,7 @@ export class RestaurantService {
     if (data.currency !== undefined) updateFields.currency = data.currency;
     if (data.taxConfig !== undefined) updateFields.taxConfig = data.taxConfig;
     if (data.invoiceConfig !== undefined) updateFields.invoiceConfig = data.invoiceConfig;
+    if (data.requireOrderApproval !== undefined) updateFields.requireOrderApproval = Boolean(data.requireOrderApproval);
     if (data.isActive !== undefined) updateFields.isActive = Boolean(data.isActive);
 
     const updated = await this.branchRepo.updateById(beforeDoc.id, updateFields);

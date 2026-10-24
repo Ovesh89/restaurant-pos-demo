@@ -216,7 +216,10 @@ class OrderService {
     const orderNumber = await getNextDailyOrderSequence(branch.code || 'MAIN');
 
     const isHeld = Boolean(held);
-    const autoApprove = Boolean(data.autoApprove);
+    const approvalRequired = branch.requireOrderApproval !== undefined
+      ? Boolean(branch.requireOrderApproval)
+      : true;
+    const autoApprove = !isHeld && (!approvalRequired || Boolean(data.autoApprove));
     let status = 'DRAFT';
     if (isHeld) {
       status = 'HOLD';
@@ -346,7 +349,12 @@ class OrderService {
       throw new NotFoundAppError('Order not found.');
     }
 
-    if (autoApprove) {
+    const branch = await branchRepository.findById(order.branchId);
+    const approvalRequired = branch?.requireOrderApproval !== undefined
+      ? Boolean(branch.requireOrderApproval)
+      : true;
+
+    if (autoApprove || !approvalRequired) {
       const confirmRes = await this.confirmOrder({ orderId, actorId, actorName });
       return confirmRes.order || confirmRes;
     }
@@ -982,6 +990,44 @@ class OrderService {
       updatedAt: now,
     });
 
+    // Update existing operational KOTs for this order
+    const existingKots = await kotRepository.findByOrder(canonicalOrderId);
+    for (const k of existingKots) {
+      if (k.type === 'CANCELLATION' || k.status === 'CANCELLED') continue;
+      let kotChanged = false;
+      const kItems = (k.items || []).map((ki) => {
+        if (
+          ki.productId === targetItem.productId ||
+          ki.productId === targetItem._id ||
+          ki.productId === targetItem.id ||
+          ki._id === targetItem._id ||
+          ki.id === targetItem._id
+        ) {
+          kotChanged = true;
+          return {
+            ...ki,
+            status: 'CANCELLED',
+            cancelled: true,
+            cancellationReason: cleanReason,
+          };
+        }
+        return ki;
+      });
+
+      if (kotChanged) {
+        const allItemsCancelled = kItems.every((ki) => ki.status === 'CANCELLED' || ki.cancelled === true);
+        const updatePayload = {
+          items: kItems,
+          updatedAt: now,
+        };
+        if (allItemsCancelled) {
+          updatePayload.status = 'CANCELLED';
+          updatePayload.notes = `KOT CANCELLED: All items were removed from order (${cleanReason})`;
+        }
+        await kotRepository.updateById(k._id, updatePayload);
+      }
+    }
+
     let cancellationKot = null;
     if (
       ['CONFIRMED', 'KOT_SENT', 'PREPARING', 'READY', 'SERVED'].includes(currentStatus) &&
@@ -993,6 +1039,19 @@ class OrderService {
         reason: cleanReason,
         actorId,
         actorName,
+      });
+
+      await notificationService.notify({
+        branchId: order.branchId,
+        eventType: 'ORDER_ITEM_CANCELLED',
+        title: `Item Cancelled: Table ${order.tableNumber || ''}`,
+        message: `Dish "${targetItem.productName}" was cancelled from Order #${order.orderNumber}. Reason: ${cleanReason}`,
+        recipientRole: 'KITCHEN',
+        metadata: {
+          orderId: canonicalOrderId,
+          itemId: targetItem._id || targetItem.id,
+          productName: targetItem.productName,
+        },
       });
     }
 

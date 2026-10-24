@@ -237,6 +237,8 @@ export const en = {
     paymentMode: 'Payment Mode',
     recordPayment: 'Record Payment',
     settleAndPrint: 'Settle & Print Tax Invoice',
+    settleBill: 'Settle Bill',
+    settle: 'Settle',
     printKot: 'Print KOT Slip',
     subtotalAmount: 'Subtotal Amount',
     discountAmount: 'Discount Applied',
@@ -368,6 +370,8 @@ export const en = {
     invoicePrefix: 'Invoice Prefix',
     kotPrefix: 'KOT Prefix',
     receiptFooter: 'Receipt Notice / Footer',
+    orderWorkflow: 'Order Approvals & Workflow',
+    requireOrderApproval: 'Require Order Approval',
     saveSettings: 'Save Settings',
     resetDefaults: 'Reset to Factory Defaults'
   }

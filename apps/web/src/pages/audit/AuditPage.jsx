@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Search, Filter, ClipboardList, Shield, RefreshCw, Clock, Trash2, CheckCircle2 } from 'lucide-react';
+import { Search, Filter, ClipboardList, Shield, RefreshCw, Clock, Trash2, CheckCircle2, ChevronDown, ChevronUp } from 'lucide-react';
 import { auditRepository } from '../../services/repositories/auditRepository';
 import { PageHeader } from '../../components/common/PageHeader';
 import { Button } from '../../components/common/Button';
@@ -18,6 +18,7 @@ export const AuditPage = () => {
   const [purgeNotice, setPurgeNotice] = useState(null);
   const [search, setSearch] = useState('');
   const [actionFilter, setActionFilter] = useState('');
+  const [isMobileFiltersOpen, setIsMobileFiltersOpen] = useState(false);
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(20);
   const [pagination, setPagination] = useState(null);
@@ -154,21 +155,25 @@ export const AuditPage = () => {
         title={t('audit.title', 'Operational Audit Trail')}
         subtitle={t('audit.subtitle', 'Immutable chronological history of all security, pricing, and administrative events')}
       >
-        <div className="flex items-center gap-2">
-          <Button
-            variant="outline"
-            icon={Trash2}
-            onClick={handleManualPurge}
-            loading={purging}
-            title="Purge logs older than 30 days immediately"
-            className="text-slate-600 hover:text-rose-600 hover:border-rose-300"
-          >
-            {t('audit.purgeOld', 'Purge > 30 Days')}
-          </Button>
-          <Button variant="secondary" icon={RefreshCw} onClick={loadLogs} loading={loading}>
-            {t('audit.refreshTrail', 'Refresh Trail')}
-          </Button>
-        </div>
+        <Button
+          variant="outline"
+          icon={Trash2}
+          onClick={handleManualPurge}
+          loading={purging}
+          title="Purge logs older than 30 days immediately"
+          className="h-11 w-full justify-center text-xs font-bold text-slate-600 hover:text-rose-600 hover:border-rose-300"
+        >
+          {t('audit.purgeOld', 'Purge > 30 Days')}
+        </Button>
+        <Button
+          variant="secondary"
+          icon={RefreshCw}
+          onClick={loadLogs}
+          loading={loading}
+          className="h-11 w-full justify-center text-xs font-bold"
+        >
+          {t('audit.refreshTrail', 'Refresh Trail')}
+        </Button>
       </PageHeader>
 
       {/* Retention Policy Banner */}
@@ -201,9 +206,33 @@ export const AuditPage = () => {
         </div>
       )}
 
-      {/* Filter / Search Bar */}
+      {/* Mobile Filter Toggle Header */}
+      <div className="md:hidden flex items-center justify-between p-3 bg-white rounded-2xl border border-slate-200 shadow-xs">
+        <div className="flex items-center gap-2.5 min-w-0">
+          <div className="w-8 h-8 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
+            <Filter className="w-4 h-4" />
+          </div>
+          <div className="min-w-0">
+            <div className="text-xs font-bold text-slate-800 truncate">
+              {actionFilter || t('common.all', 'All Event Actions')}
+            </div>
+            <div className="text-[10px] text-slate-500 font-medium truncate">
+              {formatNumber(pagination?.total ?? logs.length)} {t('common.total', 'Total Logs')}
+            </div>
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={() => setIsMobileFiltersOpen(!isMobileFiltersOpen)}
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition-all shrink-0"
+        >
+          <span>{isMobileFiltersOpen ? t('common.collapse', 'Collapse') : t('common.filter', 'Filters')}</span>
+          {isMobileFiltersOpen ? <ChevronUp className="w-4 h-4 text-slate-500" /> : <ChevronDown className="w-4 h-4 text-slate-500" />}
+        </button>
+      </div>
 
-      <div className="bg-white p-3.5 sm:p-4 rounded-xl border border-slate-200 shadow-xs flex flex-col sm:flex-row flex-wrap items-stretch sm:items-center gap-3">
+      {/* Filter / Search Bar */}
+      <div className={`bg-white p-3.5 sm:p-4 rounded-xl border border-slate-200 shadow-xs flex-col md:flex md:flex-row md:items-center gap-2.5 sm:gap-3 ${isMobileFiltersOpen ? 'flex' : 'hidden md:flex'}`}>
         <form onSubmit={handleSearchSubmit} className="w-full sm:w-72 flex gap-2">
           <Input
             icon={Search}
@@ -232,7 +261,7 @@ export const AuditPage = () => {
           />
         </div>
 
-        <div className="sm:ml-auto text-xs text-slate-500 font-semibold text-right sm:text-left">
+        <div className="w-full sm:w-auto sm:ml-auto text-xs text-slate-500 font-semibold text-right sm:text-left">
           {t('common.total', 'Total Logs')}: {formatNumber(pagination?.total ?? logs.length)}
         </div>
       </div>

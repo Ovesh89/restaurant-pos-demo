@@ -20,6 +20,9 @@ import {
   Layers,
   Eye,
   ChevronRight,
+  ChevronDown,
+  ChevronUp,
+  Filter,
   X,
   Calendar
 } from 'lucide-react';
@@ -113,6 +116,7 @@ export const BillingPage = () => {
 
   const [readyOrders, setReadyOrders] = useState([]);
   const [billsHistory, setBillsHistory] = useState([]);
+  const [isMobileFiltersOpen, setIsMobileFiltersOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [historyPage, setHistoryPage] = useState(1);
   const [historyLimit, setHistoryLimit] = useState(10);
@@ -992,12 +996,12 @@ export const BillingPage = () => {
             {t('billing.noPendingBills', null, 'No active dining tables or takeaway orders pending bill settlement.')}
           </div>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4">
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2.5 sm:gap-4">
             {readyOrders.map((ord) => (
               <div
                 key={ord.id}
                 onClick={() => handleOpenCheckout(ord)}
-                className="bg-white rounded-2xl border border-slate-200 p-4 shadow-xs hover:shadow-lg hover:border-blue-400 transition-all flex flex-col justify-between cursor-pointer"
+                className="bg-white rounded-2xl border border-slate-200 p-3 sm:p-4 shadow-xs hover:shadow-lg hover:border-blue-400 transition-all flex flex-col justify-between cursor-pointer"
               >
                 <div>
                   <div className="flex items-center justify-between pb-2 border-b border-slate-100">
@@ -1009,7 +1013,7 @@ export const BillingPage = () => {
                     </Badge>
                   </div>
 
-                  <div className="my-3">
+                  <div className="my-2.5 sm:my-3">
                     {ord.orderType && ord.orderType !== 'DINE_IN' ? (
                       <div>
                         <div className="flex items-center gap-1.5 mb-1">
@@ -1017,46 +1021,51 @@ export const BillingPage = () => {
                             {ord.orderType === 'TAKEAWAY' ? t('orders.takeaway', null, 'Take Away') : ord.orderType}
                           </span>
                           {ord.onlineOrderRef && (
-                            <span className="text-[11px] font-mono font-bold text-slate-600">
+                            <span className="text-[11px] font-mono font-bold text-slate-600 truncate">
                               #{ord.onlineOrderRef}
                             </span>
                           )}
                         </div>
-                        <h3 className="text-base font-black text-slate-800 truncate">
+                        <h3 className="text-sm sm:text-base font-black text-slate-800 truncate">
                           {ord.customerName || t('orders.walkinGuest', null, 'Walk-in Guest')}
                         </h3>
                         {ord.customerPhone && (
-                          <p className="text-xs text-slate-500 font-mono">{ord.customerPhone}</p>
+                          <p className="text-xs text-slate-500 font-mono truncate">{ord.customerPhone}</p>
                         )}
                       </div>
                     ) : (
                       <>
-                        <h3 className="text-xl font-black text-slate-800">{t('orders.table', null, 'Table')} {ord.tableNo}</h3>
-                        <p className="text-xs text-slate-500 mt-0.5">{t('orders.captain', null, 'Captain')}: {ord.captainName || t('orders.captain', null, 'Staff')}</p>
+                        <h3 className="text-base sm:text-xl font-black text-slate-800 truncate">{t('orders.table', null, 'Table')} {ord.tableNo}</h3>
+                        <p className="text-xs text-slate-500 mt-0.5 truncate">{t('orders.captain', null, 'Captain')}: {ord.captainName || t('orders.captain', null, 'Staff')}</p>
                       </>
                     )}
-                    <p className="text-xs text-slate-600 mt-1.5 font-semibold">
+                    <p className="text-xs text-slate-600 mt-1 sm:mt-1.5 font-semibold truncate">
                       {formatNumber(ord.items?.length)} {t('orders.dishes', null, 'dishes')} ({formatNumber(ord.items?.reduce((a, b) => a + b.quantity, 0))} {t('orders.dishes', null, 'items')})
                     </p>
                   </div>
                 </div>
 
-                <div className="pt-3 border-t border-slate-100 flex items-center justify-between">
-                  <div>
-                    <span className="text-[10px] text-slate-400 uppercase font-semibold">{t('billing.subtotalAmount', null, 'Subtotal')}</span>
-                    <p className="text-base font-black text-slate-900">₹{formatNumber(ord.subtotal)}</p>
+                <div className="pt-2.5 sm:pt-3 border-t border-slate-100 flex items-center justify-between gap-1.5 sm:gap-2">
+                  <div className="min-w-0">
+                    <span className="text-[10px] text-slate-400 uppercase font-semibold block truncate">
+                      <span className="hidden sm:inline">{t('billing.subtotalAmount', null, 'Subtotal Amount')}</span>
+                      <span className="sm:hidden">{t('common.subtotal', null, 'Subtotal')}</span>
+                    </span>
+                    <p className="text-sm sm:text-base font-black text-slate-900 truncate">₹{formatNumber(ord.subtotal)}</p>
                   </div>
 
                   <Button
                     variant="primary"
                     size="sm"
                     icon={Receipt}
+                    className="shrink-0 whitespace-nowrap px-2 sm:px-2.5 py-1 text-xs"
                     onClick={(e) => {
                       e.stopPropagation();
                       handleOpenCheckout(ord);
                     }}
                   >
-                    {t('billing.settleBill', null, 'Settle Bill')}
+                    <span className="hidden sm:inline">{t('billing.settleBill', null, 'Settle Bill')}</span>
+                    <span className="sm:hidden">{t('billing.settle', null, 'Settle')}</span>
                   </Button>
                 </div>
               </div>
@@ -1069,21 +1078,33 @@ export const BillingPage = () => {
       <div className="space-y-3">
         <div className="bg-white rounded-2xl border border-slate-200 p-4 shadow-xs space-y-3">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <div className="flex items-center gap-2.5">
-              <div className="w-9 h-9 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center">
-                <Receipt className="w-5 h-5" />
+            <div className="flex items-center justify-between w-full sm:w-auto">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center">
+                  <Receipt className="w-5 h-5" />
+                </div>
+                <div>
+                  <h2 className="text-base font-bold text-slate-800 flex items-center gap-2">
+                    <span>{t('billing.settledInvoices', null, 'Settled Invoices')}</span>
+                    <span className="text-xs px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 font-mono font-bold">
+                      {formatNumber(historyPagination?.total ?? billsHistory.length)}
+                    </span>
+                  </h2>
+                  <p className="text-xs text-slate-500">
+                    {getDateRangeLabel(dateFilter, customFromDate, customToDate)}
+                  </p>
+                </div>
               </div>
-              <div>
-                <h2 className="text-base font-bold text-slate-800 flex items-center gap-2">
-                  <span>{t('billing.settledInvoices', null, 'Settled Invoices')}</span>
-                  <span className="text-xs px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 font-mono font-bold">
-                    {formatNumber(historyPagination?.total ?? billsHistory.length)}
-                  </span>
-                </h2>
-                <p className="text-xs text-slate-500">
-                  {getDateRangeLabel(dateFilter, customFromDate, customToDate)}
-                </p>
-              </div>
+
+              {/* Mobile Filter Toggle Button */}
+              <button
+                type="button"
+                onClick={() => setIsMobileFiltersOpen(!isMobileFiltersOpen)}
+                className="sm:hidden flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition-all shrink-0"
+              >
+                <span>{isMobileFiltersOpen ? t('common.collapse', null, 'Collapse') : t('common.filter', null, 'Filters')}</span>
+                {isMobileFiltersOpen ? <ChevronUp className="w-4 h-4 text-slate-500" /> : <ChevronDown className="w-4 h-4 text-slate-500" />}
+              </button>
             </div>
 
             {/* Quick Search */}
@@ -1113,8 +1134,8 @@ export const BillingPage = () => {
           </div>
 
           {/* Filter Pills / Tabs */}
-          <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-100">
-            <div className="flex flex-wrap items-center gap-1.5">
+          <div className={`grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center sm:justify-between pt-2 border-t border-slate-100 ${isMobileFiltersOpen ? 'grid' : 'hidden sm:flex'}`}>
+            <div className="grid grid-cols-2 gap-1.5 sm:flex sm:flex-wrap sm:items-center pos-tag-grid col-span-2 sm:col-span-1">
               {[
                 { key: 'TODAY', label: t('reports.today', null, 'Today') },
                 { key: 'YESTERDAY', label: t('reports.yesterday', null, 'Yesterday') },
@@ -1142,7 +1163,7 @@ export const BillingPage = () => {
               size="sm"
               loading={historyLoading}
               onClick={() => loadSettledBills(1, historyLimit)}
-              className="text-slate-500 hover:text-slate-700 text-xs"
+              className="text-slate-500 hover:text-slate-700 text-xs col-span-2 sm:col-span-1 justify-center"
             >
               <RefreshCw className="w-3.5 h-3.5 mr-1" />
               {t('common.refresh', null, 'Refresh')}
@@ -1151,7 +1172,7 @@ export const BillingPage = () => {
 
           {/* Custom Date Inputs (when CUSTOM is active) */}
           {dateFilter === 'CUSTOM' && (
-            <div className="flex flex-wrap items-center gap-3 pt-2 bg-slate-50 p-3 rounded-xl border border-slate-200">
+            <div className={`grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center pt-2 bg-slate-50 p-3 rounded-xl border border-slate-200 pos-filter-grid ${isMobileFiltersOpen ? 'grid' : 'hidden sm:flex'}`}>
               <div className="flex items-center gap-2 text-xs">
                 <span className="font-bold text-slate-600">{t('reports.from', null, 'From')}:</span>
                 <input
@@ -1592,11 +1613,13 @@ export const BillingPage = () => {
                       {t('billing.recordPayment', null, 'Collect Payment Entry')}
                     </span>
 
-                    <div className="grid grid-cols-2 gap-2">
+                    <div className="grid grid-cols-2 gap-2.5 items-end">
                       <Select
                         label={t('billing.paymentMode', null, 'Payment Mode')}
+                        labelClassName="h-5 flex items-center truncate text-[11px]"
                         value={paymentMode}
                         onChange={(e) => setPaymentMode(e.target.value)}
+                        className="h-10 text-xs sm:text-sm pl-2.5 sm:pl-3.5 pr-7 sm:pr-8"
                         options={[
                           { value: PAYMENT_MODES.UPI, label: 'UPI / QR Code' },
                           { value: PAYMENT_MODES.CASH, label: t('billing.cash', null, 'Cash') },
@@ -1605,7 +1628,8 @@ export const BillingPage = () => {
                         ]}
                       />
                       <Input
-                        label={`${t('billing.enterPaidAmount', null, 'Amount to Pay')} (₹)`}
+                        label={`${t('common.amount', null, 'Amount')} (₹)`}
+                        labelClassName="h-5 flex items-center truncate text-[11px]"
                         type="number"
                         step="any"
                         min="0"
@@ -1613,6 +1637,7 @@ export const BillingPage = () => {
                         value={paymentAmount}
                         onChange={(e) => setPaymentAmount(e.target.value)}
                         placeholder={`${t('billing.balanceRemaining', null, 'Balance')}: ₹${formatNumber(activeBill.balance)}`}
+                        className="h-10 text-xs sm:text-sm"
                         required
                       />
                     </div>
@@ -1622,12 +1647,13 @@ export const BillingPage = () => {
                       placeholder="e.g. UPI Ref / Card Last 4 digits"
                       value={paymentRef}
                       onChange={(e) => setPaymentRef(e.target.value)}
+                      className="h-10 text-xs sm:text-sm"
                     />
 
                     <Button
                       type="submit"
                       variant="primary"
-                      className="w-full bg-blue-600 hover:bg-blue-700"
+                      className="h-11 w-full bg-blue-600 hover:bg-blue-700 font-bold text-xs sm:text-sm justify-center"
                       loading={actionLoading}
                     >
                       {t('billing.recordPayment', null, 'Record')} ₹{formatNumber(paymentAmount || activeBill.balance)} {t('common.via', null, 'via')} {paymentMode}
@@ -1717,8 +1743,8 @@ export const BillingPage = () => {
               {/* Left Column: Current Items in Order (5 of 12 cols) */}
               <div className="lg:col-span-5 border border-slate-200 rounded-2xl p-3.5 bg-slate-50 space-y-3">
                 <div className="flex items-center justify-between pb-2 border-b border-slate-200">
-                  <span className="text-xs font-black uppercase text-slate-700">{t('kitchen.orderedDishes', null, 'Order Dishes')}</span>
-                  <span className="text-xs font-extrabold text-blue-700">
+                  <span className="text-xs font-black uppercase text-slate-700 whitespace-nowrap">{t('kitchen.orderedDishes', null, 'Order Dishes')}</span>
+                  <span className="text-xs font-extrabold text-blue-700 whitespace-nowrap">
                     ₹{formatNumber(billingModifiedItems.reduce((acc, i) => acc + (i.quantity * i.unitPrice), 0))}
                   </span>
                 </div>
@@ -2000,26 +2026,24 @@ export const BillingPage = () => {
 
             {/* Actions Footer */}
             <div className="pt-3 border-t border-slate-100 flex flex-wrap items-center justify-between gap-2 pos-modal-actions">
-              <div className="flex items-center gap-2">
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  icon={Printer}
-                  onClick={() => handleReprintInvoice(inspectInvoiceBill)}
-                >
-                  {t('billing.reprint', null, 'Reprint Tax Invoice')}
-                </Button>
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  icon={Tag}
-                  onClick={() => handleOpenDiscountModal(inspectInvoiceBill)}
-                >
-                  {t('billing.discountAmount', null, 'Adjust Discount')}
-                </Button>
-              </div>
+              <Button
+                variant="secondary"
+                size="sm"
+                icon={Printer}
+                onClick={() => handleReprintInvoice(inspectInvoiceBill)}
+              >
+                {t('billing.reprint', null, 'Reprint Tax Invoice')}
+              </Button>
+              <Button
+                variant="secondary"
+                size="sm"
+                icon={Tag}
+                onClick={() => handleOpenDiscountModal(inspectInvoiceBill)}
+              >
+                {t('billing.discountAmount', null, 'Adjust Discount')}
+              </Button>
 
-              <Button variant="secondary" size="sm" onClick={() => setInspectInvoiceBill(null)}>
+              <Button variant="secondary" size="sm" className="sm:ml-auto" onClick={() => setInspectInvoiceBill(null)}>
                 {t('common.close', null, 'Close')}
               </Button>
             </div>

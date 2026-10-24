@@ -10,6 +10,9 @@ import {
   UtensilsCrossed,
   Tag,
   DollarSign,
+  Filter,
+  ChevronDown,
+  ChevronUp,
   Trash2
 } from 'lucide-react';
 import { productRepository } from '../../services/repositories/productRepository';
@@ -44,6 +47,7 @@ export const ProductsPage = () => {
   const [search, setSearch] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('');
   const [selectedStation, setSelectedStation] = useState('');
+  const [isMobileFiltersOpen, setIsMobileFiltersOpen] = useState(false);
 
   // Add/Edit Product Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -411,18 +415,49 @@ export const ProductsPage = () => {
           variant="secondary"
           icon={History}
           onClick={() => handleOpenHistory(null)}
+          className="h-11 w-full justify-center text-xs font-bold"
         >
           {t('menu.priceHistory', 'Price History')}
         </Button>
         {canEdit && (
-          <Button variant="primary" icon={Plus} onClick={handleOpenAdd}>
+          <Button
+            variant="primary"
+            icon={Plus}
+            onClick={handleOpenAdd}
+            className="h-11 w-full justify-center text-xs font-bold"
+          >
             {t('menu.addProduct', 'Add Dish')}
           </Button>
         )}
       </PageHeader>
 
+      {/* Mobile Filter Toggle Header */}
+      <div className="md:hidden flex items-center justify-between p-3 bg-white rounded-2xl border border-slate-200 shadow-xs">
+        <div className="flex items-center gap-2.5 min-w-0">
+          <div className="w-8 h-8 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
+            <Filter className="w-4 h-4" />
+          </div>
+          <div className="min-w-0">
+            <div className="text-xs font-bold text-slate-800 truncate">
+              {selectedCategory ? (categories.find((c) => c.id === selectedCategory)?.name || 'Category') : t('orders.allCategories', 'All Categories')}
+            </div>
+            <div className="text-[10px] text-slate-500 font-medium truncate">
+              {selectedStation || t('kitchen.allStations', 'All Stations')} • {formatNumber(pagination?.total ?? products.length)} {t('orders.dishes', 'dishes')}
+            </div>
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={() => setIsMobileFiltersOpen(!isMobileFiltersOpen)}
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition-all shrink-0"
+        >
+          <span>{isMobileFiltersOpen ? t('common.collapse', 'Collapse') : t('common.filter', 'Filters')}</span>
+          {isMobileFiltersOpen ? <ChevronUp className="w-4 h-4 text-slate-500" /> : <ChevronDown className="w-4 h-4 text-slate-500" />}
+        </button>
+      </div>
+
       {/* Filter Bar */}
-      <div className="bg-white p-3 sm:p-4 rounded-xl border border-slate-200 shadow-xs flex flex-wrap items-center gap-2.5 sm:gap-3">
+      <div className={`bg-white p-3 sm:p-4 rounded-xl border border-slate-200 shadow-xs flex-col md:flex md:flex-row md:items-center gap-2.5 sm:gap-3 ${isMobileFiltersOpen ? 'flex' : 'hidden md:flex'}`}>
         <div className="w-full sm:w-64">
           <Input
             icon={Search}
@@ -432,26 +467,28 @@ export const ProductsPage = () => {
           />
         </div>
 
-        <div className="w-full sm:w-48">
-          <Select
-            value={selectedCategory}
-            onChange={(e) => setSelectedCategory(e.target.value)}
-            options={[
-              { value: '', label: t('orders.allCategories', 'All Categories') },
-              ...categories.map((c) => ({ value: c.id, label: c.name }))
-            ]}
-          />
-        </div>
+        <div className="grid grid-cols-2 gap-2 w-full md:flex md:items-center md:w-auto pos-filter-grid">
+          <div className="w-full sm:w-48">
+            <Select
+              value={selectedCategory}
+              onChange={(e) => setSelectedCategory(e.target.value)}
+              options={[
+                { value: '', label: t('orders.allCategories', 'All Categories') },
+                ...categories.map((c) => ({ value: c.id, label: c.name }))
+              ]}
+            />
+          </div>
 
-        <div className="w-full sm:w-48">
-          <Select
-            value={selectedStation}
-            onChange={(e) => setSelectedStation(e.target.value)}
-            options={[
-              { value: '', label: t('kitchen.allStations', 'All Stations') },
-              ...APP_CONFIG.DEFAULT_KITCHEN_STATIONS.map((s) => ({ value: s.name, label: s.name }))
-            ]}
-          />
+          <div className="w-full sm:w-48">
+            <Select
+              value={selectedStation}
+              onChange={(e) => setSelectedStation(e.target.value)}
+              options={[
+                { value: '', label: t('kitchen.allStations', 'All Stations') },
+                ...APP_CONFIG.DEFAULT_KITCHEN_STATIONS.map((s) => ({ value: s.name, label: s.name }))
+              ]}
+            />
+          </div>
         </div>
 
         <div className="w-full sm:w-auto sm:ml-auto text-xs text-slate-500 font-semibold text-right">

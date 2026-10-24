@@ -113,7 +113,7 @@ export const ReportsPage = () => {
       </PageHeader>
 
       {/* Primary KPI Metrics */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-4">
         <StatCard
           title={t('reports.totalRevenue', 'Total Net Sales')}
           value={loading ? '...' : formatCurrency(reportData?.totalNetSales || 0)}
@@ -148,7 +148,7 @@ export const ReportsPage = () => {
       </div>
 
       {/* Navigation Tabs */}
-      <div className="flex items-center gap-1.5 border-b border-slate-200 pb-3 text-xs overflow-x-auto no-scrollbar">
+      <div className="grid grid-cols-2 gap-1.5 sm:flex sm:items-center sm:gap-1.5 border-b border-slate-200 pb-3 text-xs pos-tag-grid">
         {[
           { id: 'OVERVIEW', label: t('reports.paymentBreakdown', 'Payment Mode Breakup') },
           { id: 'ITEMS', label: t('reports.categoryPerformance', 'Top Dish Sales') },
@@ -170,7 +170,7 @@ export const ReportsPage = () => {
 
       {/* Active Tab View */}
       {activeTab === 'OVERVIEW' && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-4">
           <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-xs">
             <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">{t('payment.upi', 'UPI / QR Code')}</span>
             <h3 className="text-2xl font-black text-blue-600 mt-1">
