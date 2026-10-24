@@ -352,8 +352,8 @@ export class PrintService {
         </div>
 
         <div class="divider"></div>
-        <div class="row"><span><b>INVOICE NO:</b> ${cleanBillNo}</span><span><b>TABLE:</b> ${tableNo}</span></div>
-        <div class="row"><span><b>ORDER NO  :</b> ${cleanOrderNo}</span><span><b>DATE :</b> ${dateStr}</span></div>
+        <div class="row"><span><b>INVOICE NO:</b> ${billNo}</span><span><b>TABLE:</b> ${tableNo}</span></div>
+        <div class="row"><span><b>ORDER NO  :</b> ${orderNo}</span><span><b>DATE :</b> ${dateStr}</span></div>
         <div class="row"><span><b>CASHIER   :</b> ${cashierName}</span><span><b>TIME :</b> ${timeStr}</span></div>
         ${guest ? `<div class="row"><span><b>GUEST     :</b> ${guest.name}${guest.mobile ? ' (' + guest.mobile + ')' : ''}</span></div>` : ''}
         <div class="divider"></div>

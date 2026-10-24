@@ -34,12 +34,8 @@ const PRESERVED_DEMO_FILES = new Set([
   'apps/web/public/logo.png',
   'apps/web/src/assets/logoBase64.js',
   'apps/web/src/layouts/Sidebar.jsx',
-  'apps/web/src/layouts/Topbar.jsx',
   'apps/web/src/pages/auth/LoginPage.jsx',
   'apps/web/src/pages/auth/ProfilePage.jsx',
-  'apps/web/src/pages/dashboard/DashboardPage.jsx',
-  'apps/web/src/services/printing/printService.js',
-  'apps/web/src/services/repositories/local/settingsLocalRepository.js',
 
   // Demo Documentation
   'README.md',
@@ -88,14 +84,19 @@ export function getExclusionReason(relPath) {
     return 'Environment configuration (.env*)';
   }
 
-  // 3. Configuration directories (e.g., apps/web/src/config, apps/backend/src/config)
-  if (segments.includes('config')) {
-    return 'Config directory file (*config/*)';
-  }
+  // Permissions & OpenAPI are application code, not environment config
+  if (norm === 'apps/backend/src/config/permissions.js' || norm === 'apps/backend/src/config/openapi.js') {
+    // Allowed to sync
+  } else {
+    // 3. Configuration directories (e.g., apps/web/src/config, apps/backend/src/config)
+    if (segments.includes('config')) {
+      return 'Config directory file (*config/*)';
+    }
 
-  // 4. Configuration files (*config*.js, *config*.json, *config*.mjs, *config*.cjs, etc.)
-  if (/(^|[._-])config([._-]|$)/i.test(base) || base.toLowerCase().includes('config')) {
-    return 'Configuration file (*config*)';
+    // 4. Configuration files (*config*.js, *config*.json, *config*.mjs, *config*.cjs, etc.)
+    if (/(^|[._-])config([._-]|$)/i.test(base) || base.toLowerCase().includes('config')) {
+      return 'Configuration file (*config*)';
+    }
   }
 
   // 5. GitHub workflows and deployment configs (.github/*)
@@ -140,6 +141,20 @@ function transformContent(relPath, srcFile) {
     content = content.replace(/Chiloda Cross Road, Gandhinagar/g, 'Sector 11, Gandhinagar');
     return Buffer.from(content, 'utf8');
   }
+
+  if (relPath === 'apps/web/src/services/repositories/local/settingsLocalRepository.js') {
+    let content = fs.readFileSync(srcFile, 'utf8');
+    content = content
+      .replace(/restaurantName: 'Green Tandoor Se',/g, "restaurantName: 'Green Garden Pure Veg',")
+      .replace(/tagline: 'Garden Restaurant',/g, "tagline: 'Pure Vegetarian Dining & Banquet',")
+      .replace(/address: 'Opp\\. SP Petrol Pump, Gandhinagar, Chiloda Cross Road, Gandhinagar\\.',/g, "address: '101, City Centre, Near Central Park, Sector 11, Gandhinagar - 382010',")
+      .replace(/phone: '\\+91 97375 81238',/g, "phone: '+91 98765 43210',")
+      .replace(/email: 'greentandoorse@gmail\\.com',/g, "email: 'info@greengardenveg.demo',")
+      .replace(/gstin: '24ABCDE1234F1Z5',/g, "gstin: '24AABCG1234F1Z8',")
+      .replace(/notice: 'Order once placed will not be cancelled\\. Please allow minimum 20-25 minutes for preparation\\.'/g, "notice: 'Order once placed will not be cancelled. 100% Pure Vegetarian Kitchen.'");
+    return Buffer.from(content, 'utf8');
+  }
+
   return null;
 }
 

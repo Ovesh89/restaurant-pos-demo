@@ -5,17 +5,18 @@ import { auditRepository } from '../auditRepository.js';
 import { DEFAULT_LOGOS } from '../../../utils/logoProcessor.js';
 
 export const DEFAULT_SETTINGS = {
-  restaurantName: 'Green Tandoor Se',
-  tagline: 'Garden Restaurant',
+  restaurantName: 'Green Garden Pure Veg',
+  tagline: 'Pure Vegetarian Dining & Banquet',
   branchName: 'Main Branch (Gandhinagar)',
   address: 'Opp. SP Petrol Pump, Gandhinagar, Chiloda Cross Road, Gandhinagar.',
   phone: '+91 97375 81238',
   email: 'greentandoorse@gmail.com',
-  gstin: '24ABCDE1234F1Z5',
+  gstin: '24AABCG1234F1Z8',
   fssai: '13320001000123',
   currencySymbol: '₹',
   defaultTaxRate: 5.0,
   maxDiscountPercent: 25.0,
+  requireOrderApproval: true,
   upiId: 'q705457761@ybl',
   invoicePrefix: 'INV-',
   kotPrefix: 'KOT-',
