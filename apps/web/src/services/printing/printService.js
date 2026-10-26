@@ -32,8 +32,8 @@ export const truncateReceiptName = (name, maxChars = 18) => {
 };
 
 /**
- * Formats order, KOT, or bill numbers into clean daily sequence numbers for receipts.
- * Removes messy GUIDs and prefixes, returning clean sequences like '001', '002'.
+ * Formats order, KOT, or bill numbers into clean sequence numbers for receipts.
+ * Returns only the last three digits (e.g., '001', '002') as required for thermal receipts.
  */
 export const formatReceiptSequence = (code, fallback = '001') => {
   if (!code) return fallback;
@@ -42,13 +42,20 @@ export const formatReceiptSequence = (code, fallback = '001') => {
   if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str)) {
     return fallback;
   }
-  // If it contains hyphens like ORD-191026-001 or KOT-191026-002 or BILL-191026-001
+  // If hyphen separated (e.g. BILL-251026-001, ORD-251026-1, KOT-002)
   const parts = str.split('-');
   const lastPart = parts[parts.length - 1];
-  if (/^\d+$/.test(lastPart)) {
-    return lastPart.padStart(3, '0');
+  const digitsMatch = lastPart.match(/\d+$/);
+  if (digitsMatch) {
+    const num = digitsMatch[0];
+    return num.length >= 3 ? num.slice(-3) : num.padStart(3, '0');
   }
-  return str;
+  const anyDigits = str.match(/\d+$/);
+  if (anyDigits) {
+    const num = anyDigits[0];
+    return num.length >= 3 ? num.slice(-3) : num.padStart(3, '0');
+  }
+  return fallback;
 };
 
 export class PrintService {
@@ -117,6 +124,9 @@ export class PrintService {
   /**
    * Browser-based printing for KOT ticket using a printable window
    */
+  /**
+   * Browser-based printing for KOT ticket using a printable window
+   */
   printKOT(kot, order, table, options = {}) {
     try {
       const cfg = this.getEffectiveSettings(options);
@@ -124,83 +134,140 @@ export class PrintService {
       const rName = (cfg.restaurantName || 'GREEN TANDOOR SE').toUpperCase();
       const rTitle = cfg.tagline ? cfg.tagline.toUpperCase() : 'GARDEN RESTAURANT';
 
-      const printWindow = window.open('', '_blank', 'width=400,height=600');
+      const printWindow = window.open('', '_blank', 'width=420,height=600');
       if (!printWindow) {
         throw new Error('Pop-up was blocked. Please allow pop-ups for browser printing.');
       }
+
+      const cleanKotNo = formatReceiptSequence(kot.kotNo);
+      const rawOrderNo = order ? order.orderNo : (kot.orderNumber || kot.orderId);
+      const cleanOrderNo = formatReceiptSequence(rawOrderNo);
+
+      let rawTable = table ? table.tableNo : (kot.tableNo || '');
+      let cleanKotTable = String(rawTable).trim();
+      if (!cleanKotTable || cleanKotTable === 'N/A' || cleanKotTable === 'undefined' || cleanKotTable === '-') {
+        cleanKotTable = (order?.orderType) && order.orderType !== 'DINE_IN'
+          ? (order.orderType === 'TAKEAWAY' ? 'Take Away' : order.orderType)
+          : 'Direct';
+      } else {
+        const stripped = cleanKotTable.replace(/^(T-?)+/i, '').trim();
+        cleanKotTable = stripped ? `T-${stripped}` : cleanKotTable;
+      }
+
+      let cleanCaptain = String(kot.captainName || (order ? order.captainName : 'Staff')).trim();
+      if (cleanCaptain.length > 14) cleanCaptain = cleanCaptain.substring(0, 14);
+
+      let cleanStation = String(kot.station || 'Kitchen').trim();
+      if (cleanStation.length > 14) cleanStation = cleanStation.substring(0, 14);
+
+      const timeStr = new Date(kot.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
       const html = `
         <!DOCTYPE html>
         <html>
         <head>
-          <title>KOT Print - ${kot.kotNo}</title>
+          <title>KOT Print - ${cleanKotNo}</title>
           <style>
-            @page { margin: 0; size: 80mm auto; }
-            body {
-              font-family: 'Courier New', Courier, monospace;
-              font-size: 13px;
-              line-height: 1.3;
+            @page {
+              size: 80mm auto;
+              margin: 0;
+            }
+            * {
+              box-sizing: border-box;
+            }
+            html, body {
+              margin: 0;
+              padding: 0;
+              background: #fff;
               color: #000;
-              margin: 10px;
-              width: 74mm;
+            }
+            body {
+              font-family: 'Consolas', 'Lucida Console', 'Courier New', monospace;
+              font-size: 12px;
+              font-weight: 600;
+              line-height: 1.35;
+              width: 68mm;
+              max-width: 68mm;
+              margin-left: 2mm;
+              padding: 2mm 0 6mm 0;
+              color: #000;
+              -webkit-print-color-adjust: exact;
+              print-color-adjust: exact;
             }
             .center { text-align: center; }
-            .bold { font-weight: bold; }
-            .divider { border-top: 1px dashed #000; margin: 8px 0; }
-            .header { margin-bottom: 8px; }
+            .bold { font-weight: 800; }
+            .divider { border-top: 1.5px dashed #000; margin: 6px 0; }
+            .header { margin-bottom: 6px; }
             .receipt-logo {
-              width: 60px;
+              width: 55px;
               height: auto;
-              max-height: 60px;
-              margin: 0 auto 5px auto;
+              max-height: 55px;
+              margin: 0 auto 4px auto;
               display: block;
               object-fit: contain;
             }
-            .title { font-size: 16px; font-weight: bold; margin-bottom: 4px; }
-            .item-row { display: flex; justify-content: space-between; margin: 4px 0; }
-            .item-qty { font-weight: bold; width: 35px; }
-            .item-name { flex-grow: 1; }
-            .note { font-style: italic; font-size: 11px; margin-left: 35px; }
-            .badge { border: 1px solid #000; padding: 2px 4px; font-size: 11px; display: inline-block; margin-top: 4px; }
+            .title { font-size: 14px; font-weight: 900; margin-bottom: 2px; }
+            .meta-table { width: 100%; border-collapse: collapse; table-layout: fixed; margin: 2px 0; }
+            .meta-col-left { width: 55%; text-align: left; vertical-align: top; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding: 1.5px 0; }
+            .meta-col-right { width: 45%; text-align: right; vertical-align: top; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding: 1.5px 0; }
+            .items-table { width: 100%; table-layout: fixed; border-collapse: collapse; margin: 2px 0; }
+            .items-head-row th { border-bottom: 1.5px dashed #000; padding: 4px 0; font-weight: 800; font-size: 11.5px; }
+            .item-row td { padding: 3px 0; font-size: 12px; vertical-align: middle; }
+            .col-qty { width: 18%; text-align: center; font-weight: 800; }
+            .col-item { width: 82%; text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+            .note { font-style: italic; font-size: 11px; padding-left: 18%; color: #000; }
+            .badge { border: 1.5px solid #000; padding: 1px 4px; font-size: 11px; font-weight: 800; display: inline-block; }
           </style>
         </head>
         <body>
           <div class="center header">
             <img src="${receiptLogo}" class="receipt-logo" alt="${rName}" />
             <div class="title">*** KITCHEN ORDER TICKET ***</div>
-            <div>${rName}${rTitle ? ' ' + rTitle : ''}</div>
+            <div style="font-size: 11px; font-weight: 700;">${rName}${rTitle ? ' ' + rTitle : ''}</div>
           </div>
 
           <div class="divider"></div>
-          <div><b>KOT NO :</b> ${formatReceiptSequence(kot.kotNo)} <span class="badge">${kot.type || 'NEW'}</span></div>
-          <div><b>TABLE  :</b> ${table ? 'Table ' + table.tableNo : kot.tableNo || 'N/A'}</div>
-          <div><b>ORDER  :</b> ${formatReceiptSequence(order ? order.orderNo : (kot.orderNumber || kot.orderId))}</div>
-          <div><b>CAPTAIN:</b> ${kot.captainName || (order ? order.captainName : 'Staff')}</div>
-          <div><b>STATION:</b> ${kot.station || 'Main Kitchen'}</div>
-          <div><b>TIME   :</b> ${new Date(kot.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</div>
+          <table class="meta-table">
+            <tr>
+              <td class="meta-col-left"><b>KOT NO :</b> ${cleanKotNo} <span class="badge">${kot.type || 'NEW'}</span></td>
+              <td class="meta-col-right"><b>TABLE:</b> ${cleanKotTable}</td>
+            </tr>
+            <tr>
+              <td class="meta-col-left"><b>ORDER  :</b> ${cleanOrderNo}</td>
+              <td class="meta-col-right"><b>TIME :</b> ${timeStr}</td>
+            </tr>
+            <tr>
+              <td class="meta-col-left"><b>CAPTAIN:</b> ${cleanCaptain}</td>
+              <td class="meta-col-right"><b>STN  :</b> ${cleanStation}</td>
+            </tr>
+          </table>
+
           <div class="divider"></div>
-          <div class="item-row bold">
-            <span class="item-qty">QTY</span>
-            <span class="item-name">ITEM</span>
-          </div>
-          <div class="divider"></div>
-          ${kot.items
-            .map(
-              (item) => `
-            <div>
-              <div class="item-row" style="display: flex; align-items: center; justify-content: space-between; margin: 3px 0; white-space: nowrap;">
-                <span class="item-qty" style="width: 35px; font-weight: bold;">${item.quantity}x</span>
-                <span class="item-name bold" style="flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${item.name}">${truncateReceiptName(item.name, 24)}</span>
-              </div>
-              ${item.notes ? `<div class="note">* Note: ${item.notes}</div>` : ''}
-            </div>
-          `
-            )
-            .join('')}
+          <table class="items-table">
+            <thead>
+              <tr class="items-head-row">
+                <th class="col-qty">QTY</th>
+                <th class="col-item">ITEM</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${kot.items
+                .map(
+                  (item) => `
+                <tr class="item-row">
+                  <td class="col-qty">${item.quantity}x</td>
+                  <td class="col-item bold" title="${item.name}">${truncateReceiptName(item.name, 22)}</td>
+                </tr>
+                ${item.notes ? `<tr><td colspan="2" class="note">* Note: ${item.notes}</td></tr>` : ''}
+              `
+                )
+                .join('')}
+            </tbody>
+          </table>
           <div class="divider"></div>
           ${
             kot.revision > 1
-              ? `<div class="center bold">REVISION #${kot.revision}</div>`
+              ? `<div class="center bold" style="margin-top: 4px;">REVISION #${kot.revision}</div>`
               : ''
           }
           <script>
@@ -247,16 +314,37 @@ export class PrintService {
     const rPhone = cfg.phone || '';
     const rFooter = cfg.receiptFooter || 'Order once placed will not be cancelled. Thank You for Dining With Us!';
 
-    const billNo = bill.billNo || bill.billNumber || 'INV-000';
-    const orderNo = bill.orderNo || bill.orderNumber || order?.orderNo || order?.orderNumber || 'N/A';
-    const tableNo = bill.tableNo || bill.tableNumber || order?.tableNo || order?.tableNumber || 'N/A';
+    const rawBillNo = bill.billNo || bill.billNumber || 'INV-000';
+    const rawOrderNo = bill.orderNo || bill.orderNumber || order?.orderNo || order?.orderNumber || 'N/A';
+    const rawTableNo = bill.tableNo || bill.tableNumber || order?.tableNo || order?.tableNumber || '';
     const cashierName = bill.generatedByName || bill.generatedBy || 'Staff';
 
-    const cleanBillNo = formatReceiptSequence(billNo);
-    const cleanOrderNo = formatReceiptSequence(orderNo);
+    // Sequence format: strictly 3 digits (e.g. 001, 002)
+    const cleanBillNo = formatReceiptSequence(rawBillNo);
+    const cleanOrderNo = formatReceiptSequence(rawOrderNo);
+
+    // Clean table label
+    let cleanTableNo = String(rawTableNo).trim();
+    if (!cleanTableNo || cleanTableNo === 'N/A' || cleanTableNo === 'undefined' || cleanTableNo === '-') {
+      cleanTableNo = (bill.orderType || order?.orderType) && (bill.orderType || order?.orderType) !== 'DINE_IN'
+        ? ((bill.orderType || order?.orderType) === 'TAKEAWAY' ? 'Take Away' : (bill.orderType || order?.orderType))
+        : 'Direct';
+    } else {
+      const stripped = cleanTableNo.replace(/^(T-?)+/i, '').trim();
+      cleanTableNo = stripped ? `T-${stripped}` : cleanTableNo;
+    }
+
+    // Clean cashier name so it never overflows
+    let cleanCashier = String(cashierName || 'Staff').trim();
+    cleanCashier = cleanCashier.replace(/administrator/i, 'Admin').trim();
+    if (cleanCashier.length > 14) {
+      cleanCashier = cleanCashier.substring(0, 14);
+    }
 
     const invoiceDate = bill.createdAt ? new Date(bill.createdAt) : new Date();
-    const dateStr = !isNaN(invoiceDate.getTime()) ? invoiceDate.toLocaleDateString() : new Date().toLocaleDateString();
+    const dateStr = !isNaN(invoiceDate.getTime())
+      ? invoiceDate.toLocaleDateString('en-GB')
+      : new Date().toLocaleDateString('en-GB');
     const timeStr = !isNaN(invoiceDate.getTime())
       ? invoiceDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
       : new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
@@ -305,38 +393,148 @@ export class PrintService {
       <head>
         <title>Invoice - ${cleanBillNo}</title>
         <style>
-          @page { margin: 0; size: 80mm auto; }
-          body {
-            font-family: 'Courier New', Courier, monospace;
-            font-size: 13px;
-            line-height: 1.3;
+          @page {
+            size: 80mm auto;
+            margin: 0;
+          }
+          * {
+            box-sizing: border-box;
+          }
+          html, body {
+            margin: 0;
+            padding: 0;
+            background: #fff;
             color: #000;
-            margin: 10px;
-            width: 74mm;
+          }
+          body {
+            font-family: 'Consolas', 'Lucida Console', 'Courier New', monospace;
+            font-size: 12px;
+            font-weight: 600;
+            line-height: 1.35;
+            width: 68mm;
+            max-width: 68mm;
+            margin-left: 2mm;
+            padding: 2mm 0 6mm 0;
+            color: #000;
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
           }
           .center { text-align: center; }
           .right { text-align: right; }
-          .bold { font-weight: bold; }
-          .divider { border-top: 1px dashed #000; margin: 8px 0; }
-          .double-divider { border-top: 2px solid #000; margin: 8px 0; }
+          .bold { font-weight: 800; }
+          .divider { border-top: 1.5px dashed #000; margin: 6px 0; }
+          .double-divider { border-top: 2px solid #000; margin: 6px 0; }
           .receipt-logo {
-            width: 70px;
+            width: 65px;
             height: auto;
-            max-height: 70px;
-            margin: 0 auto 6px auto;
+            max-height: 65px;
+            margin: 0 auto 4px auto;
             display: block;
             object-fit: contain;
           }
-          .title { font-size: 18px; font-weight: bold; margin-bottom: 2px; }
-          .subtitle { font-size: 11px; margin-bottom: 6px; }
-          .row { display: flex; justify-content: space-between; margin: 3px 0; }
-          .item-row { display: flex; align-items: center; justify-content: space-between; margin: 3px 0; white-space: nowrap; }
-          .item-name { width: 130px; max-width: 130px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: left; }
-          .item-qty { width: 32px; text-align: center; }
-          .item-rate { width: 52px; text-align: right; }
-          .item-amount { width: 62px; text-align: right; font-weight: bold; }
-          .grand-total { font-size: 16px; font-weight: bold; margin: 6px 0; }
-          .footer { font-size: 11px; margin-top: 12px; }
+          .title { font-size: 16px; font-weight: 900; letter-spacing: 0.5px; margin-bottom: 2px; }
+          .subtitle { font-size: 10.5px; font-weight: 600; margin-bottom: 4px; line-height: 1.3; }
+          .invoice-badge { font-size: 13px; font-weight: 900; margin: 4px 0 2px 0; letter-spacing: 0.5px; }
+
+          .meta-table {
+            width: 100%;
+            border-collapse: collapse;
+            table-layout: fixed;
+            margin: 2px 0;
+          }
+          .meta-col-left {
+            width: 55%;
+            text-align: left;
+            vertical-align: top;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            padding: 1.5px 0;
+          }
+          .meta-col-right {
+            width: 45%;
+            text-align: right;
+            vertical-align: top;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            padding: 1.5px 0;
+          }
+          .meta-col-full {
+            width: 100%;
+            text-align: left;
+            vertical-align: top;
+            padding: 1.5px 0;
+          }
+
+          .items-table {
+            width: 100%;
+            table-layout: fixed;
+            border-collapse: collapse;
+            margin: 2px 0;
+          }
+          .items-head-row th {
+            border-bottom: 1.5px dashed #000;
+            padding: 4px 0;
+            font-weight: 800;
+            font-size: 11.5px;
+          }
+          .item-row td {
+            padding: 3px 0;
+            font-size: 12px;
+            vertical-align: middle;
+          }
+          .col-item {
+            width: 48%;
+            text-align: left;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            padding-right: 2px;
+          }
+          .col-qty {
+            width: 12%;
+            text-align: center;
+            font-weight: 700;
+          }
+          .col-rate {
+            width: 19%;
+            text-align: right;
+            padding-right: 2px;
+          }
+          .col-amount {
+            width: 21%;
+            text-align: right;
+            font-weight: 800;
+          }
+
+          .totals-table {
+            width: 100%;
+            border-collapse: collapse;
+            table-layout: fixed;
+            margin: 2px 0;
+          }
+          .tot-label {
+            width: 55%;
+            text-align: left;
+            padding: 1.5px 0;
+          }
+          .tot-val {
+            width: 45%;
+            text-align: right;
+            padding: 1.5px 0;
+            white-space: nowrap;
+          }
+
+          .grand-total-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 15px;
+            font-weight: 900;
+            padding: 4px 0;
+          }
+          .footer { font-size: 10.5px; font-weight: 600; margin-top: 10px; line-height: 1.35; }
         </style>
       </head>
       <body>
@@ -348,79 +546,132 @@ export class PrintService {
             ${rAddress ? `<div>${rAddress}</div>` : ''}
             ${(rGstin || rPhone) ? `<div>${rGstin ? 'GSTIN: ' + rGstin : ''}${rGstin && rPhone ? ' | ' : ''}${rPhone ? 'Ph: ' + rPhone : ''}</div>` : ''}
           </div>
-          <div class="bold">*** TAX INVOICE ***</div>
+          <div class="invoice-badge">*** TAX INVOICE ***</div>
         </div>
 
         <div class="divider"></div>
-        <div class="row"><span><b>INVOICE NO:</b> ${billNo}</span><span><b>TABLE:</b> ${tableNo}</span></div>
-        <div class="row"><span><b>ORDER NO  :</b> ${orderNo}</span><span><b>DATE :</b> ${dateStr}</span></div>
-        <div class="row"><span><b>CASHIER   :</b> ${cashierName}</span><span><b>TIME :</b> ${timeStr}</span></div>
-        ${guest ? `<div class="row"><span><b>GUEST     :</b> ${guest.name}${guest.mobile ? ' (' + guest.mobile + ')' : ''}</span></div>` : ''}
+        <table class="meta-table">
+          <tr>
+            <td class="meta-col-left"><b>INVOICE NO:</b> ${cleanBillNo}</td>
+            <td class="meta-col-right"><b>TABLE:</b> ${cleanTableNo}</td>
+          </tr>
+          <tr>
+            <td class="meta-col-left"><b>ORDER NO :</b> ${cleanOrderNo}</td>
+            <td class="meta-col-right"><b>DATE :</b> ${dateStr}</td>
+          </tr>
+          <tr>
+            <td class="meta-col-left"><b>CASHIER  :</b> ${cleanCashier}</td>
+            <td class="meta-col-right"><b>TIME :</b> ${timeStr}</td>
+          </tr>
+          ${guest && guest.name ? `<tr><td colspan="2" class="meta-col-full"><b>GUEST    :</b> ${guest.name}${guest.mobile ? ' (' + guest.mobile + ')' : ''}</td></tr>` : ''}
+        </table>
+
         <div class="divider"></div>
-        <div class="row bold" style="border-bottom: 1px dashed #000; padding-bottom: 3px;">
-          <span style="width: 130px; text-align: left;">ITEM</span>
-          <span style="width: 32px; text-align: center;">QTY</span>
-          <span style="width: 52px; text-align: right;">RATE</span>
-          <span style="width: 62px; text-align: right;">AMOUNT</span>
+        <table class="items-table">
+          <thead>
+            <tr class="items-head-row">
+              <th class="col-item">ITEM</th>
+              <th class="col-qty">QTY</th>
+              <th class="col-rate">RATE</th>
+              <th class="col-amount">AMOUNT</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${items
+              .map((item) => {
+                const qty = Number(item.quantity) || 1;
+                const unitPrice = normalizeMoney(item.unitPrice !== undefined ? item.unitPrice : item.price);
+                const lineSubtotal = normalizeMoney(item.lineSubtotal !== undefined ? item.lineSubtotal : qty * unitPrice);
+                const rawDishName = item.name || item.productName || 'Dish';
+                const dishName = truncateReceiptName(rawDishName, 17);
+                return `
+              <tr class="item-row">
+                <td class="col-item" title="${rawDishName}">${dishName}</td>
+                <td class="col-qty">${qty}</td>
+                <td class="col-rate">${formatMoney(unitPrice)}</td>
+                <td class="col-amount">${formatMoney(lineSubtotal)}</td>
+              </tr>
+            `;
+              })
+              .join('')}
+          </tbody>
+        </table>
+
+        <div class="divider"></div>
+        <table class="totals-table">
+          <tr>
+            <td class="tot-label">Subtotal:</td>
+            <td class="tot-val"><b>₹${formatMoney(subtotal)}</b></td>
+          </tr>
+          ${
+            discountAmount > 0
+              ? `<tr>
+                  <td class="tot-label">Discount (${discountReason}):</td>
+                  <td class="tot-val"><b>-₹${formatMoney(discountAmount)}</b></td>
+                </tr>`
+              : ''
+          }
+          <tr>
+            <td class="tot-label">Taxable Value:</td>
+            <td class="tot-val">₹${formatMoney(taxableValue)}</td>
+          </tr>
+          <tr>
+            <td class="tot-label">CGST (${halfRate}%):</td>
+            <td class="tot-val">₹${formatMoney(cgst)}</td>
+          </tr>
+          <tr>
+            <td class="tot-label">SGST (${halfRate}%):</td>
+            <td class="tot-val">₹${formatMoney(sgst)}</td>
+          </tr>
+          ${rounding !== 0 ? `<tr>
+            <td class="tot-label">Rounding:</td>
+            <td class="tot-val">₹${formatMoney(rounding)}</td>
+          </tr>` : ''}
+        </table>
+
+        <div class="double-divider"></div>
+        <div class="grand-total-row">
+          <span>GRAND TOTAL:</span>
+          <span>₹${formatMoney(grandTotal)}</span>
         </div>
-        <div class="divider"></div>
-        ${items
-          .map((item) => {
-            const qty = Number(item.quantity) || 1;
-            const unitPrice = normalizeMoney(item.unitPrice !== undefined ? item.unitPrice : item.price);
-            const lineSubtotal = normalizeMoney(item.lineSubtotal !== undefined ? item.lineSubtotal : qty * unitPrice);
-            const rawDishName = item.name || item.productName || 'Dish';
-            const dishName = truncateReceiptName(rawDishName, 18);
-            return `
-          <div class="item-row">
-            <span class="item-name" title="${rawDishName}">${dishName}</span>
-            <span class="item-qty">${qty}</span>
-            <span class="item-rate">${formatMoney(unitPrice)}</span>
-            <span class="item-amount">${formatMoney(lineSubtotal)}</span>
-          </div>
-        `;
-          })
-          .join('')}
-        <div class="divider"></div>
-        <div class="row"><span>Subtotal:</span><span class="bold">₹${formatMoney(subtotal)}</span></div>
-        ${
-          discountAmount > 0
-            ? `<div class="row"><span>Discount (${discountReason}):</span><span class="bold">-₹${formatMoney(discountAmount)}</span></div>`
-            : ''
-        }
-        <div class="row"><span>Taxable Value:</span><span>₹${formatMoney(taxableValue)}</span></div>
-        <div class="row"><span>CGST (${halfRate}%):</span><span>₹${formatMoney(cgst)}</span></div>
-        <div class="row"><span>SGST (${halfRate}%):</span><span>₹${formatMoney(sgst)}</span></div>
-        ${rounding !== 0 ? `<div class="row"><span>Rounding:</span><span>₹${formatMoney(rounding)}</span></div>` : ''}
         <div class="double-divider"></div>
-        <div class="row grand-total"><span>GRAND TOTAL:</span><span>₹${formatMoney(grandTotal)}</span></div>
-        <div class="double-divider"></div>
-        <div class="bold" style="margin-top: 6px;">Payment Breakdown:</div>
-        ${payments
-          .map(
-            (p) => `
-          <div class="row">
-            <span>* ${p.mode || 'CASH'}${p.reference ? ' (' + p.reference + ')' : ''}</span>
-            <span class="bold">₹${formatMoney(p.amount)}</span>
-          </div>
-        `
-          )
-          .join('')}
-        <div class="row" style="margin-top: 4px;"><span>Total Paid:</span><span class="bold">₹${formatMoney(paidAmount)}</span></div>
-        <div class="row"><span>Balance Due:</span><span class="bold">₹${formatMoney(balance)}</span></div>
+
+        <div class="bold" style="margin-top: 5px; font-size: 12px;">Payment Breakdown:</div>
+        <table class="totals-table">
+          ${payments
+            .map(
+              (p) => `
+            <tr>
+              <td class="tot-label">* ${p.mode || 'CASH'}${p.reference ? ' (' + p.reference + ')' : ''}</td>
+              <td class="tot-val"><b>₹${formatMoney(p.amount)}</b></td>
+            </tr>
+          `
+            )
+            .join('')}
+          <tr>
+            <td class="tot-label">Total Paid:</td>
+            <td class="tot-val"><b>₹${formatMoney(paidAmount)}</b></td>
+          </tr>
+          <tr>
+            <td class="tot-label">Balance Due:</td>
+            <td class="tot-val"><b>₹${formatMoney(balance)}</b></td>
+          </tr>
+        </table>
+
         ${
           options.qrDataUrl
             ? `
         <div class="divider"></div>
-        <div class="center upi-qr-container" style="margin: 8px 0;">
-          <div class="bold" style="font-size: 11px; margin-bottom: 4px; text-transform: uppercase; letter-spacing: 0.5px;">Scan &amp; Pay via UPI</div>
-          <img src="${options.qrDataUrl}" alt="UPI QR Code" style="width: 135px; height: 135px; margin: 0 auto; display: block; image-rendering: pixelated;" />
-          <div style="font-size: 10px; font-weight: bold; margin-top: 3px;">${options.upiId || 'q705457761@ybl'}</div>
-          <div style="font-size: 9px; color: #444; margin-top: 1px;">Google Pay / PhonePe / Paytm / BHIM</div>
+        <div class="center upi-qr-container" style="margin: 6px 0;">
+          <div class="bold" style="font-size: 11px; margin-bottom: 3px; text-transform: uppercase; letter-spacing: 0.5px;">Scan &amp; Pay via UPI</div>
+          <img src="${options.qrDataUrl}" alt="UPI QR Code" style="width: 130px; height: 130px; margin: 0 auto; display: block; image-rendering: pixelated;" />
+          <div style="font-size: 10.5px; font-weight: 800; margin-top: 3px; color: #000;">${options.upiId || 'q705457761@ybl'}</div>
+          <div style="font-size: 9.5px; font-weight: 700; color: #000; margin-top: 1px;">Google Pay / PhonePe / Paytm / BHIM</div>
         </div>
         `
             : ''
         }
+
         <div class="divider"></div>
         <div class="center footer">
           <div>${rFooter}</div>
