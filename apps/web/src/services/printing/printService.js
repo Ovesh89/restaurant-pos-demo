@@ -24,7 +24,7 @@ export const formatMoney = (value, fallback = 0) => {
 /**
  * Truncates dish name so it fits on exactly one line and preserves thermal receipt alignment.
  */
-export const truncateReceiptName = (name, maxChars = 18) => {
+export const truncateReceiptName = (name, maxChars = 15) => {
   if (!name) return '';
   const trimmed = String(name).trim();
   if (trimmed.length <= maxChars) return trimmed;
@@ -155,10 +155,10 @@ export class PrintService {
       }
 
       let cleanCaptain = String(kot.captainName || (order ? order.captainName : 'Staff')).trim();
-      if (cleanCaptain.length > 14) cleanCaptain = cleanCaptain.substring(0, 14);
+      if (cleanCaptain.length > 12) cleanCaptain = cleanCaptain.substring(0, 12);
 
       let cleanStation = String(kot.station || 'Kitchen').trim();
-      if (cleanStation.length > 14) cleanStation = cleanStation.substring(0, 14);
+      if (cleanStation.length > 12) cleanStation = cleanStation.substring(0, 12);
 
       const timeStr = new Date(kot.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
@@ -166,14 +166,16 @@ export class PrintService {
         <!DOCTYPE html>
         <html>
         <head>
-          <title>KOT Print - ${cleanKotNo}</title>
+          <title>KOT - ${cleanKotNo}</title>
           <style>
             @page {
               size: 80mm auto;
-              margin: 0;
+              margin: 0mm;
             }
             * {
               box-sizing: border-box;
+              -webkit-print-color-adjust: exact !important;
+              print-color-adjust: exact !important;
             }
             html, body {
               margin: 0;
@@ -182,22 +184,30 @@ export class PrintService {
               color: #000;
             }
             body {
-              font-family: 'Consolas', 'Lucida Console', 'Courier New', monospace;
-              font-size: 12px;
+              font-family: 'Consolas', 'Courier New', Courier, monospace;
+              font-size: 11.5px;
               font-weight: 600;
               line-height: 1.35;
-              width: 68mm;
-              max-width: 68mm;
-              margin-left: 2mm;
-              padding: 2mm 0 6mm 0;
               color: #000;
-              -webkit-print-color-adjust: exact;
-              print-color-adjust: exact;
+            }
+            .receipt-container {
+              width: 250px;
+              max-width: 250px;
+              margin: 0 auto;
+              padding: 2mm 0 6mm 0;
             }
             .center { text-align: center; }
             .bold { font-weight: 800; }
-            .divider { border-top: 1.5px dashed #000; margin: 6px 0; }
-            .header { margin-bottom: 6px; }
+            .divider {
+              width: 250px;
+              border-top: 1.5px dashed #000;
+              margin: 5px 0;
+            }
+            .header {
+              width: 250px;
+              text-align: center;
+              margin-bottom: 4px;
+            }
             .receipt-logo {
               width: 55px;
               height: auto;
@@ -206,70 +216,126 @@ export class PrintService {
               display: block;
               object-fit: contain;
             }
-            .title { font-size: 14px; font-weight: 900; margin-bottom: 2px; }
-            .meta-table { width: 100%; border-collapse: collapse; table-layout: fixed; margin: 2px 0; }
-            .meta-col-left { width: 55%; text-align: left; vertical-align: top; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding: 1.5px 0; }
-            .meta-col-right { width: 45%; text-align: right; vertical-align: top; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding: 1.5px 0; }
-            .items-table { width: 100%; table-layout: fixed; border-collapse: collapse; margin: 2px 0; }
-            .items-head-row th { border-bottom: 1.5px dashed #000; padding: 4px 0; font-weight: 800; font-size: 11.5px; }
-            .item-row td { padding: 3px 0; font-size: 12px; vertical-align: middle; }
-            .col-qty { width: 18%; text-align: center; font-weight: 800; }
-            .col-item { width: 82%; text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-            .note { font-style: italic; font-size: 11px; padding-left: 18%; color: #000; }
-            .badge { border: 1.5px solid #000; padding: 1px 4px; font-size: 11px; font-weight: 800; display: inline-block; }
+            .title {
+              font-size: 13.5px;
+              font-weight: 900;
+              letter-spacing: 0.5px;
+              margin-bottom: 2px;
+            }
+            .meta-row {
+              display: flex;
+              justify-content: space-between;
+              align-items: center;
+              width: 250px;
+              padding: 1.5px 0;
+            }
+            .meta-left {
+              width: 140px;
+              max-width: 140px;
+              overflow: hidden;
+              text-overflow: ellipsis;
+              white-space: nowrap;
+              text-align: left;
+            }
+            .meta-right {
+              width: 110px;
+              max-width: 110px;
+              overflow: hidden;
+              text-overflow: ellipsis;
+              white-space: nowrap;
+              text-align: right;
+            }
+            .kot-head-row {
+              display: flex;
+              align-items: center;
+              width: 250px;
+              font-size: 11.5px;
+              font-weight: 800;
+              border-bottom: 1.5px dashed #000;
+              padding-bottom: 3px;
+              margin-bottom: 2px;
+            }
+            .kot-row {
+              display: flex;
+              align-items: center;
+              width: 250px;
+              padding: 2px 0;
+              font-size: 12px;
+            }
+            .kot-qty {
+              width: 35px;
+              text-align: left;
+              font-weight: 800;
+            }
+            .kot-item {
+              width: 215px;
+              max-width: 215px;
+              overflow: hidden;
+              text-overflow: ellipsis;
+              white-space: nowrap;
+              font-weight: 800;
+              text-align: left;
+            }
+            .note {
+              font-style: italic;
+              font-size: 10.5px;
+              padding-left: 35px;
+              color: #000;
+            }
+            .badge {
+              border: 1.5px solid #000;
+              padding: 1px 4px;
+              font-size: 11px;
+              font-weight: 800;
+              display: inline-block;
+            }
           </style>
         </head>
         <body>
-          <div class="center header">
-            <img src="${receiptLogo}" class="receipt-logo" alt="${rName}" />
-            <div class="title">*** KITCHEN ORDER TICKET ***</div>
-            <div style="font-size: 11px; font-weight: 700;">${rName}${rTitle ? ' ' + rTitle : ''}</div>
+          <div class="receipt-container">
+            <div class="center header">
+              <img src="${receiptLogo}" class="receipt-logo" alt="${rName}" />
+              <div class="title">*** KITCHEN ORDER TICKET ***</div>
+              <div style="font-size: 10.5px; font-weight: 700;">${rName}${rTitle ? ' ' + rTitle : ''}</div>
+            </div>
+
+            <div class="divider"></div>
+            <div class="meta-row">
+              <span class="meta-left"><b>KOT NO :</b> ${cleanKotNo} <span class="badge">${kot.type || 'NEW'}</span></span>
+              <span class="meta-right"><b>TABLE:</b> ${cleanKotTable}</span>
+            </div>
+            <div class="meta-row">
+              <span class="meta-left"><b>ORDER  :</b> ${cleanOrderNo}</span>
+              <span class="meta-right"><b>TIME :</b> ${timeStr}</span>
+            </div>
+            <div class="meta-row">
+              <span class="meta-left"><b>CAPTAIN:</b> ${cleanCaptain}</span>
+              <span class="meta-right"><b>STN  :</b> ${cleanStation}</span>
+            </div>
+
+            <div class="divider"></div>
+            <div class="kot-head-row">
+              <span class="kot-qty">QTY</span>
+              <span class="kot-item">ITEM</span>
+            </div>
+            ${kot.items
+              .map(
+                (item) => `
+              <div class="kot-row">
+                <span class="kot-qty">${item.quantity}x</span>
+                <span class="kot-item" title="${item.name}">${truncateReceiptName(item.name, 20)}</span>
+              </div>
+              ${item.notes ? `<div class="note">* Note: ${item.notes}</div>` : ''}
+            `
+              )
+              .join('')}
+            <div class="divider"></div>
+            ${
+              kot.revision > 1
+                ? `<div class="center bold" style="margin-top: 4px;">REVISION #${kot.revision}</div>`
+                : ''
+            }
           </div>
-
-          <div class="divider"></div>
-          <table class="meta-table">
-            <tr>
-              <td class="meta-col-left"><b>KOT NO :</b> ${cleanKotNo} <span class="badge">${kot.type || 'NEW'}</span></td>
-              <td class="meta-col-right"><b>TABLE:</b> ${cleanKotTable}</td>
-            </tr>
-            <tr>
-              <td class="meta-col-left"><b>ORDER  :</b> ${cleanOrderNo}</td>
-              <td class="meta-col-right"><b>TIME :</b> ${timeStr}</td>
-            </tr>
-            <tr>
-              <td class="meta-col-left"><b>CAPTAIN:</b> ${cleanCaptain}</td>
-              <td class="meta-col-right"><b>STN  :</b> ${cleanStation}</td>
-            </tr>
-          </table>
-
-          <div class="divider"></div>
-          <table class="items-table">
-            <thead>
-              <tr class="items-head-row">
-                <th class="col-qty">QTY</th>
-                <th class="col-item">ITEM</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${kot.items
-                .map(
-                  (item) => `
-                <tr class="item-row">
-                  <td class="col-qty">${item.quantity}x</td>
-                  <td class="col-item bold" title="${item.name}">${truncateReceiptName(item.name, 22)}</td>
-                </tr>
-                ${item.notes ? `<tr><td colspan="2" class="note">* Note: ${item.notes}</td></tr>` : ''}
-              `
-                )
-                .join('')}
-            </tbody>
-          </table>
-          <div class="divider"></div>
-          ${
-            kot.revision > 1
-              ? `<div class="center bold" style="margin-top: 4px;">REVISION #${kot.revision}</div>`
-              : ''
-          }
           <script>
             function triggerPrint() {
               window.print();
@@ -337,8 +403,8 @@ export class PrintService {
     // Clean cashier name so it never overflows
     let cleanCashier = String(cashierName || 'Staff').trim();
     cleanCashier = cleanCashier.replace(/administrator/i, 'Admin').trim();
-    if (cleanCashier.length > 14) {
-      cleanCashier = cleanCashier.substring(0, 14);
+    if (cleanCashier.length > 12) {
+      cleanCashier = cleanCashier.substring(0, 12);
     }
 
     const invoiceDate = bill.createdAt ? new Date(bill.createdAt) : new Date();
@@ -395,10 +461,12 @@ export class PrintService {
         <style>
           @page {
             size: 80mm auto;
-            margin: 0;
+            margin: 0mm;
           }
           * {
             box-sizing: border-box;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
           }
           html, body {
             margin: 0;
@@ -407,122 +475,153 @@ export class PrintService {
             color: #000;
           }
           body {
-            font-family: 'Consolas', 'Lucida Console', 'Courier New', monospace;
-            font-size: 12px;
+            font-family: 'Consolas', 'Courier New', Courier, monospace;
+            font-size: 11.5px;
             font-weight: 600;
             line-height: 1.35;
-            width: 68mm;
-            max-width: 68mm;
-            margin-left: 2mm;
-            padding: 2mm 0 6mm 0;
             color: #000;
-            -webkit-print-color-adjust: exact;
-            print-color-adjust: exact;
+          }
+          .receipt-container {
+            width: 250px;
+            max-width: 250px;
+            margin: 0 auto;
+            padding: 2mm 0 6mm 0;
           }
           .center { text-align: center; }
           .right { text-align: right; }
           .bold { font-weight: 800; }
-          .divider { border-top: 1.5px dashed #000; margin: 6px 0; }
-          .double-divider { border-top: 2px solid #000; margin: 6px 0; }
+          .divider {
+            width: 250px;
+            border-top: 1.5px dashed #000;
+            margin: 5px 0;
+          }
+          .double-divider {
+            width: 250px;
+            border-top: 2px solid #000;
+            margin: 5px 0;
+          }
+          .header {
+            width: 250px;
+            text-align: center;
+            margin-bottom: 4px;
+          }
           .receipt-logo {
-            width: 65px;
+            width: 60px;
             height: auto;
-            max-height: 65px;
+            max-height: 60px;
             margin: 0 auto 4px auto;
             display: block;
             object-fit: contain;
           }
-          .title { font-size: 16px; font-weight: 900; letter-spacing: 0.5px; margin-bottom: 2px; }
-          .subtitle { font-size: 10.5px; font-weight: 600; margin-bottom: 4px; line-height: 1.3; }
-          .invoice-badge { font-size: 13px; font-weight: 900; margin: 4px 0 2px 0; letter-spacing: 0.5px; }
-
-          .meta-table {
-            width: 100%;
-            border-collapse: collapse;
-            table-layout: fixed;
-            margin: 2px 0;
+          .title {
+            font-size: 15px;
+            font-weight: 900;
+            letter-spacing: 0.5px;
+            margin-bottom: 2px;
+            word-break: break-word;
           }
-          .meta-col-left {
-            width: 55%;
-            text-align: left;
-            vertical-align: top;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
+          .subtitle {
+            font-size: 10px;
+            font-weight: 600;
+            margin-bottom: 4px;
+            line-height: 1.3;
+          }
+          .invoice-badge {
+            font-size: 12.5px;
+            font-weight: 900;
+            margin: 4px 0 2px 0;
+            letter-spacing: 0.5px;
+          }
+
+          .meta-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            width: 250px;
             padding: 1.5px 0;
           }
-          .meta-col-right {
-            width: 45%;
+          .meta-left {
+            width: 140px;
+            max-width: 140px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            text-align: left;
+          }
+          .meta-right {
+            width: 110px;
+            max-width: 110px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
             text-align: right;
-            vertical-align: top;
-            white-space: nowrap;
+          }
+          .meta-full {
+            width: 250px;
             overflow: hidden;
             text-overflow: ellipsis;
-            padding: 1.5px 0;
-          }
-          .meta-col-full {
-            width: 100%;
+            white-space: nowrap;
             text-align: left;
-            vertical-align: top;
-            padding: 1.5px 0;
           }
 
-          .items-table {
-            width: 100%;
-            table-layout: fixed;
-            border-collapse: collapse;
-            margin: 2px 0;
-          }
-          .items-head-row th {
+          .item-head-row {
+            display: flex;
+            align-items: center;
+            width: 250px;
             border-bottom: 1.5px dashed #000;
-            padding: 4px 0;
-            font-weight: 800;
+            padding-bottom: 3px;
+            margin-bottom: 2px;
             font-size: 11.5px;
+            font-weight: 800;
           }
-          .item-row td {
-            padding: 3px 0;
-            font-size: 12px;
-            vertical-align: middle;
+          .item-row {
+            display: flex;
+            align-items: center;
+            width: 250px;
+            padding: 2px 0;
+            font-size: 11.5px;
+            font-weight: 600;
           }
           .col-item {
-            width: 48%;
-            text-align: left;
-            white-space: nowrap;
+            width: 115px;
+            max-width: 115px;
             overflow: hidden;
             text-overflow: ellipsis;
-            padding-right: 2px;
+            white-space: nowrap;
+            text-align: left;
           }
           .col-qty {
-            width: 12%;
+            width: 25px;
             text-align: center;
             font-weight: 700;
           }
           .col-rate {
-            width: 19%;
+            width: 52px;
             text-align: right;
-            padding-right: 2px;
           }
           .col-amount {
-            width: 21%;
+            width: 58px;
             text-align: right;
             font-weight: 800;
           }
 
-          .totals-table {
-            width: 100%;
-            border-collapse: collapse;
-            table-layout: fixed;
-            margin: 2px 0;
+          .tot-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            width: 250px;
+            padding: 1.5px 0;
           }
           .tot-label {
-            width: 55%;
+            width: 140px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
             text-align: left;
-            padding: 1.5px 0;
           }
           .tot-val {
-            width: 45%;
+            width: 110px;
             text-align: right;
-            padding: 1.5px 0;
             white-space: nowrap;
           }
 
@@ -530,152 +629,164 @@ export class PrintService {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            font-size: 15px;
+            width: 250px;
+            font-size: 14.5px;
             font-weight: 900;
             padding: 4px 0;
           }
-          .footer { font-size: 10.5px; font-weight: 600; margin-top: 10px; line-height: 1.35; }
+          .upi-qr-container {
+            width: 250px;
+            text-align: center;
+            margin: 6px 0;
+          }
+          .upi-qr-img {
+            width: 120px;
+            height: 120px;
+            margin: 0 auto;
+            display: block;
+            image-rendering: pixelated;
+          }
+          .footer {
+            font-size: 10px;
+            font-weight: 600;
+            margin-top: 8px;
+            line-height: 1.35;
+          }
         </style>
       </head>
       <body>
-        <div class="center">
-          <img src="${receiptLogo}" class="receipt-logo" alt="${rName}" />
-          <div class="title">${rName}</div>
-          <div class="subtitle">
-            ${rSubtitle ? `<div>${rSubtitle}</div>` : ''}
-            ${rAddress ? `<div>${rAddress}</div>` : ''}
-            ${(rGstin || rPhone) ? `<div>${rGstin ? 'GSTIN: ' + rGstin : ''}${rGstin && rPhone ? ' | ' : ''}${rPhone ? 'Ph: ' + rPhone : ''}</div>` : ''}
+        <div class="receipt-container">
+          <div class="center header">
+            <img src="${receiptLogo}" class="receipt-logo" alt="${rName}" />
+            <div class="title">${rName}</div>
+            <div class="subtitle">
+              ${rSubtitle ? `<div>${rSubtitle}</div>` : ''}
+              ${rAddress ? `<div>${rAddress}</div>` : ''}
+              ${(rGstin || rPhone) ? `<div>${rGstin ? 'GSTIN: ' + rGstin : ''}${rGstin && rPhone ? ' | ' : ''}${rPhone ? 'Ph: ' + rPhone : ''}</div>` : ''}
+            </div>
+            <div class="invoice-badge">*** TAX INVOICE ***</div>
           </div>
-          <div class="invoice-badge">*** TAX INVOICE ***</div>
-        </div>
 
-        <div class="divider"></div>
-        <table class="meta-table">
-          <tr>
-            <td class="meta-col-left"><b>INVOICE NO:</b> ${cleanBillNo}</td>
-            <td class="meta-col-right"><b>TABLE:</b> ${cleanTableNo}</td>
-          </tr>
-          <tr>
-            <td class="meta-col-left"><b>ORDER NO :</b> ${cleanOrderNo}</td>
-            <td class="meta-col-right"><b>DATE :</b> ${dateStr}</td>
-          </tr>
-          <tr>
-            <td class="meta-col-left"><b>CASHIER  :</b> ${cleanCashier}</td>
-            <td class="meta-col-right"><b>TIME :</b> ${timeStr}</td>
-          </tr>
-          ${guest && guest.name ? `<tr><td colspan="2" class="meta-col-full"><b>GUEST    :</b> ${guest.name}${guest.mobile ? ' (' + guest.mobile + ')' : ''}</td></tr>` : ''}
-        </table>
+          <div class="divider"></div>
+          <div class="meta-row">
+            <span class="meta-left"><b>INVOICE NO:</b> ${cleanBillNo}</span>
+            <span class="meta-right"><b>TABLE:</b> ${cleanTableNo}</span>
+          </div>
+          <div class="meta-row">
+            <span class="meta-left"><b>ORDER NO :</b> ${cleanOrderNo}</span>
+            <span class="meta-right"><b>DATE :</b> ${dateStr}</span>
+          </div>
+          <div class="meta-row">
+            <span class="meta-left"><b>CASHIER  :</b> ${cleanCashier}</span>
+            <span class="meta-right"><b>TIME :</b> ${timeStr}</span>
+          </div>
+          ${guest && guest.name ? `
+          <div class="meta-row">
+            <span class="meta-full"><b>GUEST    :</b> ${guest.name}${guest.mobile ? ' (' + guest.mobile + ')' : ''}</span>
+          </div>` : ''}
 
-        <div class="divider"></div>
-        <table class="items-table">
-          <thead>
-            <tr class="items-head-row">
-              <th class="col-item">ITEM</th>
-              <th class="col-qty">QTY</th>
-              <th class="col-rate">RATE</th>
-              <th class="col-amount">AMOUNT</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${items
-              .map((item) => {
-                const qty = Number(item.quantity) || 1;
-                const unitPrice = normalizeMoney(item.unitPrice !== undefined ? item.unitPrice : item.price);
-                const lineSubtotal = normalizeMoney(item.lineSubtotal !== undefined ? item.lineSubtotal : qty * unitPrice);
-                const rawDishName = item.name || item.productName || 'Dish';
-                const dishName = truncateReceiptName(rawDishName, 17);
-                return `
-              <tr class="item-row">
-                <td class="col-item" title="${rawDishName}">${dishName}</td>
-                <td class="col-qty">${qty}</td>
-                <td class="col-rate">${formatMoney(unitPrice)}</td>
-                <td class="col-amount">${formatMoney(lineSubtotal)}</td>
-              </tr>
-            `;
-              })
-              .join('')}
-          </tbody>
-        </table>
+          <div class="divider"></div>
+          <div class="item-head-row">
+            <span class="col-item">ITEM</span>
+            <span class="col-qty">QTY</span>
+            <span class="col-rate">RATE</span>
+            <span class="col-amount">AMOUNT</span>
+          </div>
+          ${items
+            .map((item) => {
+              const qty = Number(item.quantity) || 1;
+              const unitPrice = normalizeMoney(item.unitPrice !== undefined ? item.unitPrice : item.price);
+              const lineSubtotal = normalizeMoney(item.lineSubtotal !== undefined ? item.lineSubtotal : qty * unitPrice);
+              const rawDishName = item.name || item.productName || 'Dish';
+              const dishName = truncateReceiptName(rawDishName, 15);
+              return `
+            <div class="item-row">
+              <span class="col-item" title="${rawDishName}">${dishName}</span>
+              <span class="col-qty">${qty}</span>
+              <span class="col-rate">${formatMoney(unitPrice)}</span>
+              <span class="col-amount">${formatMoney(lineSubtotal)}</span>
+            </div>
+          `;
+            })
+            .join('')}
 
-        <div class="divider"></div>
-        <table class="totals-table">
-          <tr>
-            <td class="tot-label">Subtotal:</td>
-            <td class="tot-val"><b>₹${formatMoney(subtotal)}</b></td>
-          </tr>
+          <div class="divider"></div>
+          <div class="tot-row">
+            <span class="tot-label">Subtotal:</span>
+            <span class="bold tot-val">₹${formatMoney(subtotal)}</span>
+          </div>
           ${
             discountAmount > 0
-              ? `<tr>
-                  <td class="tot-label">Discount (${discountReason}):</td>
-                  <td class="tot-val"><b>-₹${formatMoney(discountAmount)}</b></td>
-                </tr>`
+              ? `<div class="tot-row">
+                  <span class="tot-label">Discount (${discountReason}):</span>
+                  <span class="bold tot-val">-₹${formatMoney(discountAmount)}</span>
+                </div>`
               : ''
           }
-          <tr>
-            <td class="tot-label">Taxable Value:</td>
-            <td class="tot-val">₹${formatMoney(taxableValue)}</td>
-          </tr>
-          <tr>
-            <td class="tot-label">CGST (${halfRate}%):</td>
-            <td class="tot-val">₹${formatMoney(cgst)}</td>
-          </tr>
-          <tr>
-            <td class="tot-label">SGST (${halfRate}%):</td>
-            <td class="tot-val">₹${formatMoney(sgst)}</td>
-          </tr>
-          ${rounding !== 0 ? `<tr>
-            <td class="tot-label">Rounding:</td>
-            <td class="tot-val">₹${formatMoney(rounding)}</td>
-          </tr>` : ''}
-        </table>
+          <div class="tot-row">
+            <span class="tot-label">Taxable Value:</span>
+            <span class="tot-val">₹${formatMoney(taxableValue)}</span>
+          </div>
+          <div class="tot-row">
+            <span class="tot-label">CGST (${halfRate}%):</span>
+            <span class="tot-val">₹${formatMoney(cgst)}</span>
+          </div>
+          <div class="tot-row">
+            <span class="tot-label">SGST (${halfRate}%):</span>
+            <span class="tot-val">₹${formatMoney(sgst)}</span>
+          </div>
+          ${rounding !== 0 ? `
+          <div class="tot-row">
+            <span class="tot-label">Rounding:</span>
+            <span class="tot-val">₹${formatMoney(rounding)}</span>
+          </div>` : ''}
 
-        <div class="double-divider"></div>
-        <div class="grand-total-row">
-          <span>GRAND TOTAL:</span>
-          <span>₹${formatMoney(grandTotal)}</span>
-        </div>
-        <div class="double-divider"></div>
+          <div class="double-divider"></div>
+          <div class="grand-total-row">
+            <span>GRAND TOTAL:</span>
+            <span>₹${formatMoney(grandTotal)}</span>
+          </div>
+          <div class="double-divider"></div>
 
-        <div class="bold" style="margin-top: 5px; font-size: 12px;">Payment Breakdown:</div>
-        <table class="totals-table">
+          <div class="bold" style="margin-top: 5px; font-size: 11.5px;">Payment Breakdown:</div>
           ${payments
             .map(
               (p) => `
-            <tr>
-              <td class="tot-label">* ${p.mode || 'CASH'}${p.reference ? ' (' + p.reference + ')' : ''}</td>
-              <td class="tot-val"><b>₹${formatMoney(p.amount)}</b></td>
-            </tr>
+            <div class="tot-row">
+              <span class="tot-label">* ${p.mode || 'CASH'}${p.reference ? ' (' + p.reference + ')' : ''}</span>
+              <span class="bold tot-val">₹${formatMoney(p.amount)}</span>
+            </div>
           `
             )
             .join('')}
-          <tr>
-            <td class="tot-label">Total Paid:</td>
-            <td class="tot-val"><b>₹${formatMoney(paidAmount)}</b></td>
-          </tr>
-          <tr>
-            <td class="tot-label">Balance Due:</td>
-            <td class="tot-val"><b>₹${formatMoney(balance)}</b></td>
-          </tr>
-        </table>
+          <div class="tot-row" style="margin-top: 3px;">
+            <span class="tot-label">Total Paid:</span>
+            <span class="bold tot-val">₹${formatMoney(paidAmount)}</span>
+          </div>
+          <div class="tot-row">
+            <span class="tot-label">Balance Due:</span>
+            <span class="bold tot-val">₹${formatMoney(balance)}</span>
+          </div>
 
-        ${
-          options.qrDataUrl
-            ? `
-        <div class="divider"></div>
-        <div class="center upi-qr-container" style="margin: 6px 0;">
-          <div class="bold" style="font-size: 11px; margin-bottom: 3px; text-transform: uppercase; letter-spacing: 0.5px;">Scan &amp; Pay via UPI</div>
-          <img src="${options.qrDataUrl}" alt="UPI QR Code" style="width: 130px; height: 130px; margin: 0 auto; display: block; image-rendering: pixelated;" />
-          <div style="font-size: 10.5px; font-weight: 800; margin-top: 3px; color: #000;">${options.upiId || 'q705457761@ybl'}</div>
-          <div style="font-size: 9.5px; font-weight: 700; color: #000; margin-top: 1px;">Google Pay / PhonePe / Paytm / BHIM</div>
-        </div>
-        `
-            : ''
-        }
+          ${
+            options.qrDataUrl
+              ? `
+          <div class="divider"></div>
+          <div class="center upi-qr-container">
+            <div class="bold" style="font-size: 11px; margin-bottom: 3px; text-transform: uppercase; letter-spacing: 0.5px;">Scan &amp; Pay via UPI</div>
+            <img src="${options.qrDataUrl}" alt="UPI QR Code" class="upi-qr-img" />
+            <div style="font-size: 10px; font-weight: 800; margin-top: 3px; color: #000;">${options.upiId || 'q705457761@ybl'}</div>
+            <div style="font-size: 9px; font-weight: 700; color: #000; margin-top: 1px;">Google Pay / PhonePe / Paytm / BHIM</div>
+          </div>
+          `
+              : ''
+          }
 
-        <div class="divider"></div>
-        <div class="center footer">
-          <div>${rFooter}</div>
-          <div>Please Visit Again.</div>
+          <div class="divider"></div>
+          <div class="center footer">
+            <div>${rFooter}</div>
+            <div>Please Visit Again.</div>
+          </div>
         </div>
         <script>
           function triggerPrint() {
