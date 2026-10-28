@@ -464,8 +464,8 @@ export const CreateOrderPage = () => {
         billToPrint,
         targetOrder,
         { name: customerName, mobile: customerPhone },
-        selectedTable,
-        { upiId: configuredUpiId }
+        null,
+        { table: selectedTable, upiId: configuredUpiId }
       );
     } catch (err) {
       setActionError(err.message || 'Failed to print receipt.');

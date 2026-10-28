@@ -122,10 +122,45 @@ export class PrintService {
   }
 
   /**
-   * Browser-based printing for KOT ticket using a printable window
+   * Hidden iframe printer for mobile / blocked pop-up environments
    */
+  printViaIframe(html) {
+    if (typeof document === 'undefined') {
+      return { status: 'skipped_in_node' };
+    }
+    let iframe = document.getElementById('pos-print-frame');
+    if (!iframe) {
+      iframe = document.createElement('iframe');
+      iframe.id = 'pos-print-frame';
+      iframe.style.position = 'fixed';
+      iframe.style.right = '0';
+      iframe.style.bottom = '0';
+      iframe.style.width = '0';
+      iframe.style.height = '0';
+      iframe.style.border = '0';
+      iframe.style.visibility = 'hidden';
+      document.body.appendChild(iframe);
+    }
+    const doc = iframe.contentWindow?.document || iframe.contentDocument;
+    if (!doc) {
+      throw new Error('Print frame unavailable.');
+    }
+    doc.open();
+    doc.write(html);
+    doc.close();
+    setTimeout(() => {
+      try {
+        iframe.contentWindow?.focus();
+        iframe.contentWindow?.print();
+      } catch (e) {
+        console.warn('Iframe print error:', e);
+      }
+    }, 300);
+    return { status: 'printed', timestamp: new Date().toISOString() };
+  }
+
   /**
-   * Browser-based printing for KOT ticket using a printable window
+   * Browser-based printing for KOT ticket using a printable window or fallback iframe
    */
   printKOT(kot, order, table, options = {}) {
     try {
@@ -133,11 +168,6 @@ export class PrintService {
       const receiptLogo = cfg.logoReceipt || cfg.logo || RESTAURANT_LOGO_B64;
       const rName = (cfg.restaurantName || 'GREEN TANDOOR SE').toUpperCase();
       const rTitle = cfg.tagline ? cfg.tagline.toUpperCase() : 'GARDEN RESTAURANT';
-
-      const printWindow = window.open('', '_blank', 'width=420,height=600');
-      if (!printWindow) {
-        throw new Error('Pop-up was blocked. Please allow pop-ups for browser printing.');
-      }
 
       const cleanKotNo = formatReceiptSequence(kot.kotNo);
       const rawOrderNo = order ? order.orderNo : (kot.orderNumber || kot.orderId);
@@ -339,7 +369,9 @@ export class PrintService {
           <script>
             function triggerPrint() {
               window.print();
-              setTimeout(function() { window.close(); }, 500);
+              if (window.opener) {
+                setTimeout(function() { window.close(); }, 500);
+              }
             }
             if (document.readyState === 'complete') {
               triggerPrint();
@@ -350,6 +382,25 @@ export class PrintService {
         </body>
         </html>
       `;
+
+      let printWindow = null;
+      if (typeof window !== 'undefined') {
+        try {
+          printWindow = window.open('', '_blank', 'width=420,height=600');
+        } catch (e) {
+          printWindow = null;
+        }
+      }
+
+      if (!printWindow || !printWindow.document || typeof printWindow.document.write !== 'function') {
+        if (typeof document !== 'undefined') {
+          return this.printViaIframe(html);
+        }
+        if (typeof window === 'undefined') {
+          return { status: 'skipped_in_node' };
+        }
+        throw new Error('Pop-up was blocked. Please allow pop-ups for browser printing.');
+      }
 
       printWindow.document.write(html);
       printWindow.document.close();
@@ -792,7 +843,9 @@ export class PrintService {
         <script>
           function triggerPrint() {
             window.print();
-            setTimeout(function() { window.close(); }, 500);
+            if (window.opener) {
+              setTimeout(function() { window.close(); }, 500);
+            }
           }
           if (document.readyState === 'complete') {
             triggerPrint();
@@ -813,6 +866,17 @@ export class PrintService {
     try {
       if (!bill) {
         throw new Error('Cannot print invoice without valid bill data.');
+      }
+
+      // Self-healing argument handling:
+      // If targetWindow is not a Window (e.g. caller passed a table object or options object as 4th arg)
+      if (targetWindow && (!targetWindow.document || typeof targetWindow.document.write !== 'function')) {
+        if (targetWindow.tableNo || targetWindow.id) {
+          options = { ...options, table: targetWindow };
+        } else if (typeof targetWindow === 'object') {
+          options = { ...targetWindow, ...options };
+        }
+        targetWindow = null;
       }
 
       const cfg = this.getEffectiveSettings(options);
@@ -847,9 +911,17 @@ export class PrintService {
 
       let printWindow = targetWindow;
       if (!printWindow && typeof window !== 'undefined') {
-        printWindow = window.open('', '_blank', 'width=420,height=700');
+        try {
+          printWindow = window.open('', '_blank', 'width=420,height=700');
+        } catch (e) {
+          printWindow = null;
+        }
       }
-      if (!printWindow) {
+
+      if (!printWindow || !printWindow.document || typeof printWindow.document.write !== 'function') {
+        if (typeof document !== 'undefined') {
+          return this.printViaIframe(html);
+        }
         if (typeof window === 'undefined') {
           return { status: 'skipped_in_node' };
         }
