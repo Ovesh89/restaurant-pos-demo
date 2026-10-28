@@ -52,12 +52,25 @@ export const TablesPage = () => {
   const isCaptain = user?.role === 'captain' || hasPermission('role.captain');
   const [tables, setTables] = useState([]);
   const [areas, setAreas] = useState([]);
-  const [selectedAreaId, setSelectedAreaId] = useState(() => {
-    if (user?.role === 'captain') {
-      return sessionStorage.getItem('pos_captain_selected_area') || null;
-    }
-    return 'ALL';
+  const [selectedAreaId, setSelectedAreaId] = useState('ALL');
+  const [captainMobileArea, setCaptainMobileArea] = useState(() => {
+    return sessionStorage.getItem('pos_captain_selected_area') || null;
   });
+
+  const [isMobileView, setIsMobileView] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return window.innerWidth < 1024;
+    }
+    return false;
+  });
+
+  useEffect(() => {
+    const handleResize = () => {
+      setIsMobileView(window.innerWidth < 1024);
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
   const [loading, setLoading] = useState(true);
 
   // Dining Areas Modal State
@@ -501,10 +514,14 @@ export const TablesPage = () => {
     }
   };
 
-  // Filter tables by active tab
-  const displayedTables = selectedAreaId === 'ALL'
-    ? tables
-    : tables.filter((t) => t.areaId === selectedAreaId);
+  // Filter tables by active tab or captain mobile area
+  const showCaptainMobileAreaPicker = isCaptain && isMobileView && !captainMobileArea;
+
+  const displayedTables = (isCaptain && isMobileView && captainMobileArea)
+    ? tables.filter((t) => t.areaId === captainMobileArea)
+    : (selectedAreaId === 'ALL'
+        ? tables
+        : tables.filter((t) => t.areaId === selectedAreaId));
 
   const getAreaName = (areaId) => {
     const area = areas.find((a) => a.id === areaId);
@@ -513,8 +530,8 @@ export const TablesPage = () => {
 
   return (
     <div className="space-y-6">
-      {/* If Captain hasn't chosen an area yet, show the Area Selection Flow */}
-      {isCaptain && (!selectedAreaId || selectedAreaId === 'ALL') ? (
+      {/* If Captain is on mobile and hasn't chosen an area yet, show the Area Selection Flow */}
+      {showCaptainMobileAreaPicker ? (
         <div className="space-y-4">
           <div className="bg-gradient-to-r from-blue-600 to-indigo-700 rounded-2xl p-5 text-white shadow-md">
             <span className="text-xs font-bold uppercase tracking-wider text-blue-200 block">Captain Station</span>
@@ -543,7 +560,7 @@ export const TablesPage = () => {
                   <div
                     key={a.id}
                     onClick={() => {
-                      setSelectedAreaId(a.id);
+                      setCaptainMobileArea(a.id);
                       sessionStorage.setItem('pos_captain_selected_area', a.id);
                     }}
                     className="bg-white rounded-2xl border-2 border-slate-200 hover:border-blue-500 hover:shadow-lg p-5 cursor-pointer transition-all active:scale-[0.99] flex flex-col justify-between group"
@@ -588,8 +605,8 @@ export const TablesPage = () => {
         </div>
       ) : (
         <>
-          {/* Top Header / Captain Area Header */}
-          {isCaptain ? (
+          {/* Top Header / Captain Mobile Area Header */}
+          {isCaptain && isMobileView && captainMobileArea ? (
             <div className="bg-white rounded-2xl border border-blue-200 bg-blue-50/30 p-3.5 sm:p-4 flex flex-wrap items-center justify-between gap-3 shadow-xs">
               <div className="flex items-center gap-2 sm:gap-3">
                 <Button
@@ -597,7 +614,7 @@ export const TablesPage = () => {
                   size="sm"
                   icon={ArrowLeft}
                   onClick={() => {
-                    setSelectedAreaId(null);
+                    setCaptainMobileArea(null);
                     sessionStorage.removeItem('pos_captain_selected_area');
                   }}
                   className="font-bold text-xs"
@@ -607,7 +624,7 @@ export const TablesPage = () => {
                 <div>
                   <span className="text-[10px] font-bold uppercase tracking-wider text-blue-700 block">Working in Area</span>
                   <h3 className="text-base sm:text-lg font-black text-slate-800">
-                    {getAreaName(selectedAreaId)}
+                    {getAreaName(captainMobileArea)}
                   </h3>
                 </div>
               </div>
@@ -657,8 +674,8 @@ export const TablesPage = () => {
             </div>
           )}
 
-          {/* Area Selector Tabs & Status Legend (For non-captain users) */}
-          {!isCaptain && (
+          {/* Area Selector Tabs & Status Legend (For everyone on desktop browser, or non-captain on mobile) */}
+          {(!isCaptain || !isMobileView) && (
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 sm:gap-4 border-b border-slate-200 pb-3 sm:pb-4">
               <div className="grid grid-cols-2 gap-1.5 sm:flex sm:items-center sm:gap-1.5 sm:overflow-x-auto pb-1 no-scrollbar pos-tag-grid">
                 <button
