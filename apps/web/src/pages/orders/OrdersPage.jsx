@@ -1641,16 +1641,8 @@ export const OrdersPage = () => {
                   placeholder="Filter dishes by name, code or station..."
                   value={quickAddSearch}
                   onChange={(e) => setQuickAddSearch(e.target.value)}
+                  onClear={() => setQuickAddSearch('')}
                 />
-                {quickAddSearch && (
-                  <button
-                    type="button"
-                    onClick={() => setQuickAddSearch('')}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 text-xs font-bold px-1.5 py-0.5 rounded bg-slate-100"
-                  >
-                    Clear
-                  </button>
-                )}
               </div>
 
               {/* Category Pills Navigation (Wrapped & Scrollable) */}

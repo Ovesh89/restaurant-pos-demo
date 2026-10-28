@@ -107,11 +107,22 @@ class BillLocalRepository {
   }) {
     const bills = storageAdapter.getItem(STORAGE_KEYS.BILLS) || [];
 
+    const isCaptain = String(actor?.role || '').toLowerCase() === 'captain';
+
+    // Captain cannot apply discounts
+    if (isCaptain) {
+      discount = { type: DISCOUNT_TYPES.FIXED, value: 0, reason: '' };
+    }
+
     // Check if open bill already exists for this order
     let existingIndex = bills.findIndex((b) => b.orderId === order.id && b.status !== BILL_STATUS.CANCELLED);
     let billNo = '';
 
     if (existingIndex > -1) {
+      // Captains are not permitted to alter or modify existing bills
+      if (isCaptain) {
+        return bills[existingIndex];
+      }
       billNo = bills[existingIndex].billNo;
     } else {
       const count = bills.length + 1;
@@ -319,6 +330,9 @@ class BillLocalRepository {
   }
 
   async closeBill(billId, actor = { id: 'cashier', name: 'Cashier' }) {
+    if (String(actor?.role || '').toLowerCase() === 'captain') {
+      throw new Error('Captains are not permitted to close or alter bills.');
+    }
     const bill = await this.getBillById(billId);
     if (!bill) {
       throw new Error('Bill not found.');
@@ -363,6 +377,9 @@ class BillLocalRepository {
   }
 
   async applyDiscount(billId, discount, actor = { id: 'cashier', name: 'Cashier' }) {
+    if (String(actor?.role || '').toLowerCase() === 'captain') {
+      throw new Error('Captains are not permitted to apply discounts.');
+    }
     const bills = storageAdapter.getItem(STORAGE_KEYS.BILLS) || [];
     const index = bills.findIndex((b) => b.id === billId);
     if (index === -1) throw new Error('Bill not found.');
@@ -406,6 +423,9 @@ class BillLocalRepository {
    * Cancel / Void a bill with mandatory reason
    */
   async cancelBill(billId, reason, actor = { id: 'admin', name: 'Admin' }) {
+    if (String(actor?.role || '').toLowerCase() === 'captain') {
+      throw new Error('Captains are not permitted to alter or cancel bills.');
+    }
     if (!reason || !reason.trim()) {
       throw new Error('Mandatory cancellation reason required.');
     }

@@ -109,7 +109,8 @@ function getDateRangeLabel(filterType, customFrom, customTo) {
 }
 
 export const BillingPage = () => {
-  const { user } = useAuth();
+  const { user, role } = useAuth();
+  const isCaptain = role === 'captain' || user?.role === 'captain';
   const { t, formatCurrency, formatNumber } = useTranslation();
   const [searchParams, setSearchParams] = useSearchParams();
   const hasAutoOpenedRef = useRef(false);
@@ -398,6 +399,10 @@ export const BillingPage = () => {
   };
 
   const handleOpenDiscountModal = (bill) => {
+    if (isCaptain) {
+      setActionError('Captains are not permitted to apply discounts.');
+      return;
+    }
     setDiscountModalBill(bill);
     setModalDiscType(bill.discountType || DISCOUNT_TYPES.PERCENTAGE);
     setModalDiscValue(bill.discountValue ? bill.discountValue.toString() : '');
@@ -409,12 +414,16 @@ export const BillingPage = () => {
 
   const handleApplyPostSettlementDiscount = async (e) => {
     e.preventDefault();
+    if (isCaptain) {
+      setDiscountModalError('Captains are not permitted to apply discounts.');
+      return;
+    }
     if (!discountModalBill) return;
     setDiscountModalError('');
     setDiscountModalLoading(true);
 
     try {
-      const actor = { id: user?.id || 'cashier', name: user?.name || 'Cashier' };
+      const actor = { id: user?.id || 'cashier', name: user?.name || 'Cashier', role: user?.role || 'cashier' };
       const updated = await billRepository.applyDiscount(
         discountModalBill.id,
         {
@@ -439,11 +448,15 @@ export const BillingPage = () => {
 
   // Recompute bill on discount change (Reason is completely optional)
   const handleApplyDiscount = async () => {
+    if (isCaptain) {
+      setActionError('Captains are not permitted to apply discounts.');
+      return;
+    }
     if (!selectedOrder) return;
     setActionError('');
 
     try {
-      const actor = { id: user?.id || 'cashier', name: user?.name || 'Cashier' };
+      const actor = { id: user?.id || 'cashier', name: user?.name || 'Cashier', role: user?.role || 'cashier' };
       const bill = await billRepository.generateBill({
         order: selectedOrder,
         discount: {
@@ -577,16 +590,21 @@ export const BillingPage = () => {
 
   // Customer search & select
   const handleSearchCustomer = async (q) => {
-    setCustomerQuery(q);
-    if (!q.trim()) {
+    const queryStr = typeof q === 'string' ? q : (q?.target?.value ?? '');
+    setCustomerQuery(queryStr);
+    if (!queryStr.trim()) {
       setCustomerResults([]);
       return;
     }
     try {
-      const results = await customerRepository.searchCustomers(q);
-      setCustomerResults(results);
+      const searchFn = customerRepository.searchCustomers
+        ? customerRepository.searchCustomers.bind(customerRepository)
+        : customerRepository.getCustomers.bind(customerRepository);
+      const results = await searchFn(queryStr);
+      setCustomerResults(Array.isArray(results) ? results : (results?.items || []));
     } catch (err) {
-      console.error(err);
+      console.error('Customer search failed:', err);
+      setCustomerResults([]);
     }
   };
 
@@ -637,6 +655,10 @@ export const BillingPage = () => {
 
   // Dish modification handlers
   const handleOpenBillingModify = async (order) => {
+    if (isCaptain) {
+      setActionError('Captains are not permitted to alter or modify bills.');
+      return;
+    }
     if (!order) return;
     const activeItems = (order.items || []).filter((i) => (i.status || 'ACTIVE') !== 'CANCELLED');
     setBillingModifiedItems(JSON.parse(JSON.stringify(activeItems)));
@@ -717,6 +739,10 @@ export const BillingPage = () => {
 
   const handleSaveBillingModification = async (e) => {
     e.preventDefault();
+    if (isCaptain) {
+      setBillingModError('Captains are not permitted to alter or modify bills.');
+      return;
+    }
     if (!selectedOrder) return;
     if (billingModifiedItems.length === 0) {
       setBillingModError('Order cannot have 0 dishes. Cancel order instead.');
@@ -946,15 +972,17 @@ export const BillingPage = () => {
           >
             {t('common.details', null, 'Details')}
           </Button>
-          <Button
-            variant="secondary"
-            size="sm"
-            icon={Tag}
-            onClick={() => handleOpenDiscountModal(row)}
-            title="Update Post-Settlement Discount"
-          >
-            {t('billing.discountAmount', null, 'Discount')}
-          </Button>
+          {!isCaptain && (
+            <Button
+              variant="secondary"
+              size="sm"
+              icon={Tag}
+              onClick={() => handleOpenDiscountModal(row)}
+              title="Update Post-Settlement Discount"
+            >
+              {t('billing.discountAmount', null, 'Discount')}
+            </Button>
+          )}
           <Button
             variant="secondary"
             size="sm"
@@ -1109,27 +1137,22 @@ export const BillingPage = () => {
 
             {/* Quick Search */}
             <form onSubmit={handleApplySearch} className="relative w-full sm:w-64">
-              <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
-              <input
-                type="text"
+              <Input
+                icon={Search}
                 value={historySearch}
                 onChange={(e) => setHistorySearch(e.target.value)}
                 placeholder={t('common.search', null, 'Search invoice, table, guest...')}
-                className="w-full text-xs pl-9 pr-8 py-2 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                onVoiceResult={(transcript) => {
+                  setHistorySearch(transcript);
+                  setHistoryPage(1);
+                  loadSettledBills(1, historyLimit, dateFilter, customFromDate, customToDate, transcript);
+                }}
+                onClear={() => {
+                  setHistorySearch('');
+                  setHistoryPage(1);
+                  loadSettledBills(1, historyLimit, dateFilter, customFromDate, customToDate, '');
+                }}
               />
-              {historySearch && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setHistorySearch('');
-                    setHistoryPage(1);
-                    loadSettledBills(1, historyLimit, dateFilter, customFromDate, customToDate, '');
-                  }}
-                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
-                >
-                  <X className="w-3.5 h-3.5" />
-                </button>
-              )}
             </form>
           </div>
 
@@ -1340,15 +1363,17 @@ export const BillingPage = () => {
                         >
                           {t('common.details', null, 'Details')}
                         </Button>
-                        <Button
-                          variant="secondary"
-                          size="sm"
-                          icon={Tag}
-                          onClick={() => handleOpenDiscountModal(row)}
-                          className="flex-1 text-xs justify-center"
-                        >
-                          {t('billing.discountAmount', null, 'Discount')}
-                        </Button>
+                        {!isCaptain && (
+                          <Button
+                            variant="secondary"
+                            size="sm"
+                            icon={Tag}
+                            onClick={() => handleOpenDiscountModal(row)}
+                            className="flex-1 text-xs justify-center"
+                          >
+                            {t('billing.discountAmount', null, 'Discount')}
+                          </Button>
+                        )}
                         <Button
                           variant="secondary"
                           size="sm"
@@ -1439,9 +1464,14 @@ export const BillingPage = () => {
                   ) : (
                     <div className="relative">
                       <Input
+                        icon={Search}
                         placeholder={t('billing.searchGuestPlaceholder', null, 'Search guest by mobile or name...')}
                         value={customerQuery}
                         onChange={(e) => handleSearchCustomer(e.target.value)}
+                        onClear={() => {
+                          setCustomerQuery('');
+                          setCustomerResults([]);
+                        }}
                       />
                       {customerResults.length > 0 && (
                         <div className="absolute top-full left-0 right-0 z-20 bg-white border border-slate-200 rounded-lg shadow-lg mt-1 max-h-32 overflow-y-auto">
@@ -1470,14 +1500,16 @@ export const BillingPage = () => {
                         {activeBill.items.length} {activeBill.items.length === 1 ? 'Dish' : 'Dishes'}
                       </span>
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => handleOpenBillingModify(selectedOrder)}
-                      className="text-xs font-bold text-blue-600 hover:text-blue-700 bg-white px-2 py-0.5 rounded border border-slate-200 flex items-center gap-1 shadow-2xs hover:bg-blue-50 transition-colors"
-                    >
-                      <Edit3 className="w-3.5 h-3.5" />
-                      {t('billing.modifyDishes', null, 'Modify Dishes')}
-                    </button>
+                    {!isCaptain && (
+                      <button
+                        type="button"
+                        onClick={() => handleOpenBillingModify(selectedOrder)}
+                        className="text-xs font-bold text-blue-600 hover:text-blue-700 bg-white px-2 py-0.5 rounded border border-slate-200 flex items-center gap-1 shadow-2xs hover:bg-blue-50 transition-colors"
+                      >
+                        <Edit3 className="w-3.5 h-3.5" />
+                        {t('billing.modifyDishes', null, 'Modify Dishes')}
+                      </button>
+                    )}
                   </div>
                   <div className="divide-y divide-slate-100 border border-slate-200 rounded-xl overflow-hidden text-xs max-h-60 overflow-y-auto">
                     {activeBill.items.map((i, idx) => (
@@ -1494,45 +1526,47 @@ export const BillingPage = () => {
                   </div>
                 </div>
 
-                {/* Discount Section (Optional Reason) */}
-                <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200 space-y-2.5">
-                  <div className="flex items-center justify-between">
-                    <span className="font-bold text-slate-700 uppercase tracking-wider text-[11px] flex items-center gap-1">
-                      <Tag className="w-3.5 h-3.5 text-blue-600" /> {t('billing.applyDiscount', null, 'Apply Discount (Optional)')}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={handleApplyDiscount}
-                      className="text-xs font-bold text-blue-600 hover:text-blue-700 bg-white px-2 py-0.5 rounded border border-slate-200"
-                    >
-                      {t('billing.updateTotal', null, 'Update Total')}
-                    </button>
-                  </div>
+                {/* Discount Section (Optional Reason) - Hidden for Captain */}
+                {!isCaptain && (
+                  <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200 space-y-2.5">
+                    <div className="flex items-center justify-between">
+                      <span className="font-bold text-slate-700 uppercase tracking-wider text-[11px] flex items-center gap-1">
+                        <Tag className="w-3.5 h-3.5 text-blue-600" /> {t('billing.applyDiscount', null, 'Apply Discount (Optional)')}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={handleApplyDiscount}
+                        className="text-xs font-bold text-blue-600 hover:text-blue-700 bg-white px-2 py-0.5 rounded border border-slate-200"
+                      >
+                        {t('billing.updateTotal', null, 'Update Total')}
+                      </button>
+                    </div>
 
-                  <div className="grid grid-cols-2 gap-2">
-                    <Select
-                      value={discountType}
-                      onChange={(e) => setDiscountType(e.target.value)}
-                      options={[
-                        { value: DISCOUNT_TYPES.FIXED, label: `${t('common.fixed', null, 'Fixed Amount')} (₹)` },
-                        { value: DISCOUNT_TYPES.PERCENTAGE, label: `${t('common.percentage', null, 'Percentage')} (%)` }
-                      ]}
-                    />
+                    <div className="grid grid-cols-2 gap-2">
+                      <Select
+                        value={discountType}
+                        onChange={(e) => setDiscountType(e.target.value)}
+                        options={[
+                          { value: DISCOUNT_TYPES.FIXED, label: `${t('common.fixed', null, 'Fixed Amount')} (₹)` },
+                          { value: DISCOUNT_TYPES.PERCENTAGE, label: `${t('common.percentage', null, 'Percentage')} (%)` }
+                        ]}
+                      />
+                      <Input
+                        type="number"
+                        min="0"
+                        placeholder={t('billing.discountAmount', null, 'Discount value')}
+                        value={discountValue}
+                        onChange={(e) => setDiscountValue(e.target.value)}
+                      />
+                    </div>
+
                     <Input
-                      type="number"
-                      min="0"
-                      placeholder={t('billing.discountAmount', null, 'Discount value')}
-                      value={discountValue}
-                      onChange={(e) => setDiscountValue(e.target.value)}
+                      placeholder={t('billing.discountReason', null, 'Reason for discount (Optional)...')}
+                      value={discountReason}
+                      onChange={(e) => setDiscountReason(e.target.value)}
                     />
                   </div>
-
-                  <Input
-                    placeholder={t('billing.discountReason', null, 'Reason for discount (Optional)...')}
-                    value={discountReason}
-                    onChange={(e) => setDiscountReason(e.target.value)}
-                  />
-                </div>
+                )}
               </div>
 
               {/* Right Column: Financial Calculation & Split Payment Collector */}
@@ -1797,16 +1831,8 @@ export const BillingPage = () => {
                     placeholder={t('menu.searchDishes', null, 'Search dishes to add to this order...')}
                     value={billingSearch}
                     onChange={(e) => setBillingSearch(e.target.value)}
+                    onClear={() => setBillingSearch('')}
                   />
-                  {billingSearch && (
-                    <button
-                      type="button"
-                      onClick={() => setBillingSearch('')}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 text-xs font-bold px-1.5 py-0.5 rounded bg-slate-100"
-                    >
-                      {t('common.clear', null, 'Clear')}
-                    </button>
-                  )}
                 </div>
 
                 {/* Categories Pills (Wrapped & Scrollable) */}
@@ -2034,14 +2060,16 @@ export const BillingPage = () => {
               >
                 {t('billing.reprint', null, 'Reprint Tax Invoice')}
               </Button>
-              <Button
-                variant="secondary"
-                size="sm"
-                icon={Tag}
-                onClick={() => handleOpenDiscountModal(inspectInvoiceBill)}
-              >
-                {t('billing.discountAmount', null, 'Adjust Discount')}
-              </Button>
+              {!isCaptain && (
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  icon={Tag}
+                  onClick={() => handleOpenDiscountModal(inspectInvoiceBill)}
+                >
+                  {t('billing.discountAmount', null, 'Adjust Discount')}
+                </Button>
+              )}
 
               <Button variant="secondary" size="sm" className="sm:ml-auto" onClick={() => setInspectInvoiceBill(null)}>
                 {t('common.close', null, 'Close')}

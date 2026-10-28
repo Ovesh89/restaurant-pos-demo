@@ -91,6 +91,11 @@ class CustomerApiRepository {
     return this.normalizeCustomer(res);
   }
 
+  async searchCustomers(query) {
+    const list = await this.getCustomers(query);
+    return Array.isArray(list) ? list : (list?.items || []);
+  }
+
   async recordVisitAndSpend(customerId, amount) {
     // In Django backend, billing_service.close_bill automatically
     // increments totalVisits and totalSpend. If called manually, fetch fresh customer.

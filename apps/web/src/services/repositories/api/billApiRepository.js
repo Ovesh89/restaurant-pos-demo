@@ -233,8 +233,9 @@ class BillApiRepository {
     customer = null,
     actor = { id: 'cashier', name: 'Cashier' }
   }) {
+    const isCaptain = String(actor?.role || '').toLowerCase() === 'captain';
     const payload = {};
-    const hasDiscount = discount && Number(discount.value) > 0;
+    const hasDiscount = !isCaptain && discount && Number(discount.value) > 0;
     if (hasDiscount) {
       payload.discount = {
         type: String(discount.type || 'FIXED').toUpperCase(),
@@ -247,7 +248,7 @@ class BillApiRepository {
     let bill = this.normalizeBill(res);
 
     // If an existing bill was retrieved and a new discount is requested, apply via /bills/{id}/discount
-    if (hasDiscount && bill?.id) {
+    if (!isCaptain && hasDiscount && bill?.id) {
       const currentDiscVal = Number(bill.discountValue || 0);
       const reqDiscVal = Number(discount.value);
       if (currentDiscVal !== reqDiscVal || bill.discountType !== String(discount.type || 'FIXED').toUpperCase()) {
@@ -268,6 +269,9 @@ class BillApiRepository {
   }
 
   async applyDiscount(billId, discount, actor = { id: 'cashier', name: 'Cashier' }) {
+    if (String(actor?.role || '').toLowerCase() === 'captain') {
+      throw new Error('Captains are not permitted to apply discounts.');
+    }
     const payload = {
       type: String(discount.type || 'FIXED').toUpperCase(),
       value: String(discount.value || '0'),
@@ -309,11 +313,17 @@ class BillApiRepository {
   }
 
   async closeBill(billId, actor = { id: 'cashier', name: 'Cashier' }) {
+    if (String(actor?.role || '').toLowerCase() === 'captain') {
+      throw new Error('Captains are not permitted to alter or close bills.');
+    }
     const closedRes = await apiClient.post(`/bills/${billId}/close`);
     return this.normalizeBill(closedRes);
   }
 
   async cancelBill(billId, reason, actor = { id: 'admin', name: 'Admin' }) {
+    if (String(actor?.role || '').toLowerCase() === 'captain') {
+      throw new Error('Captains are not permitted to alter or cancel bills.');
+    }
     if (!reason || !reason.trim()) {
       throw new Error('Mandatory cancellation reason required.');
     }

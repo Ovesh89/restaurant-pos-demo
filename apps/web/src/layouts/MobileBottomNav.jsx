@@ -1,13 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { NavLink } from 'react-router-dom';
-import { LayoutDashboard, ShoppingBag, Coffee, Receipt, Menu } from 'lucide-react';
+import { LayoutDashboard, ShoppingBag, Coffee, Receipt, Menu, User } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 import { useTranslation } from '../hooks/useTranslation';
 import { PERMISSIONS } from '../constants/permissions';
 
 export const MobileBottomNav = ({ onOpenMenu }) => {
-  const { hasAnyPermission, hasPermission } = useAuth();
+  const { hasAnyPermission, hasPermission, role, user } = useAuth();
   const { t } = useTranslation();
+  const isCaptain = role === 'captain' || user?.role === 'captain';
   const [isModalOpen, setIsModalOpen] = useState(() => {
     if (typeof document !== 'undefined') {
       return (
@@ -46,32 +47,47 @@ export const MobileBottomNav = ({ onOpenMenu }) => {
     return null;
   }
 
-  const navButtons = [
-    {
-      to: '/dashboard',
-      label: t('nav.dashboard', null, 'Dashboard'),
-      icon: LayoutDashboard,
-      show: true
-    },
-    {
-      to: '/orders',
-      label: t('nav.orders', null, 'Orders'),
-      icon: ShoppingBag,
-      show: hasAnyPermission([PERMISSIONS.ORDER_CREATE, PERMISSIONS.ORDER_CONFIRM, PERMISSIONS.TABLE_VIEW])
-    },
-    {
-      to: '/tables',
-      label: t('nav.tables', null, 'Tables'),
-      icon: Coffee,
-      show: hasPermission(PERMISSIONS.TABLE_VIEW)
-    },
-    {
-      to: '/billing',
-      label: t('nav.billing', null, 'Billing'),
-      icon: Receipt,
-      show: hasAnyPermission([PERMISSIONS.BILLING_GENERATE, PERMISSIONS.PAYMENT_COLLECT])
-    }
-  ];
+  const navButtons = isCaptain
+    ? [
+        {
+          to: '/tables',
+          label: t('nav.tables', null, 'Tables'),
+          icon: Coffee,
+          show: true
+        },
+        {
+          to: '/profile',
+          label: t('nav.profile', null, 'Profile'),
+          icon: User,
+          show: true
+        }
+      ]
+    : [
+        {
+          to: '/dashboard',
+          label: t('nav.dashboard', null, 'Dashboard'),
+          icon: LayoutDashboard,
+          show: true
+        },
+        {
+          to: '/orders',
+          label: t('nav.orders', null, 'Orders'),
+          icon: ShoppingBag,
+          show: hasAnyPermission([PERMISSIONS.ORDER_CREATE, PERMISSIONS.ORDER_CONFIRM, PERMISSIONS.TABLE_VIEW])
+        },
+        {
+          to: '/tables',
+          label: t('nav.tables', null, 'Tables'),
+          icon: Coffee,
+          show: hasPermission(PERMISSIONS.TABLE_VIEW)
+        },
+        {
+          to: '/billing',
+          label: t('nav.billing', null, 'Billing'),
+          icon: Receipt,
+          show: hasAnyPermission([PERMISSIONS.BILLING_GENERATE, PERMISSIONS.PAYMENT_COLLECT])
+        }
+      ];
 
   return (
     <nav
@@ -101,16 +117,18 @@ export const MobileBottomNav = ({ onOpenMenu }) => {
           );
         })}
 
-        {/* More / All Modules Drawer Opener */}
-        <button
-          type="button"
-          onClick={onOpenMenu}
-          className="flex-1 flex flex-col items-center justify-center gap-0.5 text-[10px] font-bold text-slate-500 hover:text-slate-900 active:bg-slate-50 transition-colors select-none"
-          aria-label={t('nav.more', null, 'More')}
-        >
-          <Menu className="w-5 h-5 shrink-0" />
-          <span>{t('nav.more', null, 'More')}</span>
-        </button>
+        {/* More / All Modules Drawer Opener (Only for non-captain) */}
+        {!isCaptain && (
+          <button
+            type="button"
+            onClick={onOpenMenu}
+            className="flex-1 flex flex-col items-center justify-center gap-0.5 text-[10px] font-bold text-slate-500 hover:text-slate-900 active:bg-slate-50 transition-colors select-none"
+            aria-label={t('nav.more', null, 'More')}
+          >
+            <Menu className="w-5 h-5 shrink-0" />
+            <span>{t('nav.more', null, 'More')}</span>
+          </button>
+        )}
       </div>
     </nav>
   );

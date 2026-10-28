@@ -34,6 +34,7 @@ import { Button } from '../../components/common/Button';
 import { DataTable } from '../../components/common/DataTable';
 import { Pagination } from '../../components/common/Pagination';
 import { Modal } from '../../components/common/Modal';
+import { Input } from '../../components/common/Input';
 import { ORDER_STATUS, ORDER_STATUS_CONFIG, getOrderStatusConfig } from '../../constants/orderStatus';
 
 export const OrderHistoryPage = () => {
@@ -139,7 +140,7 @@ export const OrderHistoryPage = () => {
     setEndDate(`${y}-${m}-${String(lastDay).padStart(2, '0')}`);
   };
 
-  const loadHistory = async (overridePage = page, overrideLimit = limit) => {
+  const loadHistory = async (overridePage = page, overrideLimit = limit, overrideSearch = search) => {
     try {
       setLoading(true);
       const filters = {
@@ -149,7 +150,7 @@ export const OrderHistoryPage = () => {
         customerId: selectedCustomer !== 'ALL' ? selectedCustomer : undefined,
         categoryId: selectedCategory !== 'ALL' ? selectedCategory : undefined,
         status: statusFilter !== 'ALL' ? statusFilter : undefined,
-        search: search.trim() || undefined,
+        search: (overrideSearch || '').trim() || undefined,
         page: overridePage,
         limit: overrideLimit
       };
@@ -705,14 +706,22 @@ export const OrderHistoryPage = () => {
                 {t('orders.searchOrdersItems', null, 'Search Orders / Items')}
               </label>
               <form onSubmit={handleSearchSubmit} className="relative">
-                <input
-                  type="text"
-                  placeholder="Order #, Table, Dish..."
+                <Input
+                  icon={Search}
+                  placeholder={t('orders.searchOrdersItems', null, 'Order #, Table, Dish...')}
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
-                  className="w-full text-xs px-3 py-2 pl-8 border border-slate-200 rounded-xl bg-slate-50 focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-blue-500"
+                  onVoiceResult={(transcript) => {
+                    setSearch(transcript);
+                    setPage(1);
+                    loadHistory(1, limit, transcript);
+                  }}
+                  onClear={() => {
+                    setSearch('');
+                    setPage(1);
+                    loadHistory(1, limit, '');
+                  }}
                 />
-                <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2.5" />
               </form>
             </div>
           </div>
@@ -722,14 +731,22 @@ export const OrderHistoryPage = () => {
         {!isMobileFiltersOpen && (
           <div className="block md:hidden">
             <form onSubmit={handleSearchSubmit} className="relative">
-              <input
-                type="text"
-                placeholder="Order #, Table, Dish..."
+              <Input
+                icon={Search}
+                placeholder={t('orders.searchOrdersItems', null, 'Order #, Table, Dish...')}
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                className="w-full text-xs px-3 py-2 pl-8 border border-slate-200 rounded-xl bg-slate-50 focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-blue-500"
+                onVoiceResult={(transcript) => {
+                  setSearch(transcript);
+                  setPage(1);
+                  loadHistory(1, limit, transcript);
+                }}
+                onClear={() => {
+                  setSearch('');
+                  setPage(1);
+                  loadHistory(1, limit, '');
+                }}
               />
-              <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2.5" />
             </form>
           </div>
         )}

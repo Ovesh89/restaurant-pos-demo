@@ -257,6 +257,9 @@ class OrderApiRepository {
     if (!currentOrder) {
       throw new Error('Order not found.');
     }
+    if (currentOrder.bill && String(actor?.role || '').toLowerCase() === 'captain') {
+      throw new Error('Cannot modify items: A bill has already been generated. Captains are not permitted to alter or modify bills.');
+    }
     const targetOrderId = currentOrder.id || currentOrder._id || orderId;
     const prevItems = currentOrder?.items || [];
 

@@ -9,6 +9,7 @@ import {
   AlertCircle,
   Receipt,
   ArrowRightLeft,
+  ArrowLeft,
   Eye,
   Trash2,
   Printer,
@@ -48,9 +49,15 @@ export const TablesPage = () => {
   const navigate = useNavigate();
   const canManage = hasPermission(PERMISSIONS.TABLE_MANAGE);
 
+  const isCaptain = user?.role === 'captain' || hasPermission('role.captain');
   const [tables, setTables] = useState([]);
   const [areas, setAreas] = useState([]);
-  const [selectedAreaId, setSelectedAreaId] = useState('ALL');
+  const [selectedAreaId, setSelectedAreaId] = useState(() => {
+    if (user?.role === 'captain') {
+      return sessionStorage.getItem('pos_captain_selected_area') || null;
+    }
+    return 'ALL';
+  });
   const [loading, setLoading] = useState(true);
 
   // Dining Areas Modal State
@@ -506,233 +513,343 @@ export const TablesPage = () => {
 
   return (
     <div className="space-y-6">
-      <PageHeader
-        title={t('tables.title', 'Restaurant Table Floor')}
-        subtitle={t('tables.subtitle', 'Floor layout visualizer, dining sections, table seating capacity, and status overview')}
-      >
-        {canManage && (
-          <>
-            <Button
-              variant="secondary"
-              icon={Layers}
-              onClick={() => setIsAreaModalOpen(true)}
-              className="h-11 sm:h-auto w-full justify-center text-xs font-bold"
-            >
-              {t('tables.manageAreas', 'Manage Areas')}
-            </Button>
-            <Button
-              variant="primary"
-              icon={Plus}
-              onClick={handleOpenAdd}
-              className="h-11 sm:h-auto w-full justify-center text-xs font-bold"
-            >
-              {t('tables.addTable', 'Add Table')}
-            </Button>
-          </>
-        )}
-      </PageHeader>
+      {/* If Captain hasn't chosen an area yet, show the Area Selection Flow */}
+      {isCaptain && (!selectedAreaId || selectedAreaId === 'ALL') ? (
+        <div className="space-y-4">
+          <div className="bg-gradient-to-r from-blue-600 to-indigo-700 rounded-2xl p-5 text-white shadow-md">
+            <span className="text-xs font-bold uppercase tracking-wider text-blue-200 block">Captain Station</span>
+            <h2 className="text-xl sm:text-2xl font-black mt-0.5">Select Your Working Area</h2>
+            <p className="text-xs sm:text-sm text-blue-100 mt-1 max-w-xl">
+              Choose the dining area you are managing today. You will only see and take orders for tables in your selected area.
+            </p>
+          </div>
 
-      {/* Success Notification Alert */}
-      {successMsg && (
-        <div className="p-3.5 bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs rounded-2xl flex items-center gap-2 shadow-xs">
-          <CheckCircle className="w-4 h-4 text-emerald-600 shrink-0" />
-          <span className="font-semibold">{successMsg}</span>
-        </div>
-      )}
+          {loading ? (
+            <div className="bg-white rounded-2xl border border-slate-200 p-12 text-center text-slate-500 font-medium">
+              {t('common.loading', 'Loading dining areas...')}
+            </div>
+          ) : areas.length === 0 ? (
+            <div className="bg-white rounded-2xl border border-slate-200 p-12 text-center text-slate-500 font-medium">
+              No dining areas found.
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5 sm:gap-4">
+              {areas.map((a) => {
+                const aTables = tables.filter((t) => t.areaId === a.id && t.isActive);
+                const availableCount = aTables.filter((t) => t.status === TABLE_STATUS.AVAILABLE).length;
+                const occupiedCount = aTables.filter((t) => t.status !== TABLE_STATUS.AVAILABLE).length;
 
-      {/* Area Selector Tabs & Status Legend */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 sm:gap-4 border-b border-slate-200 pb-3 sm:pb-4">
-        {/* Tabs - Kept Open in Mobile */}
-        <div className="grid grid-cols-2 gap-1.5 sm:flex sm:items-center sm:gap-1.5 sm:overflow-x-auto pb-1 no-scrollbar pos-tag-grid">
-          <button
-            onClick={() => setSelectedAreaId('ALL')}
-            className={`px-3 sm:px-3.5 py-1.5 sm:py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all ${
-              selectedAreaId === 'ALL'
-                ? 'bg-blue-600 text-white shadow-sm'
-                : 'bg-white text-slate-600 hover:bg-slate-50 border border-slate-200'
-            }`}
-          >
-            {t('common.all', 'All Areas')} ({formatNumber(tables.length)})
-          </button>
-          {areas.map((a) => {
-            const count = tables.filter((t) => t.areaId === a.id).length;
-            return (
-              <button
-                key={a.id}
-                onClick={() => setSelectedAreaId(a.id)}
-                className={`px-3 sm:px-3.5 py-1.5 sm:py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all ${
-                  selectedAreaId === a.id
-                    ? 'bg-blue-600 text-white shadow-sm'
-                    : 'bg-white text-slate-600 hover:bg-slate-50 border border-slate-200'
-                }`}
-              >
-                {a.name} ({formatNumber(count)})
-              </button>
-            );
-          })}
-        </div>
+                return (
+                  <div
+                    key={a.id}
+                    onClick={() => {
+                      setSelectedAreaId(a.id);
+                      sessionStorage.setItem('pos_captain_selected_area', a.id);
+                    }}
+                    className="bg-white rounded-2xl border-2 border-slate-200 hover:border-blue-500 hover:shadow-lg p-5 cursor-pointer transition-all active:scale-[0.99] flex flex-col justify-between group"
+                  >
+                    <div>
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="p-2.5 rounded-xl bg-blue-50 text-blue-600 group-hover:bg-blue-600 group-hover:text-white transition-colors">
+                          <Coffee className="w-5 h-5" />
+                        </span>
+                        <span className="text-xs font-bold text-slate-500">
+                          {formatNumber(aTables.length)} {t('tables.title', 'Tables')}
+                        </span>
+                      </div>
+                      <h3 className="text-lg font-black text-slate-800 group-hover:text-blue-600 transition-colors">
+                        {a.name}
+                      </h3>
+                      <p className="text-xs text-slate-500 mt-1">
+                        {a.description || 'Assigned dining floor section'}
+                      </p>
+                    </div>
 
-        {/* Legend - Desktop / Tablet Only (Hidden on Mobile) */}
-        <div className="hidden md:flex md:items-center md:gap-3 text-[10px] sm:text-[11px] font-semibold text-slate-600">
-          <div className="flex items-center gap-1.5">
-            <span className="w-2.5 h-2.5 rounded-full bg-emerald-500"></span>
-            <span>{t('common.available', 'Available')}</span>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <span className="w-2.5 h-2.5 rounded-full bg-blue-500"></span>
-            <span>{t('common.occupied', 'Occupied')}</span>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <span className="w-2.5 h-2.5 rounded-full bg-amber-500"></span>
-            <span>{t('orders.kotSent', 'KOT Sent')}</span>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <span className="w-2.5 h-2.5 rounded-full bg-orange-500"></span>
-            <span>{t('common.preparing', 'Preparing')}</span>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <span className="w-2.5 h-2.5 rounded-full bg-purple-500"></span>
-            <span>{t('common.ready', 'Ready')}</span>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <span className="w-2.5 h-2.5 rounded-full bg-teal-500"></span>
-            <span>{t('common.served', 'Served')}</span>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <span className="w-2.5 h-2.5 rounded-full bg-rose-500"></span>
-            <span>{t('common.billed', 'Bill Pending')}</span>
-          </div>
-        </div>
-      </div>
-
-      {/* Tables Grid */}
-      {loading ? (
-        <div className="bg-white rounded-2xl border border-slate-200 p-12 text-center text-slate-500 font-medium">
-          {t('common.loading', 'Loading restaurant table floor...')}
-        </div>
-      ) : displayedTables.length === 0 ? (
-        <div className="bg-white rounded-2xl border border-slate-200 p-12 text-center text-slate-500 font-medium">
-          {t('tables.noTables', 'No dining tables configured in this area.')}
+                    <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between">
+                      <div className="flex items-center gap-2 text-xs font-bold">
+                        <span className="text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-lg border border-emerald-200">
+                          {formatNumber(availableCount)} Available
+                        </span>
+                        {occupiedCount > 0 && (
+                          <span className="text-blue-700 bg-blue-50 px-2 py-0.5 rounded-lg border border-blue-200">
+                            {formatNumber(occupiedCount)} Active
+                          </span>
+                        )}
+                      </div>
+                      <span className="text-xs font-extrabold text-blue-600 group-hover:translate-x-1 transition-transform inline-flex items-center gap-1">
+                        Select →
+                      </span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
       ) : (
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3 sm:gap-4">
-          {displayedTables.map((tbl) => {
-            const statusConfig = getTableStatusConfig(tbl.status, t) || getTableStatusConfig(TABLE_STATUS.AVAILABLE, t);
-            const isBillPending = tbl.status === TABLE_STATUS.BILL_PENDING || tbl.status === 'BILLING' || tbl.status === 'PAYMENT_PENDING';
-            const cleanTableNo = String(tbl.tableNo || '').trim().replace(/^T-?/i, '');
+        <>
+          {/* Top Header / Captain Area Header */}
+          {isCaptain ? (
+            <div className="bg-white rounded-2xl border border-blue-200 bg-blue-50/30 p-3.5 sm:p-4 flex flex-wrap items-center justify-between gap-3 shadow-xs">
+              <div className="flex items-center gap-2 sm:gap-3">
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  icon={ArrowLeft}
+                  onClick={() => {
+                    setSelectedAreaId(null);
+                    sessionStorage.removeItem('pos_captain_selected_area');
+                  }}
+                  className="font-bold text-xs"
+                >
+                  Change Area
+                </Button>
+                <div>
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-blue-700 block">Working in Area</span>
+                  <h3 className="text-base sm:text-lg font-black text-slate-800">
+                    {getAreaName(selectedAreaId)}
+                  </h3>
+                </div>
+              </div>
 
-            const handleCardClick = () => {
-              if (!tbl.isActive) return;
-              if (tbl.status === TABLE_STATUS.AVAILABLE) {
-                navigate(`/orders/new?tableId=${tbl.id}&from=tables`);
-              } else {
-                handleOpenOrderDetails(tbl);
-              }
-            };
-
-            return (
-              <div
-                key={tbl.id}
-                onClick={handleCardClick}
-                className={`relative rounded-2xl border bg-white p-3.5 sm:p-5 shadow-xs transition-all flex flex-col justify-between min-h-[160px] sm:h-44 cursor-pointer ${
-                  !tbl.isActive
-                    ? 'opacity-50 border-dashed border-slate-300 cursor-not-allowed'
-                    : 'hover:shadow-md hover:border-blue-500 hover:scale-[1.01]'
-                }`}
-              >
-                {/* Top Info */}
-                <div className="flex items-start justify-between">
-                  <div>
-                    <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                      {getAreaName(tbl.areaId)}
-                    </span>
-                    <h3 className="text-xl sm:text-2xl font-black text-slate-800 tracking-tight mt-0.5">
-                      T-{cleanTableNo}
-                    </h3>
-                  </div>
-
-                  <span
-                    className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold border shrink-0 ${statusConfig.color}`}
+              <div className="flex items-center gap-2 text-xs font-bold">
+                <span className="text-emerald-700 bg-emerald-100/70 px-2.5 py-1 rounded-xl">
+                  {formatNumber(displayedTables.filter(t => t.status === TABLE_STATUS.AVAILABLE && t.isActive).length)} Available
+                </span>
+                <span className="text-blue-700 bg-blue-100/70 px-2.5 py-1 rounded-xl">
+                  {formatNumber(displayedTables.filter(t => t.status !== TABLE_STATUS.AVAILABLE && t.isActive).length)} Active
+                </span>
+              </div>
+            </div>
+          ) : (
+            <PageHeader
+              title={t('tables.title', 'Restaurant Table Floor')}
+              subtitle={t('tables.subtitle', 'Floor layout visualizer, dining sections, table seating capacity, and status overview')}
+            >
+              {canManage && (
+                <>
+                  <Button
+                    variant="secondary"
+                    icon={Layers}
+                    onClick={() => setIsAreaModalOpen(true)}
+                    className="h-11 sm:h-auto w-full justify-center text-xs font-bold"
                   >
-                    <span className={`w-1.5 h-1.5 rounded-full ${statusConfig.dot}`}></span>
-                    {statusConfig.label}
-                  </span>
-                </div>
+                    {t('tables.manageAreas', 'Manage Areas')}
+                  </Button>
+                  <Button
+                    variant="primary"
+                    icon={Plus}
+                    onClick={handleOpenAdd}
+                    className="h-11 sm:h-auto w-full justify-center text-xs font-bold"
+                  >
+                    {t('tables.addTable', 'Add Table')}
+                  </Button>
+                </>
+              )}
+            </PageHeader>
+          )}
 
-                {/* Capacity & Attributes */}
-                <div className="my-1.5 sm:my-2">
-                  <div className="flex items-center gap-1 text-[11px] sm:text-xs text-slate-600 font-semibold">
-                    <Users className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                    <span>{t('tables.seats', { count: tbl.capacity }, `${formatNumber(tbl.capacity)} Pax`)}</span>
-                  </div>
-                </div>
+          {/* Success Notification Alert */}
+          {successMsg && (
+            <div className="p-3.5 bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs rounded-2xl flex items-center gap-2 shadow-xs">
+              <CheckCircle className="w-4 h-4 text-emerald-600 shrink-0" />
+              <span className="font-semibold">{successMsg}</span>
+            </div>
+          )}
 
-                {/* Bottom Actions */}
-                <div className="pt-2 border-t border-slate-100 flex flex-wrap items-center justify-between gap-1 text-xs">
-                  {tbl.status === TABLE_STATUS.AVAILABLE ? (
+          {/* Area Selector Tabs & Status Legend (For non-captain users) */}
+          {!isCaptain && (
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 sm:gap-4 border-b border-slate-200 pb-3 sm:pb-4">
+              <div className="grid grid-cols-2 gap-1.5 sm:flex sm:items-center sm:gap-1.5 sm:overflow-x-auto pb-1 no-scrollbar pos-tag-grid">
+                <button
+                  onClick={() => setSelectedAreaId('ALL')}
+                  className={`px-3 sm:px-3.5 py-1.5 sm:py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all ${
+                    selectedAreaId === 'ALL'
+                      ? 'bg-blue-600 text-white shadow-sm'
+                      : 'bg-white text-slate-600 hover:bg-slate-50 border border-slate-200'
+                  }`}
+                >
+                  {t('common.all', 'All Areas')} ({formatNumber(tables.length)})
+                </button>
+                {areas.map((a) => {
+                  const count = tables.filter((t) => t.areaId === a.id).length;
+                  return (
                     <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        navigate(`/orders/new?tableId=${tbl.id}&from=tables`);
-                      }}
-                      className="text-[11px] font-bold text-blue-600 hover:text-blue-700 bg-blue-50 px-2 py-0.5 rounded-lg border border-blue-200"
+                      key={a.id}
+                      onClick={() => setSelectedAreaId(a.id)}
+                      className={`px-3 sm:px-3.5 py-1.5 sm:py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all ${
+                        selectedAreaId === a.id
+                          ? 'bg-blue-600 text-white shadow-sm'
+                          : 'bg-white text-slate-600 hover:bg-slate-50 border border-slate-200'
+                      }`}
                     >
-                      + {t('orders.newOrder', 'Take Order')}
+                      {a.name} ({formatNumber(count)})
                     </button>
-                  ) : (
-                    <div className="flex items-center gap-1.5 flex-wrap">
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleOpenOrderDetails(tbl);
-                        }}
-                        className="text-[11px] font-bold text-blue-700 hover:text-blue-800 bg-blue-50 px-2 py-0.5 rounded-lg border border-blue-200 flex items-center gap-1"
-                        title="View order details and dishes"
-                      >
-                        <Eye className="w-3 h-3" />
-                        <span>{t('orders.viewDetails', 'View Order')}</span>
-                      </button>
+                  );
+                })}
+              </div>
 
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleOpenModify(tbl);
-                        }}
-                        className="text-[11px] font-bold text-amber-700 hover:text-amber-800 bg-amber-50 px-2 py-0.5 rounded-lg border border-amber-200 flex items-center gap-1"
-                        title="Modify dishes or add items"
-                      >
-                        <Edit2 className="w-3 h-3" />
-                        <span>Modify</span>
-                      </button>
+              {/* Legend */}
+              <div className="hidden md:flex md:items-center md:gap-3 text-[10px] sm:text-[11px] font-semibold text-slate-600">
+                <div className="flex items-center gap-1.5">
+                  <span className="w-2.5 h-2.5 rounded-full bg-emerald-500"></span>
+                  <span>{t('common.available', 'Available')}</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <span className="w-2.5 h-2.5 rounded-full bg-blue-500"></span>
+                  <span>{t('common.occupied', 'Occupied')}</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <span className="w-2.5 h-2.5 rounded-full bg-amber-500"></span>
+                  <span>{t('orders.kotSent', 'KOT Sent')}</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <span className="w-2.5 h-2.5 rounded-full bg-orange-500"></span>
+                  <span>{t('common.preparing', 'Preparing')}</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <span className="w-2.5 h-2.5 rounded-full bg-purple-500"></span>
+                  <span>{t('common.ready', 'Ready')}</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <span className="w-2.5 h-2.5 rounded-full bg-teal-500"></span>
+                  <span>{t('common.served', 'Served')}</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <span className="w-2.5 h-2.5 rounded-full bg-rose-500"></span>
+                  <span>{t('common.billed', 'Bill Pending')}</span>
+                </div>
+              </div>
+            </div>
+          )}
 
-                      {isBillPending && hasAnyPermission([PERMISSIONS.BILLING_GENERATE, PERMISSIONS.PAYMENT_COLLECT]) && (
+          {/* Tables Grid */}
+          {loading ? (
+            <div className="bg-white rounded-2xl border border-slate-200 p-12 text-center text-slate-500 font-medium">
+              {t('common.loading', 'Loading restaurant table floor...')}
+            </div>
+          ) : displayedTables.length === 0 ? (
+            <div className="bg-white rounded-2xl border border-slate-200 p-12 text-center text-slate-500 font-medium">
+              {t('tables.noTables', 'No dining tables configured in this area.')}
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3 sm:gap-4">
+              {displayedTables.map((tbl) => {
+                const statusConfig = getTableStatusConfig(tbl.status, t) || getTableStatusConfig(TABLE_STATUS.AVAILABLE, t);
+                const isBillPending = tbl.status === TABLE_STATUS.BILL_PENDING || tbl.status === 'BILLING' || tbl.status === 'PAYMENT_PENDING';
+                const cleanTableNo = String(tbl.tableNo || '').trim().replace(/^T-?/i, '');
+
+                // Common for all: Clicking table redirects directly to add/update order page
+                const handleCardClick = () => {
+                  if (!tbl.isActive) return;
+                  navigate(`/orders/new?tableId=${tbl.id}&from=tables`);
+                };
+
+                return (
+                  <div
+                    key={tbl.id}
+                    onClick={handleCardClick}
+                    className={`relative rounded-2xl border bg-white p-3.5 sm:p-5 shadow-xs transition-all flex flex-col justify-between min-h-[160px] sm:h-44 cursor-pointer ${
+                      !tbl.isActive
+                        ? 'opacity-50 border-dashed border-slate-300 cursor-not-allowed'
+                        : 'hover:shadow-md hover:border-blue-500 hover:scale-[1.01]'
+                    }`}
+                  >
+                    {/* Top Info */}
+                    <div className="flex items-start justify-between">
+                      <div>
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                          {getAreaName(tbl.areaId)}
+                        </span>
+                        <h3 className="text-xl sm:text-2xl font-black text-slate-800 tracking-tight mt-0.5">
+                          T-{cleanTableNo}
+                        </h3>
+                      </div>
+
+                      <span
+                        className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold border shrink-0 ${statusConfig.color}`}
+                      >
+                        <span className={`w-1.5 h-1.5 rounded-full ${statusConfig.dot}`}></span>
+                        {statusConfig.label}
+                      </span>
+                    </div>
+
+                    {/* Capacity & Attributes */}
+                    <div className="my-1.5 sm:my-2">
+                      <div className="flex items-center gap-1 text-[11px] sm:text-xs text-slate-600 font-semibold">
+                        <Users className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                        <span>{t('tables.seats', { count: tbl.capacity }, `${formatNumber(tbl.capacity)} Pax`)}</span>
+                      </div>
+                    </div>
+
+                    {/* Bottom Actions */}
+                    <div className="pt-2 border-t border-slate-100 flex flex-wrap items-center justify-between gap-1 text-xs">
+                      {tbl.status === TABLE_STATUS.AVAILABLE ? (
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
-                            navigate(`/billing?tableId=${tbl.id}`);
+                            navigate(`/orders/new?tableId=${tbl.id}&from=tables`);
                           }}
-                          className="text-[11px] font-bold text-emerald-700 hover:text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded-lg border border-emerald-300 flex items-center gap-1"
-                          title="Proceed to billing & payment desk"
+                          className="text-[11px] font-bold text-blue-600 hover:text-blue-700 bg-blue-50 px-2 py-0.5 rounded-lg border border-blue-200"
                         >
-                          <Receipt className="w-3 h-3" />
-                          <span>{t('billing.recordPayment', 'Bill')}</span>
+                          + {t('orders.newOrder', 'Take Order')}
+                        </button>
+                      ) : (
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              navigate(`/orders/new?tableId=${tbl.id}&from=tables`);
+                            }}
+                            className="text-[11px] font-bold text-blue-700 hover:text-blue-800 bg-blue-50 px-2 py-0.5 rounded-lg border border-blue-200 flex items-center gap-1"
+                            title="Add dishes or modify order"
+                          >
+                            <Edit2 className="w-3 h-3" />
+                            <span>{t('orders.modifyOrder', 'Order / Modify')}</span>
+                          </button>
+
+                          {!isCaptain && (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleOpenOrderDetails(tbl);
+                              }}
+                              className="text-[11px] font-bold text-slate-500 hover:text-slate-800 bg-slate-50 px-1.5 py-0.5 rounded-lg border border-slate-200 flex items-center gap-1"
+                              title="Inspect order details"
+                            >
+                              <Eye className="w-3 h-3" />
+                              <span>View</span>
+                            </button>
+                          )}
+
+                          {!isCaptain && isBillPending && hasAnyPermission([PERMISSIONS.BILLING_GENERATE, PERMISSIONS.PAYMENT_COLLECT]) && (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                navigate(`/billing?tableId=${tbl.id}`);
+                              }}
+                              className="text-[11px] font-bold text-emerald-700 hover:text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded-lg border border-emerald-300 flex items-center gap-1"
+                              title="Proceed to billing & payment desk"
+                            >
+                              <Receipt className="w-3 h-3" />
+                              <span>{t('billing.recordPayment', 'Bill')}</span>
+                            </button>
+                          )}
+                        </div>
+                      )}
+
+                      {tbl.status !== TABLE_STATUS.AVAILABLE && (
+                        <button
+                          onClick={(e) => handleOpenTransfer(tbl, e)}
+                          className="p-1 text-slate-400 hover:text-blue-600 rounded hover:bg-slate-100"
+                          title="Transfer Table Order to Another Table"
+                        >
+                          <ArrowRightLeft className="w-3.5 h-3.5" />
                         </button>
                       )}
-                    </div>
-                  )}
 
-                  {tbl.status !== TABLE_STATUS.AVAILABLE && (
-                    <button
-                      onClick={(e) => handleOpenTransfer(tbl, e)}
-                      className="p-1 text-slate-400 hover:text-blue-600 rounded hover:bg-slate-100"
-                      title="Transfer Table Order to Another Table"
-                    >
-                      <ArrowRightLeft className="w-3.5 h-3.5" />
-                    </button>
-                  )}
-
-                  {canManage && (
-                    <div className="flex items-center gap-1">
+                      {canManage && (
+                        <div className="flex items-center gap-1">
                       <button
                         onClick={(e) => handleOpenEdit(tbl, e)}
                         className="p-1 text-slate-400 hover:text-blue-600 rounded hover:bg-slate-100"
@@ -753,6 +870,8 @@ export const TablesPage = () => {
             );
           })}
         </div>
+      )}
+        </>
       )}
 
       {/* Add / Edit Table Modal */}
@@ -1243,16 +1362,8 @@ export const TablesPage = () => {
                   placeholder="Filter dishes by name, code or station..."
                   value={quickAddSearch}
                   onChange={(e) => setQuickAddSearch(e.target.value)}
+                  onClear={() => setQuickAddSearch('')}
                 />
-                {quickAddSearch && (
-                  <button
-                    type="button"
-                    onClick={() => setQuickAddSearch('')}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 text-xs font-bold px-1.5 py-0.5 rounded bg-slate-100"
-                  >
-                    Clear
-                  </button>
-                )}
               </div>
 
               {/* Category Filter Pills (Wrapped for easy viewing & scrolling on desktop & mobile) */}

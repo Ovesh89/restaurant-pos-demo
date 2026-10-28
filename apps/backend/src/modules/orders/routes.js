@@ -215,6 +215,7 @@ router.post(
       reason: req.body?.reason,
       actorId: req.user.id,
       actorName: req.user.displayName || req.user.username,
+      actorRole: req.user.role,
     });
     return successResponse(res, result, 'Order items modified successfully.');
   })

@@ -1,5 +1,6 @@
 import React from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
+import { useAuth } from '../hooks/useAuth';
 import { ProtectedRoute } from './ProtectedRoute';
 import { PermissionGuard } from './PermissionGuard';
 import { PERMISSIONS } from '../constants/permissions';
@@ -38,6 +39,10 @@ import { ShiftsPage } from '../pages/shifts/ShiftsPage';
 import { SettingsPage } from '../pages/settings/SettingsPage';
 
 export const AppRoutes = () => {
+  const { user, role } = useAuth();
+  const isCaptain = role === 'captain' || user?.role === 'captain';
+  const defaultHome = isCaptain ? '/tables' : '/dashboard';
+
   return (
     <Routes>
       {/* Auth Public Routes */}
@@ -53,8 +58,8 @@ export const AppRoutes = () => {
           </ProtectedRoute>
         }
       >
-        <Route path="/" element={<Navigate to="/dashboard" replace />} />
-        <Route path="/dashboard" element={<DashboardPage />} />
+        <Route path="/" element={<Navigate to={defaultHome} replace />} />
+        <Route path="/dashboard" element={isCaptain ? <Navigate to="/tables" replace /> : <DashboardPage />} />
 
         {/* Phase 2: Operations Workflow */}
         <Route

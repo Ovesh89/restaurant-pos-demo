@@ -643,7 +643,7 @@ class OrderService {
     };
   }
 
-  async addOrModifyItems({ orderId, itemsToAdd, reason = null, actorId, actorName }) {
+  async addOrModifyItems({ orderId, itemsToAdd, reason = null, actorId, actorName, actorRole = null }) {
     const order = await orderRepository.findById(orderId);
     if (!order) {
       throw new NotFoundAppError('Order not found.');
@@ -662,6 +662,12 @@ class OrderService {
     if (existingBill && existingBill.status === 'COMPLETED') {
       throw new StateConflictError(
         'Cannot modify items: the bill for this order has already been settled.'
+      );
+    }
+
+    if (existingBill && String(actorRole || '').toLowerCase() === 'captain') {
+      throw new StateConflictError(
+        'Cannot modify items: A bill has already been generated for this order. Captains are not permitted to alter or modify bills.'
       );
     }
 

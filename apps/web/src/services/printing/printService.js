@@ -458,6 +458,7 @@ export class PrintService {
       <html>
       <head>
         <title>Invoice - ${cleanBillNo}</title>
+        <meta name="bill-number" content="${rawBillNo}" />
         <style>
           @page {
             size: 80mm auto;

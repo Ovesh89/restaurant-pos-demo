@@ -56,6 +56,11 @@ class CustomerLocalRepository {
     return paginated;
   }
 
+  async searchCustomers(query) {
+    const list = await this.getCustomers(query);
+    return Array.isArray(list) ? list : (list?.items || []);
+  }
+
   async getCustomerById(id) {
     const customers = await this.getCustomers();
     return customers.find((c) => c.id === id) || null;

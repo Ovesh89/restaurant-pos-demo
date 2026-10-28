@@ -439,6 +439,9 @@ class OrderLocalRepository {
     if (linkedBill && ['COMPLETED', 'PAID'].includes(linkedBill.status)) {
       throw new Error('Cannot modify items on an order once the bill is settled.');
     }
+    if (linkedBill && String(actor?.role || '').toLowerCase() === 'captain') {
+      throw new Error('Cannot modify items: A bill has already been generated. Captains are not permitted to alter or modify bills.');
+    }
 
     const previousItems = [...order.items];
 

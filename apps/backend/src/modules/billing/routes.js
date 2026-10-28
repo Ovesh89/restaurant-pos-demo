@@ -24,12 +24,18 @@ router.post(
     const order = await orderService.getOrder(req.params.id);
     ensureBranchAccess(req.user, order.branchId);
 
+    const isCaptain = (req.user.role || '').toLowerCase() === 'captain';
     const discountData = req.body?.discount || null;
+
+    if (isCaptain && discountData && (toDecimal(discountData.value || 0).gt(0) || toDecimal(discountData.amount || 0).gt(0))) {
+      throw new PermissionDeniedAppError('Captains are not permitted to apply discounts.');
+    }
+
     const bill = await billingService.generateBill({
       orderId: req.params.id,
       actorId: req.user.id,
       actorName: req.user.displayName || req.user.username,
-      discountInput: discountData,
+      discountInput: isCaptain ? null : discountData,
     });
 
     const isExisting = Boolean(bill._isExisting);
@@ -86,6 +92,11 @@ router.post(
   authenticate,
   requireAnyPermission(['discount.apply', 'discount.approve', 'billing.discount']),
   asyncHandler(async (req, res) => {
+    const isCaptain = (req.user.role || '').toLowerCase() === 'captain';
+    if (isCaptain) {
+      throw new PermissionDeniedAppError('Captains are not permitted to apply discounts.');
+    }
+
     const bill = await billingService.getBill(req.params.id);
     ensureBranchAccess(req.user, bill.branchId);
 
@@ -131,6 +142,11 @@ router.post(
     'payment.collect',
   ]),
   asyncHandler(async (req, res) => {
+    const isCaptain = (req.user.role || '').toLowerCase() === 'captain';
+    if (isCaptain) {
+      throw new PermissionDeniedAppError('Captains are not permitted to close or alter bills.');
+    }
+
     const bill = await billingService.getBill(req.params.id);
     ensureBranchAccess(req.user, bill.branchId);
 

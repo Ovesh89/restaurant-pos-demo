@@ -23,12 +23,12 @@ export const AuditPage = () => {
   const [limit, setLimit] = useState(20);
   const [pagination, setPagination] = useState(null);
 
-  const loadLogs = async (overridePage = page, overrideLimit = limit) => {
+  const loadLogs = async (overridePage = page, overrideLimit = limit, overrideSearch = search) => {
     try {
       setLoading(true);
       const data = await auditRepository.getAuditLogs({
         action: actionFilter || undefined,
-        search: search.trim() || undefined,
+        search: (overrideSearch || '').trim() || undefined,
         page: overridePage,
         limit: overrideLimit,
       });
@@ -239,6 +239,16 @@ export const AuditPage = () => {
             placeholder={t('common.search', 'Search details or actor...')}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
+            onVoiceResult={(transcript) => {
+              setSearch(transcript);
+              setPage(1);
+              loadLogs(1, limit, transcript);
+            }}
+            onClear={() => {
+              setSearch('');
+              setPage(1);
+              loadLogs(1, limit, '');
+            }}
           />
         </form>
 

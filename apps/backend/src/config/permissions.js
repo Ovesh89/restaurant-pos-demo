@@ -93,9 +93,6 @@ export const PERMISSION_ALIASES = {
 
   // KOT
   'kot.manage': ['kot.send', 'kot.modify', 'kot.cancel'],
-  'kot.send': ['kot.manage'],
-  'kot.modify': ['kot.manage'],
-  'kot.cancel': ['kot.manage'],
 };
 
 /**
@@ -229,9 +226,6 @@ export const DEFAULT_ROLE_PERMISSIONS = {
     'billing.create',
     'billing.generate',
     'billing.print',
-    'billing.close',
-    'payment.record',
-    'payment.collect',
     'customer.edit',
   ],
   KITCHEN: [
