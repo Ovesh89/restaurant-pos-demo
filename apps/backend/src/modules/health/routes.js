@@ -49,12 +49,32 @@ router.get(['/ready', '/api/ready'], async (_req, res) => {
 });
 
 // OpenAPI 3.0 JSON Schema
-router.get('/api/schema', (_req, res) => {
+router.get(['/api/schema', '/api/schema/'], (_req, res) => {
   return res.status(200).json(openApiSpec);
 });
 
+// Swagger UI configuration options
+const swaggerUiOptions = {
+  explorer: true,
+  customSiteTitle: 'Restaurant POS & KOT Management API Docs',
+  swaggerOptions: {
+    persistAuthorization: true,
+    displayRequestDuration: true,
+    filter: true,
+    docExpansion: 'list',
+    defaultModelsExpandDepth: 2,
+    defaultModelExpandDepth: 2,
+    tryItOutEnabled: true,
+  },
+};
+
 // Swagger UI Interactive Docs
-router.use('/api/docs', swaggerUi.serve, swaggerUi.setup(openApiSpec));
+router.use('/api/docs', swaggerUi.serve, swaggerUi.setup(openApiSpec, swaggerUiOptions));
+
+// Convenient Swagger documentation redirects
+router.get(['/docs', '/docs/', '/swagger', '/swagger/', '/api/swagger'], (_req, res) => {
+  return res.redirect('/api/docs/');
+});
 
 // ReDoc HTML page
 router.get('/api/redoc', (_req, res) => {
