@@ -198,11 +198,24 @@ class OrderApiRepository {
       customerName,
       customerPhone,
       onlineOrderRef,
-      items: items.map((i) => ({
-        productId: i.productId,
-        quantity: Number(i.quantity) || 1,
-        note: i.notes?.trim() || i.note?.trim() || (notes ? notes.trim() : '')
-      })),
+      items: items.map((i) => {
+        const pId = i.productId || i.id;
+        const isCustomItem = Boolean(String(pId || '').startsWith('custom-') || i.isCustom || i.code === 'OFF-MENU');
+        return {
+          productId: pId,
+          name: i.name || i.productName,
+          productName: i.name || i.productName,
+          code: i.code || (isCustomItem ? 'OFF-MENU' : ''),
+          price: i.price !== undefined ? i.price : i.unitPrice,
+          unitPrice: i.unitPrice !== undefined ? i.unitPrice : i.price,
+          taxRate: i.taxRate !== undefined ? i.taxRate : 5,
+          station: i.station || i.kitchenStation || 'Main Curry',
+          kotRequired: i.kotRequired !== false,
+          isCustom: isCustomItem,
+          quantity: Number(i.quantity) || 1,
+          note: i.notes?.trim() || i.note?.trim() || (notes ? notes.trim() : '')
+        };
+      }),
       held: Boolean(isDraft),
       submitImmediately: !isDraft,
       autoApprove: Boolean(autoApprove),
@@ -265,7 +278,14 @@ class OrderApiRepository {
 
     // 1. Detect removed items and cancel them on the server
     const removedItems = prevItems.filter(
-      (pi) => (pi.status || 'ACTIVE') !== 'CANCELLED' && !updatedItems.some((ui) => ui.productId === pi.productId)
+      (pi) =>
+        (pi.status || 'ACTIVE') !== 'CANCELLED' &&
+        !updatedItems.some(
+          (ui) =>
+            (ui.productId && ui.productId === pi.productId) ||
+            (ui.id && ui.id === pi.id) ||
+            (ui._id && ui._id === pi._id)
+        )
     );
     for (const rem of removedItems) {
       await apiClient.post(`/orders/${targetOrderId}/cancel-item`, {
@@ -276,33 +296,72 @@ class OrderApiRepository {
 
     // 2. Detect added items or increased quantities
     let itemsToAdd = [];
-    const hasExistingProducts = updatedItems.some((ni) =>
-      prevItems.some((pi) => pi.productId === ni.productId)
-    );
+    const hasExistingProducts = updatedItems.some((ni) => {
+      const nId = ni.productId || ni.id;
+      return prevItems.some((pi) => pi.productId === nId || pi.id === nId || pi._id === nId);
+    });
 
     if (hasExistingProducts) {
       updatedItems.forEach((newItm) => {
-        const oldItm = prevItems.find((oi) => oi.productId === newItm.productId && (oi.status || 'ACTIVE') !== 'CANCELLED');
+        const targetPId = newItm.productId || newItm.id;
+        const oldItm = prevItems.find(
+          (oi) =>
+            (oi.productId === targetPId || oi.id === targetPId || oi._id === targetPId) &&
+            (oi.status || 'ACTIVE') !== 'CANCELLED'
+        );
+        const isCustomItem = Boolean(String(targetPId || '').startsWith('custom-') || newItm.isCustom || newItm.code === 'OFF-MENU');
+
         if (!oldItm) {
           itemsToAdd.push({
-            productId: newItm.productId,
+            productId: targetPId,
+            name: newItm.name || newItm.productName,
+            productName: newItm.name || newItm.productName,
+            code: newItm.code || (isCustomItem ? 'OFF-MENU' : ''),
+            price: newItm.price !== undefined ? newItm.price : newItm.unitPrice,
+            unitPrice: newItm.unitPrice !== undefined ? newItm.unitPrice : newItm.price,
+            taxRate: newItm.taxRate !== undefined ? newItm.taxRate : 5,
+            station: newItm.station || newItm.kitchenStation || 'Main Curry',
+            kotRequired: newItm.kotRequired !== false,
+            isCustom: isCustomItem,
             quantity: Number(newItm.quantity) || 1,
             note: newItm.notes || newItm.note || ''
           });
         } else if (newItm.quantity > oldItm.quantity) {
           itemsToAdd.push({
-            productId: newItm.productId,
+            productId: targetPId,
+            name: newItm.name || newItm.productName,
+            productName: newItm.name || newItm.productName,
+            code: newItm.code || (isCustomItem ? 'OFF-MENU' : ''),
+            price: newItm.price !== undefined ? newItm.price : newItm.unitPrice,
+            unitPrice: newItm.unitPrice !== undefined ? newItm.unitPrice : newItm.price,
+            taxRate: newItm.taxRate !== undefined ? newItm.taxRate : 5,
+            station: newItm.station || newItm.kitchenStation || 'Main Curry',
+            kotRequired: newItm.kotRequired !== false,
+            isCustom: isCustomItem,
             quantity: newItm.quantity - oldItm.quantity,
             note: newItm.notes || newItm.note || ''
           });
         }
       });
     } else {
-      itemsToAdd = updatedItems.map((it) => ({
-        productId: it.productId,
-        quantity: Number(it.quantity) || 1,
-        note: it.notes || it.note || ''
-      }));
+      itemsToAdd = updatedItems.map((it) => {
+        const targetPId = it.productId || it.id;
+        const isCustomItem = Boolean(String(targetPId || '').startsWith('custom-') || it.isCustom || it.code === 'OFF-MENU');
+        return {
+          productId: targetPId,
+          name: it.name || it.productName,
+          productName: it.name || it.productName,
+          code: it.code || (isCustomItem ? 'OFF-MENU' : ''),
+          price: it.price !== undefined ? it.price : it.unitPrice,
+          unitPrice: it.unitPrice !== undefined ? it.unitPrice : it.price,
+          taxRate: it.taxRate !== undefined ? it.taxRate : 5,
+          station: it.station || it.kitchenStation || 'Main Curry',
+          kotRequired: it.kotRequired !== false,
+          isCustom: isCustomItem,
+          quantity: Number(it.quantity) || 1,
+          note: it.notes || it.note || ''
+        };
+      });
     }
 
     let deltaKOT = null;

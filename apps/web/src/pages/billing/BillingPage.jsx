@@ -36,6 +36,7 @@ import { printService, formatReceiptSequence } from '../../services/printing/pri
 import { billingCalculator, DISCOUNT_TYPES, PAYMENT_MODES } from '../../services/calculations/billingCalculator';
 import { useAuth } from '../../hooks/useAuth';
 import { useTranslation } from '../../hooks/useTranslation';
+import { useRestaurant } from '../../context/RestaurantContext';
 import { PageHeader } from '../../components/common/PageHeader';
 import { Button } from '../../components/common/Button';
 import { Input } from '../../components/common/Input';
@@ -112,6 +113,10 @@ export const BillingPage = () => {
   const { user, role } = useAuth();
   const isCaptain = role === 'captain' || user?.role === 'captain';
   const { t, formatCurrency, formatNumber } = useTranslation();
+  const { settings } = useRestaurant();
+  const effectiveTaxRate = settings?.defaultTaxRate !== undefined && !isNaN(Number(settings.defaultTaxRate))
+    ? Number(settings.defaultTaxRate)
+    : 5.0;
   const [searchParams, setSearchParams] = useSearchParams();
   const hasAutoOpenedRef = useRef(false);
 
@@ -368,6 +373,7 @@ export const BillingPage = () => {
         bill = await billRepository.generateBill({
           order,
           discount: { type: DISCOUNT_TYPES.FIXED, value: 0, reason: '' },
+          taxRate: effectiveTaxRate,
           actor
         });
       } catch (genErr) {
@@ -465,6 +471,7 @@ export const BillingPage = () => {
           reason: discountReason.trim() || 'Discount'
         },
         customer: selectedCustomer,
+        taxRate: effectiveTaxRate,
         actor
       });
       setActiveBill(bill);
@@ -776,6 +783,7 @@ export const BillingPage = () => {
           reason: discountReason.trim() || 'Discount'
         },
         customer: selectedCustomer,
+        taxRate: effectiveTaxRate,
         actor
       });
       setActiveBill(freshBill);
@@ -1591,7 +1599,13 @@ export const BillingPage = () => {
                   </div>
 
                   <div className="flex justify-between text-slate-400">
-                    <span>{t('billing.totalTax', null, 'CGST (2.5%) + SGST (2.5%):')}</span>
+                    <span>
+                      {(() => {
+                        const rate = Number(activeBill.taxRate !== undefined ? activeBill.taxRate : effectiveTaxRate);
+                        const half = (rate / 2).toFixed(1).replace(/\.0$/, '');
+                        return t('billing.totalTax', null, `CGST (${half}%) + SGST (${half}%):`);
+                      })()}
+                    </span>
                     <span className="font-mono text-white">₹{formatNumber(activeBill.taxAmount?.toFixed(2))}</span>
                   </div>
 
@@ -2001,7 +2015,12 @@ export const BillingPage = () => {
                   <span className="font-mono">₹{formatNumber(inspectInvoiceBill.taxableValue || inspectInvoiceBill.taxableAmount)}</span>
                 </div>
                 <div className="flex justify-between text-slate-600">
-                  <span>{t('billing.totalTax', null, 'CGST + SGST:')}</span>
+                  <span>
+                    {(() => {
+                      const rate = Number(inspectInvoiceBill.taxRate !== undefined ? inspectInvoiceBill.taxRate : effectiveTaxRate);
+                      return t('billing.totalTax', null, `CGST + SGST (${rate}%):`);
+                    })()}
+                  </span>
                   <span className="font-mono">₹{formatNumber(inspectInvoiceBill.taxAmount || inspectInvoiceBill.tax)}</span>
                 </div>
                 <div className="pt-2 border-t border-slate-200 flex justify-between items-center text-sm font-black text-slate-900">

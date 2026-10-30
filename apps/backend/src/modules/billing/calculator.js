@@ -7,8 +7,8 @@ export class BillingCalculator {
     branchTaxConfig = null,
     paidAmountInput = '0.00',
   } = {}) {
-    const taxConfig = branchTaxConfig || { gstRate: '5.00', mode: 'EXCLUSIVE' };
-    const defaultRate = toDecimal(taxConfig.gstRate ?? taxConfig.rate ?? '5.00');
+    const taxConfig = branchTaxConfig || { rate: '5.00', gstRate: '5.00', mode: 'EXCLUSIVE' };
+    const defaultRate = toDecimal(taxConfig.rate ?? taxConfig.gstRate ?? '5.00');
     const defaultMode = String(taxConfig.mode || 'EXCLUSIVE').toUpperCase();
 
     let subtotal = toDecimal(0);
@@ -108,6 +108,8 @@ export class BillingCalculator {
       discount: discountMeta,
       taxableAmount: formatMoney(taxableAmount),
       tax: formatMoney(taxAmount),
+      taxRate: formatMoney(defaultRate),
+      taxMode: defaultMode,
       cgst: formatMoney(cgstAmount),
       sgst: formatMoney(sgstAmount),
       taxBreakdown: [

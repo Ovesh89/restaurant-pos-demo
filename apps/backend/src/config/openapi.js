@@ -910,6 +910,34 @@ export const openApiSpec = {
         },
       },
     },
+    '/api/v1/tables/transfer': {
+      post: {
+        tags: ['Restaurant & Master Data'],
+        summary: 'Shift / transfer active order from one table to another',
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['fromTableId', 'toTableId'],
+                properties: {
+                  fromTableId: { type: 'string', example: 'tbl-01' },
+                  toTableId: { type: 'string', example: 'tbl-02' },
+                  reason: { type: 'string', example: 'Guest requested window seat' },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          200: { description: 'Table order shifted successfully and source table released' },
+          400: { description: 'Validation error (e.g. same table or inactive table)' },
+          404: { description: 'Source table, dest table, or active order not found' },
+          409: { description: 'Destination table is already occupied' },
+        },
+      },
+    },
     '/api/v1/tables/{tableId}': {
       get: {
         tags: ['Restaurant & Master Data'],

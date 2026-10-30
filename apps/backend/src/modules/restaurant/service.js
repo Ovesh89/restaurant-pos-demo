@@ -5,7 +5,10 @@ import {
 } from '../../middleware/errorHandler.js';
 import { ensureBranchAccess } from '../../middleware/permissions.js';
 import { auditService } from '../audit/service.js';
-import { orderRepository } from '../orders/repositories.js';
+import { orderRepository, orderEventRepository } from '../orders/repositories.js';
+import { kotRepository } from '../kot/repository.js';
+import { billRepository } from '../billing/repositories.js';
+import { utcNowIso } from '../../repositories/BaseMongoRepository.js';
 import {
   areaRepository,
   branchRepository,
@@ -631,6 +634,213 @@ export class RestaurantService {
     });
 
     return updated;
+  }
+
+  async transferTable({ fromTableId, toTableId, reason = '' }, user) {
+    if (!fromTableId || !toTableId) {
+      throw new ValidationAppError('Both source and destination tables are required.');
+    }
+    if (String(fromTableId).trim() === String(toTableId).trim()) {
+      throw new ValidationAppError('Destination table cannot be the same as source table.');
+    }
+
+    // Resolve source table by id or number
+    let fromTable = await this.tableRepo.findById(fromTableId);
+    if (!fromTable && user?.branchIds?.[0]) {
+      fromTable = await this.tableRepo.findByBranchAndNumber(user.branchIds[0], fromTableId);
+    }
+    if (!fromTable) {
+      throw new NotFoundAppError(`Source table '${fromTableId}' not found.`);
+    }
+
+    const branchId = fromTable.branchId;
+    ensureBranchAccess(user, branchId);
+
+    // Resolve destination table by id or number
+    let toTable = await this.tableRepo.findById(toTableId);
+    if (!toTable) {
+      toTable = await this.tableRepo.findByBranchAndNumber(branchId, toTableId);
+    }
+    if (!toTable) {
+      throw new NotFoundAppError(`Destination table '${toTableId}' not found.`);
+    }
+
+    if (toTable.branchId !== branchId) {
+      throw new ValidationAppError('Destination table must belong to the same branch.');
+    }
+
+    if (String(fromTable.id || fromTable._id) === String(toTable.id || toTable._id)) {
+      throw new ValidationAppError('Destination table cannot be the same as source table.');
+    }
+
+    if (toTable.isActive === false) {
+      throw new ValidationAppError(`Destination Table ${toTable.tableNumber} is deactivated.`);
+    }
+
+    // Check if destination table is occupied
+    const activeDestOrder = await orderRepository.findActiveByTable(branchId, toTable._id || toTable.id);
+    if (activeDestOrder || (toTable.status && toTable.status !== 'AVAILABLE')) {
+      throw new ConflictAppError(
+        `Destination Table ${toTable.tableNumber} is currently occupied (${toTable.status || 'Active Order'}).`
+      );
+    }
+
+    // Find active order on source table
+    let activeOrder = await orderRepository.findActiveByTable(branchId, fromTable._id || fromTable.id);
+    if (!activeOrder && fromTable.activeOrderId) {
+      activeOrder = await orderRepository.findById(fromTable.activeOrderId);
+      if (
+        activeOrder &&
+        ['COMPLETED', 'CANCELLED', 'REJECTED'].includes(activeOrder.status)
+      ) {
+        activeOrder = null;
+      }
+    }
+    if (!activeOrder) {
+      activeOrder = await orderRepository.findOne({
+        branchId,
+        tableNumber: fromTable.tableNumber,
+        status: { $nin: ['COMPLETED', 'CANCELLED', 'REJECTED'] },
+      });
+    }
+
+    if (!activeOrder) {
+      throw new NotFoundAppError(`No active order found on Table ${fromTable.tableNumber} to transfer.`);
+    }
+
+    const now = utcNowIso();
+    const orderId = activeOrder.id || activeOrder._id;
+    const fromTableNum = fromTable.tableNumber;
+    const toTableNum = toTable.tableNumber;
+
+    // 1. Shift the order to the new table without changing order items or totals
+    const cleanReason = String(reason || '').trim();
+    const transferNote = `[Transferred from Table ${fromTableNum} to Table ${toTableNum}${cleanReason ? ': ' + cleanReason : ''}]`;
+    const newNotes = activeOrder.notes
+      ? `${activeOrder.notes} ${transferNote}`
+      : transferNote;
+
+    await orderRepository.updateById(orderId, {
+      tableId: toTable._id || toTable.id,
+      tableNumber: toTableNum,
+      notes: newNotes,
+      updatedAt: now,
+    });
+
+    // 2. Update active KOT tickets so kitchen display & printing reflect the new table
+    try {
+      const orderKots = await kotRepository.findByOrder(orderId);
+      if (Array.isArray(orderKots)) {
+        for (const kot of orderKots) {
+          await kotRepository.updateById(kot.id || kot._id, {
+            tableId: toTable._id || toTable.id,
+            tableNumber: toTableNum,
+            updatedAt: now,
+          });
+        }
+      }
+    } catch (e) {
+      console.warn('Warning: Failed to update KOT table numbers during table transfer:', e);
+    }
+
+    // 3. Update any active bills for this order
+    try {
+      const orderBills = await billRepository.findByOrder(orderId);
+      if (Array.isArray(orderBills)) {
+        for (const bill of orderBills) {
+          await billRepository.updateById(bill.id || bill._id, {
+            tableId: toTable._id || toTable.id,
+            tableNumber: toTableNum,
+            updatedAt: now,
+          });
+        }
+      }
+    } catch (e) {
+      console.warn('Warning: Failed to update Bill table numbers during table transfer:', e);
+    }
+
+    // 4. Determine destination table operational status
+    let destStatus = fromTable.status;
+    if (!destStatus || destStatus === 'AVAILABLE') {
+      if (['DRAFT', 'HOLD', 'WAITING_CONFIRMATION'].includes(activeOrder.status)) {
+        destStatus = 'OCCUPIED';
+      } else if (['CONFIRMED', 'KOT_SENT'].includes(activeOrder.status)) {
+        destStatus = 'KOT_SENT';
+      } else if (activeOrder.status === 'PREPARING') {
+        destStatus = 'PREPARING';
+      } else if (activeOrder.status === 'READY') {
+        destStatus = 'READY';
+      } else if (activeOrder.status === 'SERVED') {
+        destStatus = 'SERVED';
+      } else if (['BILLING', 'BILL_PENDING', 'PAYMENT_PENDING'].includes(activeOrder.status)) {
+        destStatus = 'BILL_PENDING';
+      } else {
+        destStatus = 'OCCUPIED';
+      }
+    }
+
+    // 5. Release fromTable back to AVAILABLE
+    await this.tableRepo.updateById(fromTable.id || fromTable._id, {
+      status: 'AVAILABLE',
+      activeOrderId: null,
+      currentOrderId: null,
+      updatedAt: now,
+    });
+
+    // 6. Occupy toTable with the transferred order
+    await this.tableRepo.updateById(toTable.id || toTable._id, {
+      status: destStatus,
+      activeOrderId: orderId,
+      currentOrderId: orderId,
+      updatedAt: now,
+    });
+
+    // 7. Record Order Event
+    await orderEventRepository.recordEvent({
+      orderId,
+      branchId,
+      eventType: 'TABLE_TRANSFERRED',
+      fromStatus: activeOrder.status,
+      toStatus: activeOrder.status,
+      actorId: user?.id || 'staff',
+      reason: cleanReason,
+      metadata: {
+        fromTableId: fromTable._id || fromTable.id,
+        fromTableNumber: fromTableNum,
+        toTableId: toTable._id || toTable.id,
+        toTableNumber: toTableNum,
+        reason: cleanReason || null,
+      },
+    });
+
+    // 8. Audit Log
+    await auditService.logAction({
+      branchId,
+      action: 'TABLE_TRANSFERRED',
+      entityType: 'table',
+      entityId: fromTable.id || fromTable._id,
+      actorUserId: user?.id || 'staff',
+      actorName: user?.displayName || user?.name || user?.username || 'Staff',
+      metadata: {
+        fromTableNumber: fromTableNum,
+        toTableId: toTable._id || toTable.id,
+        toTableNumber: toTableNum,
+        orderId,
+        orderNumber: activeOrder.orderNumber,
+        reason: cleanReason,
+      },
+    });
+
+    // 9. Fetch updated representations
+    const updatedOrder = await orderRepository.findById(orderId);
+    const updatedFromTable = await this.tableRepo.findById(fromTable.id || fromTable._id);
+    const updatedToTable = await this.tableRepo.findById(toTable.id || toTable._id);
+
+    return {
+      order: updatedOrder,
+      fromTable: updatedFromTable,
+      toTable: updatedToTable,
+    };
   }
 }
 

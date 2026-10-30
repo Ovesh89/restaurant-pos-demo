@@ -965,34 +965,52 @@ export const TablesPage = () => {
             </p>
           </div>
 
-          <Select
-            label={t('tables.destTable', 'Destination Available Table')}
-            value={transferTargetTableId}
-            onChange={(e) => setTransferTargetTableId(e.target.value)}
-            options={tables
-              .filter((t) => t.status === TABLE_STATUS.AVAILABLE && t.isActive && t.id !== transferSourceTable?.id)
-              .map((t) => ({
-                value: t.id,
-                label: `Table ${t.tableNo} (${t.capacity} Pax - ${getAreaName(t.areaId)})`
-              }))}
-            required
-          />
+          {(() => {
+            const availDestTables = tables.filter((t) => t.status === TABLE_STATUS.AVAILABLE && t.isActive && t.id !== transferSourceTable?.id);
+            return (
+              <>
+                {availDestTables.length === 0 ? (
+                  <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-800 font-medium">
+                    No other tables are currently available to shift this order to. All other tables are occupied or inactive.
+                  </div>
+                ) : (
+                  <Select
+                    label={t('tables.destTable', 'Destination Available Table')}
+                    value={transferTargetTableId}
+                    onChange={(e) => setTransferTargetTableId(e.target.value)}
+                    options={availDestTables.map((t) => ({
+                      value: t.id,
+                      label: `Table ${t.tableNo} (${t.capacity} Pax - ${getAreaName(t.areaId)})`
+                    }))}
+                    required
+                  />
+                )}
 
-          <Input
-            label={t('tables.transferReason', 'Reason for Transfer')}
-            placeholder="e.g. Guest requested window booth / AC section"
-            value={transferReason}
-            onChange={(e) => setTransferReason(e.target.value)}
-          />
+                <Input
+                  label={t('tables.transferReason', 'Reason for Transfer')}
+                  placeholder="e.g. Guest requested window booth / AC section"
+                  value={transferReason}
+                  onChange={(e) => setTransferReason(e.target.value)}
+                />
 
-          <div className="flex flex-col sm:flex-row justify-end gap-2 pt-4 border-t border-slate-100 pos-modal-actions">
-            <Button variant="secondary" className="w-full sm:w-auto" onClick={() => setIsTransferModalOpen(false)}>
-              {t('common.cancel', 'Cancel')}
-            </Button>
-            <Button type="submit" variant="primary" icon={ArrowRightLeft} className="w-full sm:w-auto" loading={transferLoading}>
-              {t('tables.confirmTransfer', 'Confirm Transfer')}
-            </Button>
-          </div>
+                <div className="flex flex-col sm:flex-row justify-end gap-2 pt-4 border-t border-slate-100 pos-modal-actions">
+                  <Button variant="secondary" className="w-full sm:w-auto" onClick={() => setIsTransferModalOpen(false)}>
+                    {t('common.cancel', 'Cancel')}
+                  </Button>
+                  <Button
+                    type="submit"
+                    variant="primary"
+                    icon={ArrowRightLeft}
+                    className="w-full sm:w-auto"
+                    loading={transferLoading}
+                    disabled={availDestTables.length === 0}
+                  >
+                    {t('tables.confirmTransfer', 'Confirm Transfer')}
+                  </Button>
+                </div>
+              </>
+            );
+          })()}
         </form>
       </Modal>
 
@@ -1208,6 +1226,21 @@ export const TablesPage = () => {
                 className="bg-blue-600 hover:bg-blue-700 text-white font-bold sm:mr-auto"
               >
                 Modify Order &amp; Add Dishes
+              </Button>
+
+              <Button
+                variant="secondary"
+                icon={ArrowRightLeft}
+                onClick={() => {
+                  const targetTbl = selectedTable || tables.find((t) => t.id === selectedOrder?.tableId);
+                  setIsOrderDetailsOpen(false);
+                  if (targetTbl) {
+                    handleOpenTransfer(targetTbl);
+                  }
+                }}
+                className="text-blue-700 border-blue-300 hover:bg-blue-50 font-bold"
+              >
+                Shift Table
               </Button>
 
               {hasAnyPermission([PERMISSIONS.BILLING_GENERATE, PERMISSIONS.PAYMENT_COLLECT]) && (

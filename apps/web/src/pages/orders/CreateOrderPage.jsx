@@ -124,18 +124,26 @@ export const CreateOrderPage = () => {
         setExistingOrder(activeOrd);
         const activeItems = (activeOrd.items || [])
           .filter((i) => (i.status || 'ACTIVE') !== 'CANCELLED')
-          .map((i) => ({
-            productId: i.productId || i.id || i._id,
-            name: i.name,
-            code: i.code || '',
-            price: i.unitPrice !== undefined ? Number(i.unitPrice) : Number(i.price || 0),
-            taxRate: i.taxRate !== undefined ? Number(i.taxRate) : 5,
-            station: i.station || 'Main Curry',
-            kotRequired: i.kotRequired !== false,
-            quantity: Number(i.quantity) || 1,
-            notes: i.notes || i.note || '',
-            id: i.id || i._id
-          }));
+          .map((i) => {
+            const pId = i.productId || i.id || i._id;
+            const pPrice = i.unitPrice !== undefined ? Number(i.unitPrice) : Number(i.price || 0);
+            const isCustomItem = Boolean(i.isCustom || String(pId || '').startsWith('custom-') || i.code === 'OFF-MENU');
+            return {
+              productId: pId,
+              id: i.id || i._id || pId,
+              name: i.name || i.productName || 'Special Item',
+              productName: i.productName || i.name || 'Special Item',
+              code: i.code || (isCustomItem ? 'OFF-MENU' : ''),
+              price: pPrice,
+              unitPrice: pPrice,
+              taxRate: i.taxRate !== undefined ? Number(i.taxRate) : (i.taxConfig?.rate ? Number(i.taxConfig.rate) : 5),
+              station: i.station || 'Main Curry',
+              kotRequired: i.kotRequired !== false,
+              isCustom: isCustomItem,
+              quantity: Number(i.quantity) || 1,
+              notes: i.notes || i.note || '',
+            };
+          });
         setCart(activeItems);
         if (activeOrd.customerName) setCustomerName(activeOrd.customerName);
         if (activeOrd.customerPhone) setCustomerPhone(activeOrd.customerPhone);
@@ -285,14 +293,21 @@ export const CreateOrderPage = () => {
     }
     if (!customItem.name.trim() || !customItem.price) return;
 
+    const customId = `custom-${Date.now()}`;
+    const cleanName = `${customItem.name.trim()} (Special)`;
+    const priceNum = Number(customItem.price) || 0;
     const newItem = {
-      productId: `custom-${Date.now()}`,
-      name: `${customItem.name.trim()} (Special)`,
+      productId: customId,
+      id: customId,
+      name: cleanName,
+      productName: cleanName,
       code: 'OFF-MENU',
-      price: Number(customItem.price),
+      price: priceNum,
+      unitPrice: priceNum,
       taxRate: 5,
-      station: customItem.station,
+      station: customItem.station || 'Main Curry',
       kotRequired: true,
+      isCustom: true,
       quantity: Number(customItem.quantity) || 1,
       notes: customItem.notes.trim()
     };
@@ -399,6 +414,7 @@ export const CreateOrderPage = () => {
         const freshBill = await billRepository.generateBill({
           order: freshOrder || existingOrder,
           discount: { type: 'FIXED', value: 0 },
+          taxRate,
           customer: { name: customerName, mobile: customerPhone },
           actor
         });
@@ -428,6 +444,7 @@ export const CreateOrderPage = () => {
       const bill = await billRepository.generateBill({
         order: targetOrder,
         discount: { type: 'FIXED', value: 0 },
+        taxRate,
         customer: { name: customerName, mobile: customerPhone },
         actor
       });
@@ -453,6 +470,7 @@ export const CreateOrderPage = () => {
         billToPrint = await billRepository.generateBill({
           order: targetOrder,
           discount: { type: 'FIXED', value: 0 },
+          taxRate,
           customer: { name: customerName, mobile: customerPhone },
           actor
         });
@@ -512,7 +530,9 @@ export const CreateOrderPage = () => {
 
   const subtotal = cart.reduce((acc, item) => acc + item.quantity * item.price, 0);
   const totalCartItems = cart.reduce((a, b) => a + b.quantity, 0);
-  const taxRate = 5;
+  const taxRate = settings?.defaultTaxRate !== undefined && !isNaN(Number(settings.defaultTaxRate))
+    ? Number(settings.defaultTaxRate)
+    : 5.0;
   const taxAmount = Math.round(subtotal * (taxRate / 100) * 100) / 100;
   const grandTotal = Math.round(subtotal + taxAmount);
 
@@ -1078,7 +1098,7 @@ export const CreateOrderPage = () => {
             {/* Compact Amount Breakdown */}
             <div className="pt-1.5 border-t border-slate-200 space-y-0.5 text-xs">
               <div className="flex items-center justify-between text-slate-500 text-[11px]">
-                <span>{t('billing.subtotalAmount', null, 'Subtotal')} / GST (5%)</span>
+                <span>{t('billing.subtotalAmount', null, 'Subtotal')} / GST ({taxRate}%)</span>
                 <span>₹{formatNumber(subtotal)} + ₹{formatNumber(taxAmount)}</span>
               </div>
               <div className="flex items-center justify-between font-black text-slate-900 text-sm sm:text-base">

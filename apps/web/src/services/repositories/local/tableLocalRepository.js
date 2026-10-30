@@ -215,6 +215,40 @@ class TableLocalRepository {
     tables[toIdx] = toTable;
     storageAdapter.setItem(STORAGE_KEYS.TABLES, tables);
 
+    // Also update associated KOTs and Bills in local mode
+    const kots = storageAdapter.getItem(STORAGE_KEYS.KOTS) || [];
+    let kotsUpdated = false;
+    kots.forEach((k) => {
+      if (k.orderId === activeOrder.id) {
+        k.tableId = toTable.id;
+        k.tableNo = toTable.tableNo;
+        k.tableNumber = toTable.tableNo;
+        kotsUpdated = true;
+      }
+    });
+    if (kotsUpdated) storageAdapter.setItem(STORAGE_KEYS.KOTS, kots);
+
+    const bills = storageAdapter.getItem(STORAGE_KEYS.BILLS) || [];
+    let billsUpdated = false;
+    bills.forEach((b) => {
+      if (b.orderId === activeOrder.id) {
+        b.tableId = toTable.id;
+        b.tableNo = toTable.tableNo;
+        b.tableNumber = toTable.tableNo;
+        billsUpdated = true;
+      }
+    });
+    if (billsUpdated) storageAdapter.setItem(STORAGE_KEYS.BILLS, bills);
+
+    await auditRepository.logEvent({
+      actorId: actor.id,
+      actorName: actor.name,
+      action: 'TABLE_TRANSFERRED',
+      entityType: 'Table',
+      entityId: fromTable.id,
+      details: `Shifted order ${activeOrder.orderNo || activeOrder.orderNumber || ''} from Table ${fromTable.tableNo} to Table ${toTable.tableNo}${reason ? ` (Reason: ${reason})` : ''}.`
+    });
+
     return { order: activeOrder, fromTable, toTable };
   }
 

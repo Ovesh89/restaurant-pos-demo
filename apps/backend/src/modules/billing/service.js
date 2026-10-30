@@ -45,6 +45,17 @@ class BillingService {
       ],
     });
     if (existingBill) {
+      if (existingBill.status === 'PAYMENT_PENDING') {
+        const refreshed = await this.syncUnsettledBill(canonicalOrderId, discountInput);
+        if (refreshed) {
+          const payments = await paymentRepository.findByBill(refreshed._id || refreshed.id);
+          return {
+            ...refreshed,
+            payments,
+            _isExisting: true,
+          };
+        }
+      }
       const payments = await paymentRepository.findByBill(existingBill._id);
       return {
         ...existingBill,
@@ -89,6 +100,8 @@ class BillingService {
       discount: calcResult.discount,
       taxableAmount: calcResult.taxableAmount,
       tax: calcResult.tax,
+      taxRate: calcResult.taxRate,
+      taxMode: calcResult.taxMode,
       cgst: calcResult.cgst,
       sgst: calcResult.sgst,
       taxBreakdown: calcResult.taxBreakdown,
@@ -271,7 +284,7 @@ class BillingService {
    * Automatically synchronizes an existing unsettled bill when order items are modified or removed.
    * Recalculates subtotal, discount, taxes, and balance based on currently active order items.
    */
-  async syncUnsettledBill(orderId) {
+  async syncUnsettledBill(orderId, overrideDiscount = null) {
     const order = await orderRepository.findById(orderId);
     if (!order) return null;
     const canonicalOrderId = order._id;
@@ -291,11 +304,13 @@ class BillingService {
       (it) => (it.status || 'ACTIVE') !== 'CANCELLED'
     );
     const branch = await branchRepository.findById(order.branchId);
-    const branchTaxConfig = branch?.taxConfig || { gstRate: '5.00', mode: 'EXCLUSIVE' };
+    const branchTaxConfig = branch?.taxConfig || { rate: '5.00', gstRate: '5.00', mode: 'EXCLUSIVE' };
+
+    const discountToUse = overrideDiscount !== null ? overrideDiscount : bill.discount;
 
     const calcResult = BillingCalculator.calculateBill({
       items: activeItems,
-      discountInput: bill.discount,
+      discountInput: discountToUse,
       branchTaxConfig,
       paidAmountInput: bill.paidAmount || '0.00',
     });
@@ -307,6 +322,8 @@ class BillingService {
       discount: calcResult.discount,
       taxableAmount: calcResult.taxableAmount,
       tax: calcResult.tax,
+      taxRate: calcResult.taxRate,
+      taxMode: calcResult.taxMode,
       cgst: calcResult.cgst,
       sgst: calcResult.sgst,
       taxBreakdown: calcResult.taxBreakdown,

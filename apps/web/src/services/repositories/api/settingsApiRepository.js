@@ -14,8 +14,14 @@ class SettingsApiRepository {
         return { ...DEFAULT_SETTINGS, ...(cached || {}) };
       }
 
-      const taxRate = Number(branch.taxConfig?.rate !== undefined ? branch.taxConfig.rate : DEFAULT_SETTINGS.defaultTaxRate);
-      const gstin = branch.taxConfig?.gstin || DEFAULT_SETTINGS.gstin;
+      const taxRate = Number(
+        branch.taxConfig?.rate !== undefined
+          ? branch.taxConfig.rate
+          : branch.taxConfig?.gstRate !== undefined
+          ? branch.taxConfig.gstRate
+          : (branch.defaultTaxRate !== undefined ? branch.defaultTaxRate : DEFAULT_SETTINGS.defaultTaxRate)
+      );
+      const gstin = branch.taxConfig?.gstin || branch.gstin || DEFAULT_SETTINGS.gstin;
       const invoicePrefix = branch.invoiceConfig?.prefix || DEFAULT_SETTINGS.invoicePrefix;
       const receiptFooter = branch.invoiceConfig?.terms || DEFAULT_SETTINGS.receiptFooter;
       const cached = storageAdapter.getItem(STORAGE_KEYS.SETTINGS);
@@ -57,6 +63,12 @@ class SettingsApiRepository {
   async updateSettings(newSettings, actor = { id: 'admin', name: 'Admin' }) {
     const branchId = APP_CONFIG.DEFAULT_BRANCH_ID || 'branch-main';
 
+    const taxRateNum = (newSettings.defaultTaxRate !== undefined && newSettings.defaultTaxRate !== null && !isNaN(Number(newSettings.defaultTaxRate)))
+      ? Number(newSettings.defaultTaxRate)
+      : 5;
+    const taxMode = newSettings.taxMode || newSettings.taxConfig?.mode || 'EXCLUSIVE';
+    const gstin = newSettings.gstin || '';
+
     const payload = {
       restaurantName: newSettings.restaurantName || newSettings.branchName,
       tagline: newSettings.tagline !== undefined ? newSettings.tagline : '',
@@ -64,7 +76,7 @@ class SettingsApiRepository {
       address: newSettings.address,
       phone: newSettings.phone,
       email: newSettings.email,
-      gstin: newSettings.gstin,
+      gstin,
       fssai: newSettings.fssai,
       logo: newSettings.logo,
       logoWhite: newSettings.logoWhite,
@@ -76,9 +88,10 @@ class SettingsApiRepository {
         ? Boolean(newSettings.requireOrderApproval)
         : true,
       taxConfig: {
-        rate: String(newSettings.defaultTaxRate || 5),
-        gstin: newSettings.gstin || '',
-        mode: 'EXCLUSIVE'
+        rate: String(taxRateNum),
+        gstRate: String(taxRateNum),
+        gstin,
+        mode: taxMode
       },
       invoiceConfig: {
         prefix: newSettings.invoicePrefix || 'INV-',
@@ -93,7 +106,14 @@ class SettingsApiRepository {
     }
 
     const currentCached = storageAdapter.getItem(STORAGE_KEYS.SETTINGS) || {};
-    const updated = { ...DEFAULT_SETTINGS, ...currentCached, ...newSettings };
+    const updated = {
+      ...DEFAULT_SETTINGS,
+      ...currentCached,
+      ...newSettings,
+      defaultTaxRate: taxRateNum,
+      gstin,
+      taxConfig: payload.taxConfig
+    };
     storageAdapter.setItem(STORAGE_KEYS.SETTINGS, updated);
 
     return updated;

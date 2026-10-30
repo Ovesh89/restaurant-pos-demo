@@ -82,11 +82,18 @@ class TableApiRepository {
     return table;
   }
 
-  async transferTable() {
-    throw new AppError(
-      'Table transfer is currently in development and will be available in the upcoming release.',
-      'FEATURE_DEFERRED'
-    );
+  async transferTable({ fromTableId, toTableId, reason = '' } = {}) {
+    const payload = {
+      fromTableId,
+      toTableId,
+      reason: reason || ''
+    };
+    const result = await apiClient.post('/tables/transfer', payload);
+    return {
+      order: result?.order,
+      fromTable: this.normalizeTable(result?.fromTable),
+      toTable: this.normalizeTable(result?.toTable)
+    };
   }
 
   async mergeTables() {

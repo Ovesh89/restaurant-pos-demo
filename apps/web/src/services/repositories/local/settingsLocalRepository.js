@@ -42,9 +42,19 @@ class SettingsLocalRepository {
 
   async updateSettings(newSettings, actor = { id: 'admin', name: 'Admin' }) {
     const current = await this.getSettings();
+    const taxRateNum = (newSettings.defaultTaxRate !== undefined && newSettings.defaultTaxRate !== null && !isNaN(Number(newSettings.defaultTaxRate)))
+      ? Number(newSettings.defaultTaxRate)
+      : (current.defaultTaxRate !== undefined ? Number(current.defaultTaxRate) : 5.0);
     const updated = {
       ...current,
       ...newSettings,
+      defaultTaxRate: taxRateNum,
+      taxConfig: {
+        rate: String(taxRateNum),
+        gstRate: String(taxRateNum),
+        gstin: newSettings.gstin || current.gstin || '',
+        mode: newSettings.taxMode || newSettings.taxConfig?.mode || 'EXCLUSIVE'
+      },
       updatedAt: new Date().toISOString()
     };
 

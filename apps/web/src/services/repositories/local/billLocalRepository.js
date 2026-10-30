@@ -131,11 +131,16 @@ class BillLocalRepository {
 
     const existingPayments = existingIndex > -1 ? bills[existingIndex].payments || [] : [];
 
+    const settings = storageAdapter.getItem(STORAGE_KEYS.SETTINGS) || {};
+    const effectiveTaxRate = (taxRate !== undefined && taxRate !== 5.0)
+      ? Number(taxRate)
+      : (settings.defaultTaxRate !== undefined ? Number(settings.defaultTaxRate) : 5.0);
+
     // Deterministic financial calculation from canonical order items
     const calc = billingCalculator.calculate({
       items: order.items,
       discount,
-      taxRate,
+      taxRate: effectiveTaxRate,
       payments: existingPayments
     });
 

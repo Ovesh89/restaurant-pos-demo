@@ -99,6 +99,8 @@ export class BillRepository extends BaseMongoRepository {
       discount: calcResult.discount,
       taxableAmount: calcResult.taxableAmount,
       tax: calcResult.tax,
+      taxRate: calcResult.taxRate,
+      taxMode: calcResult.taxMode,
       cgst: calcResult.cgst,
       sgst: calcResult.sgst,
       taxBreakdown: calcResult.taxBreakdown,

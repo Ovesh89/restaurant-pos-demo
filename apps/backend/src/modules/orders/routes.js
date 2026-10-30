@@ -8,6 +8,7 @@ import {
 import { asyncHandler } from '../../middleware/errorHandler.js';
 import { successResponse, createdResponse } from '../../utils/response.js';
 import { orderService } from './service.js';
+import { restaurantService } from '../restaurant/service.js';
 
 const router = Router();
 
@@ -261,6 +262,23 @@ router.get(
   asyncHandler(async (req, res) => {
     const events = await orderService.getOrderEvents(req.params.id);
     return successResponse(res, events);
+  })
+);
+
+// POST /api/v1/orders/:id/transfer and /api/v1/orders/:id/shift-table
+router.post(
+  ['/orders/:id/transfer', '/orders/:id/shift-table'],
+  authenticate,
+  requireAnyPermission(['order.modify', 'order.create', 'table.manage']),
+  asyncHandler(async (req, res) => {
+    const order = await orderService.getOrder(req.params.id);
+    const toTableId = req.body?.toTableId || req.body?.destinationTableId || req.body?.targetTableId;
+    const reason = req.body?.reason || '';
+    const result = await restaurantService.transferTable(
+      { fromTableId: order.tableId, toTableId, reason },
+      req.user
+    );
+    return successResponse(res, result, 'Order shifted to new table successfully.');
   })
 );
 

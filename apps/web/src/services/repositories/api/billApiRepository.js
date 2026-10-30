@@ -80,9 +80,9 @@ class BillApiRepository {
     const taxRate = Number(
       bill.taxRate !== undefined
         ? bill.taxRate
-        : bill.taxBreakdown?.[0]?.rate !== undefined
-        ? bill.taxBreakdown[0].rate
-        : 5
+        : (bill.taxBreakdown?.[0]?.rate !== undefined && bill.taxBreakdown?.[1]?.rate !== undefined)
+        ? (Number(bill.taxBreakdown[0].rate) + Number(bill.taxBreakdown[1].rate))
+        : (bill.taxBreakdown?.[0]?.rate !== undefined ? Number(bill.taxBreakdown[0].rate) * 2 : 5)
     );
 
     const rounding = Number(bill.rounding || 0);

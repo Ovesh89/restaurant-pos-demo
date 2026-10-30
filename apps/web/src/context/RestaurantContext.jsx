@@ -47,20 +47,27 @@ export const RestaurantProvider = ({ children }) => {
   const reloadSettings = useCallback(async () => {
     try {
       let data = null;
-      // In API mode, if we are not logged in or during initial boot, try the public branding endpoint first
-      if (APP_CONFIG.DATA_PROVIDER === 'api') {
+      // Try full settings repository first to get complete branch & tax parameters
+      try {
+        data = await settingsRepository.getSettings();
+      } catch (repoErr) {
+        // Fall back to public branding endpoint if unauthenticated
+      }
+
+      if (!data && APP_CONFIG.DATA_PROVIDER === 'api') {
         try {
           const publicBranding = await apiClient.get('/restaurant/branding');
           if (publicBranding) {
             data = { ...DEFAULT_SETTINGS, ...publicBranding };
           }
         } catch (pubErr) {
-          // Fall back to settingsRepository if public endpoint not reached
+          // ignore
         }
       }
 
       if (!data) {
-        data = await settingsRepository.getSettings();
+        const cached = storageAdapter.getItem(STORAGE_KEYS.SETTINGS);
+        data = { ...DEFAULT_SETTINGS, ...(cached || {}) };
       }
 
       if (data) {

@@ -62,8 +62,17 @@ router.get(
         logoRedReceipt: '/logo-red-receipt.png',
         favicon: '/favicon.png',
         requireOrderApproval: true,
+        defaultTaxRate: 5.0,
+        taxConfig: { rate: '5.00', mode: 'EXCLUSIVE', gstin: '24ABCDE1234F1Z5' },
       });
     }
+    const defaultTaxRate = Number(
+      branch.taxConfig?.rate !== undefined
+        ? branch.taxConfig.rate
+        : branch.taxConfig?.gstRate !== undefined
+        ? branch.taxConfig.gstRate
+        : 5.0
+    );
     return successResponse(res, {
       restaurantName: branch.restaurantName || branch.name || 'Green Tandoor Se',
       tagline: branch.tagline !== undefined ? branch.tagline : 'Garden Restaurant',
@@ -71,7 +80,9 @@ router.get(
       address: branch.address || '',
       phone: branch.phone || '',
       email: branch.email || '',
-      gstin: branch.gstin || '',
+      gstin: branch.gstin || branch.taxConfig?.gstin || '',
+      defaultTaxRate,
+      taxConfig: branch.taxConfig || { rate: String(defaultTaxRate), mode: 'EXCLUSIVE', gstin: branch.gstin || '' },
       logo: branch.logo || '/logo.png',
       logoWhite: branch.logoWhite || '/logo-white.png',
       logoBlack: branch.logoBlack || '/logo-black.png',
@@ -288,6 +299,28 @@ router.patch(
       req.user
     );
     return successResponse(res, updated, 'Table updated successfully.');
+  })
+);
+
+// POST /api/v1/tables/transfer and POST /api/v1/tables/:tableId/transfer
+router.post(
+  ['/tables/transfer', '/tables/:tableId/transfer'],
+  authenticate,
+  requireAnyPermission(['table.manage', 'order.modify', 'order.create']),
+  asyncHandler(async (req, res) => {
+    const fromTableId = req.params.tableId || req.body?.fromTableId || req.body?.sourceTableId;
+    const toTableId = req.body?.toTableId || req.body?.destinationTableId || req.body?.targetTableId;
+    const reason = req.body?.reason || '';
+
+    const result = await restaurantService.transferTable(
+      { fromTableId, toTableId, reason },
+      req.user
+    );
+    return successResponse(
+      res,
+      result,
+      `Table ${result.fromTable.tableNumber} transferred to Table ${result.toTable.tableNumber} successfully.`
+    );
   })
 );
 

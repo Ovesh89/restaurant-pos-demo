@@ -72,8 +72,11 @@ export function calculateOrderFinancials(items = []) {
 }
 
 class OrderService {
-  async _captureOrderItems(rawItems, now) {
+  async _captureOrderItems(rawItems, now, branchTaxConfig = null) {
     const capturedItems = [];
+    const defaultBranchRate = branchTaxConfig?.rate ?? branchTaxConfig?.gstRate ?? '5.00';
+    const defaultBranchMode = branchTaxConfig?.mode ?? 'EXCLUSIVE';
+
     for (const it of rawItems) {
       const prodId = it.productId;
       const qty = parseInt(it.quantity ?? 1, 10);
@@ -85,20 +88,48 @@ class OrderService {
         );
       }
 
-      const prod = await productRepository.findById(prodId);
-      if (!prod || prod.isActive === false) {
+      // Check if this is an off-menu / custom item
+      const isCustomFlag =
+        Boolean(it.isCustom) ||
+        String(prodId || '').startsWith('custom-') ||
+        it.code === 'OFF-MENU' ||
+        Boolean(it.isOffMenu);
+
+      let prod = null;
+      if (!isCustomFlag && prodId) {
+        prod = await productRepository.findById(prodId);
+      }
+
+      const isOffMenu =
+        !prod &&
+        (isCustomFlag ||
+          Boolean((it.name || it.productName) && (it.price !== undefined || it.unitPrice !== undefined)));
+
+      if (!prod && !isOffMenu) {
         throw new NotFoundAppError(`Product ${prodId} not found or inactive.`);
       }
 
-      if (prod.available === false) {
+      if (prod && prod.isActive === false) {
+        throw new NotFoundAppError(`Product ${prodId} not found or inactive.`);
+      }
+
+      if (prod && prod.available === false) {
         throw new ValidationAppError(
           `Product '${prod.name}' is currently marked unavailable.`
         );
       }
 
       const itemId = crypto.randomUUID();
-      const unitPrice = formatMoney(prod.currentPrice);
-      const taxConfig = prod.taxConfig || { rate: '5.00', mode: 'EXCLUSIVE' };
+      const rawPrice = prod
+        ? prod.currentPrice
+        : (it.price !== undefined ? it.price : (it.unitPrice !== undefined ? it.unitPrice : 0));
+      const unitPrice = formatMoney(rawPrice || 0);
+
+      // Prefer item/product explicit tax override, otherwise inherit branch default GST rate
+      const taxRateInput = it.taxRate ?? it.taxConfig?.rate ?? (prod?.taxConfig?.rate !== undefined && prod?.taxConfig?.rate !== '5.00' ? prod.taxConfig.rate : defaultBranchRate);
+      const taxModeInput = it.taxConfig?.mode ?? prod?.taxConfig?.mode ?? defaultBranchMode;
+      const taxConfig = { rate: String(taxRateInput), mode: String(taxModeInput).toUpperCase() };
+
       const lineSubtotalDec = roundMoney(toDecimal(unitPrice).times(qty));
       const taxRateDec = toDecimal(taxConfig.rate ?? '5.00');
       const taxMode = String(taxConfig.mode || 'EXCLUSIVE').toUpperCase();
@@ -115,21 +146,32 @@ class OrderService {
       }
 
       let isKotRequired = true;
-      if (prod.categoryId) {
+      if (prod && prod.categoryId) {
         const cat = await categoryRepository.findById(prod.categoryId);
         if (cat && cat.kotRequired === false) {
           isKotRequired = false;
         }
+      } else if (it.kotRequired !== undefined) {
+        isKotRequired = Boolean(it.kotRequired);
       }
+
+      const finalProdId = prod ? prod._id : (prodId || `custom-${Date.now()}`);
+      const finalProductName = prod
+        ? prod.name
+        : String(it.name || it.productName || 'Special Item').trim();
+      const finalCode = prod ? (prod.code || '') : (it.code || 'OFF-MENU');
+      const finalStation = prod ? (prod.kitchenStation || 'MAIN') : (it.station || it.kitchenStation || 'Main Curry');
+      const finalCategoryId = prod ? (prod.categoryId || null) : null;
 
       capturedItems.push({
         _id: itemId,
         id: itemId,
-        productId: prod._id,
-        productName: prod.name,
-        code: prod.code || '',
-        station: prod.kitchenStation || 'MAIN',
-        categoryId: prod.categoryId || null,
+        productId: finalProdId,
+        productName: finalProductName,
+        name: finalProductName,
+        code: finalCode,
+        station: finalStation,
+        categoryId: finalCategoryId,
         kotRequired: isKotRequired,
         quantity: qty,
         unitPrice,
@@ -139,6 +181,7 @@ class OrderService {
         lineTotal: formatMoney(lineTotalDec),
         note,
         status: 'ACTIVE',
+        isCustom: !prod,
         createdAt: now,
         updatedAt: now,
       });
@@ -211,7 +254,7 @@ class OrderService {
     }
 
     const now = utcNowIso();
-    const capturedItems = await this._captureOrderItems(rawItems, now);
+    const capturedItems = await this._captureOrderItems(rawItems, now, branch?.taxConfig);
     const financials = calculateOrderFinancials(capturedItems);
     const orderNumber = await getNextDailyOrderSequence(branch.code || 'MAIN');
 
@@ -676,7 +719,8 @@ class OrderService {
     }
 
     const now = utcNowIso();
-    const capturedNewItems = await this._captureOrderItems(itemsToAdd, now);
+    const branch = await branchRepository.findById(order.branchId);
+    const capturedNewItems = await this._captureOrderItems(itemsToAdd, now, branch?.taxConfig);
 
     // Only dishes that require KOT are sent to kitchen tickets
     const deltaKotItems = capturedNewItems
