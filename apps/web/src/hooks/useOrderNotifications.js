@@ -51,7 +51,10 @@ export const useOrderNotifications = () => {
     user?.role === 'captain' ||
     user?.role === 'kitchen' ||
     user?.role === 'admin' ||
-    user?.role === 'owner';
+    user?.role === 'owner' ||
+    user?.role === 'reception' ||
+    user?.role === 'cashier' ||
+    user?.role === 'manager';
 
   useEffect(() => {
     if (!isEligibleRole) return;

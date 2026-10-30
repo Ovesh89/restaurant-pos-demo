@@ -31,11 +31,15 @@ router.post(
       throw new PermissionDeniedAppError('Captains are not permitted to apply discounts.');
     }
 
+    const shouldCompleteOrder = isCaptain || Boolean(req.body?.completeOrder) || Boolean(req.body?.releaseTable);
+
     const bill = await billingService.generateBill({
       orderId: req.params.id,
       actorId: req.user.id,
       actorName: req.user.displayName || req.user.username,
       discountInput: isCaptain ? null : discountData,
+      isCaptain,
+      completeOrder: shouldCompleteOrder,
     });
 
     const isExisting = Boolean(bill._isExisting);

@@ -54,8 +54,32 @@ export const TablesPage = () => {
   const [areas, setAreas] = useState([]);
   const [selectedAreaId, setSelectedAreaId] = useState('ALL');
   const [captainMobileArea, setCaptainMobileArea] = useState(() => {
-    return sessionStorage.getItem('pos_captain_selected_area') || null;
+    return localStorage.getItem('pos_captain_selected_area') || null;
   });
+  const [captainTableSearch, setCaptainTableSearch] = useState('');
+  const [draftsVersion, setDraftsVersion] = useState(0);
+
+  const hasTableDraft = (tableId) => {
+    try {
+      const d = localStorage.getItem(`pos_captain_draft_table_${tableId}`);
+      if (d) {
+        const parsed = JSON.parse(d);
+        return Array.isArray(parsed?.cart) && parsed.cart.length > 0;
+      }
+    } catch {
+      return false;
+    }
+    return false;
+  };
+
+  const handleClearTableDraft = (tableId) => {
+    try {
+      localStorage.removeItem(`pos_captain_draft_table_${tableId}`);
+      setDraftsVersion((v) => v + 1);
+    } catch (e) {
+      console.warn('Failed to clear draft for table:', e);
+    }
+  };
 
   const [isMobileView, setIsMobileView] = useState(() => {
     if (typeof window !== 'undefined') {
@@ -561,7 +585,8 @@ export const TablesPage = () => {
                     key={a.id}
                     onClick={() => {
                       setCaptainMobileArea(a.id);
-                      sessionStorage.setItem('pos_captain_selected_area', a.id);
+                      localStorage.setItem('pos_captain_selected_area', a.id);
+                      window.dispatchEvent(new CustomEvent('pos-area-change', { detail: { areaId: a.id } }));
                     }}
                     className="bg-white rounded-2xl border-2 border-slate-200 hover:border-blue-500 hover:shadow-lg p-5 cursor-pointer transition-all active:scale-[0.99] flex flex-col justify-between group"
                   >
@@ -603,43 +628,129 @@ export const TablesPage = () => {
             </div>
           )}
         </div>
-      ) : (
-        <>
-          {/* Top Header / Captain Mobile Area Header */}
-          {isCaptain && isMobileView && captainMobileArea ? (
-            <div className="bg-white rounded-2xl border border-blue-200 bg-blue-50/30 p-3.5 sm:p-4 flex flex-wrap items-center justify-between gap-3 shadow-xs">
-              <div className="flex items-center gap-2 sm:gap-3">
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  icon={ArrowLeft}
-                  onClick={() => {
-                    setCaptainMobileArea(null);
-                    sessionStorage.removeItem('pos_captain_selected_area');
-                  }}
-                  className="font-bold text-xs"
-                >
-                  Change Area
-                </Button>
-                <div>
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-blue-700 block">Working in Area</span>
-                  <h3 className="text-base sm:text-lg font-black text-slate-800">
-                    {getAreaName(captainMobileArea)}
-                  </h3>
-                </div>
-              </div>
+      ) : isCaptain && isMobileView && captainMobileArea ? (
+        /* Dedicated Mobile Captain Tables View */
+        <div className="space-y-2.5">
+          {/* Top Bar: Back to Areas + Table Search Box */}
+          <div className="flex items-center gap-2">
+            <Button
+              variant="secondary"
+              size="sm"
+              icon={ArrowLeft}
+              onClick={() => {
+                setCaptainMobileArea(null);
+                localStorage.removeItem('pos_captain_selected_area');
+                window.dispatchEvent(new CustomEvent('pos-area-change', { detail: { areaId: null } }));
+              }}
+              className="font-bold text-xs shrink-0 h-10 px-3"
+              title="Change Area"
+            >
+              {getAreaName(captainMobileArea)}
+            </Button>
 
-              <div className="flex items-center gap-2 text-xs font-bold">
-                <span className="text-emerald-700 bg-emerald-100/70 px-2.5 py-1 rounded-xl">
-                  {formatNumber(displayedTables.filter(t => t.status === TABLE_STATUS.AVAILABLE && t.isActive).length)} Available
-                </span>
-                <span className="text-blue-700 bg-blue-100/70 px-2.5 py-1 rounded-xl">
-                  {formatNumber(displayedTables.filter(t => t.status !== TABLE_STATUS.AVAILABLE && t.isActive).length)} Active
-                </span>
+            <div className="flex-1">
+              <Input
+                icon={Search}
+                placeholder="Search table (e.g. 1, T-1, available)..."
+                value={captainTableSearch}
+                onChange={(e) => setCaptainTableSearch(e.target.value)}
+                className="text-xs h-10"
+              />
+            </div>
+          </div>
+
+          {/* Success Notification Alert */}
+          {successMsg && (
+            <div className="p-2.5 bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs rounded-xl flex items-center justify-between shadow-2xs">
+              <div className="flex items-center gap-2">
+                <CheckCircle className="w-4 h-4 text-emerald-600 shrink-0" />
+                <span className="font-semibold">{successMsg}</span>
               </div>
+              <button onClick={() => setSuccessMsg('')} className="text-slate-400 hover:text-slate-600 font-bold">✕</button>
+            </div>
+          )}
+
+          {/* Tables Grid */}
+          {loading ? (
+            <div className="bg-white rounded-2xl border border-slate-200 p-8 text-center text-slate-500 font-medium text-xs">
+              {t('common.loading', 'Loading tables...')}
+            </div>
+          ) : displayedTables.filter((tbl) => {
+              if (!captainTableSearch.trim()) return true;
+              const q = captainTableSearch.trim().toLowerCase();
+              const cleanNo = String(tbl.tableNo || '').toLowerCase();
+              const status = String(tbl.status || '').toLowerCase();
+              const capacity = String(tbl.capacity || '');
+              return cleanNo.includes(q) || status.includes(q) || capacity === q || `t-${cleanNo}`.includes(q);
+            }).length === 0 ? (
+            <div className="bg-white rounded-2xl border border-slate-200 p-8 text-center text-slate-400 font-medium text-xs">
+              No tables found matching your search.
             </div>
           ) : (
-            <PageHeader
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
+              {displayedTables
+                .filter((tbl) => {
+                  if (!captainTableSearch.trim()) return true;
+                  const q = captainTableSearch.trim().toLowerCase();
+                  const cleanNo = String(tbl.tableNo || '').toLowerCase();
+                  const status = String(tbl.status || '').toLowerCase();
+                  const capacity = String(tbl.capacity || '');
+                  return cleanNo.includes(q) || status.includes(q) || capacity === q || `t-${cleanNo}`.includes(q);
+                })
+                .map((tbl) => {
+                  const statusConfig = getTableStatusConfig(tbl.status, t) || getTableStatusConfig(TABLE_STATUS.AVAILABLE, t);
+                  const cleanTableNo = String(tbl.tableNo || '').trim().replace(/^T-?/i, '');
+                  const hasDraft = tbl.status === TABLE_STATUS.AVAILABLE && hasTableDraft(tbl.id);
+
+                  return (
+                    <div
+                      key={tbl.id}
+                      onClick={() => {
+                        if (!tbl.isActive) return;
+                        navigate(`/orders/new?tableId=${tbl.id}&from=tables`);
+                      }}
+                      className={`rounded-2xl border bg-white p-3 shadow-2xs transition-all flex flex-col justify-between min-h-[125px] cursor-pointer active:scale-[0.98] ${
+                        !tbl.isActive
+                          ? 'opacity-50 border-dashed border-slate-300 cursor-not-allowed'
+                          : 'hover:border-blue-500 hover:shadow-xs border-slate-200'
+                      }`}
+                    >
+                      <div className="flex items-start justify-between gap-1">
+                        <div>
+                          <h3 className="text-xl font-black text-slate-800 tracking-tight">
+                            T-{cleanTableNo}
+                          </h3>
+                        </div>
+                        {hasDraft ? (
+                          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-300 shrink-0">
+                            Draft
+                          </span>
+                        ) : (
+                          <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold border shrink-0 ${statusConfig.color}`}>
+                            <span className={`w-1.5 h-1.5 rounded-full ${statusConfig.dot}`}></span>
+                            {statusConfig.label}
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="flex items-center justify-between text-xs text-slate-500 font-semibold pt-2 border-t border-slate-100 mt-2">
+                        <div className="flex items-center gap-1 text-[11px]">
+                          <Users className="w-3 h-3 text-slate-400 shrink-0" />
+                          <span>{tbl.capacity} Pax</span>
+                        </div>
+                        <span className="text-[11px] font-bold text-blue-600">
+                          {tbl.status === TABLE_STATUS.AVAILABLE ? (hasDraft ? 'Resume →' : '+ Order') : 'Order →'}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })}
+            </div>
+          )}
+        </div>
+      ) : (
+        <>
+          <PageHeader
               title={t('tables.title', 'Restaurant Table Floor')}
               subtitle={t('tables.subtitle', 'Floor layout visualizer, dining sections, table seating capacity, and status overview')}
             >
@@ -664,7 +775,6 @@ export const TablesPage = () => {
                 </>
               )}
             </PageHeader>
-          )}
 
           {/* Success Notification Alert */}
           {successMsg && (

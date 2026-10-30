@@ -153,6 +153,14 @@ class TableLocalRepository {
     return tables[index];
   }
 
+  async updateTableStatus(id, newStatus, activeOrderId = null, actor = { id: 'system', name: 'System' }) {
+    return this.updateOperationalStatus(id, newStatus, activeOrderId, actor);
+  }
+
+  async releaseTable(id, actor = { id: 'system', name: 'System' }) {
+    return this.updateOperationalStatus(id, TABLE_STATUS.AVAILABLE, null, actor);
+  }
+
   async transferTable({ fromTableId, toTableId, reason = '', actor = { id: 'staff', name: 'Staff' } }) {
     if (!fromTableId || !toTableId) {
       throw new Error('Both source and destination tables are required.');

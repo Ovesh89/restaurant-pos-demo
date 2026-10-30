@@ -103,7 +103,8 @@ class BillLocalRepository {
     discount = { type: DISCOUNT_TYPES.FIXED, value: 0, reason: '' },
     taxRate = 5.0,
     customer = null,
-    actor = { id: 'cashier', name: 'Cashier' }
+    actor = { id: 'cashier', name: 'Cashier' },
+    completeOrder = false,
   }) {
     const bills = storageAdapter.getItem(STORAGE_KEYS.BILLS) || [];
 
@@ -112,6 +113,12 @@ class BillLocalRepository {
     // Captain cannot apply discounts
     if (isCaptain) {
       discount = { type: DISCOUNT_TYPES.FIXED, value: 0, reason: '' };
+    }
+
+    if (isCaptain || completeOrder) {
+      if (order.tableId) {
+        await tableRepository.updateOperationalStatus(order.tableId, TABLE_STATUS.AVAILABLE, null, actor);
+      }
     }
 
     // Check if open bill already exists for this order
@@ -187,8 +194,17 @@ class BillLocalRepository {
 
     storageAdapter.setItem(STORAGE_KEYS.BILLS, bills);
 
-    // Update order status to BILLING only if not yet settled and not already in an operational state (SERVED, READY, PREPARING)
-    if (
+    if (isCaptain || completeOrder) {
+      const orders = storageAdapter.getItem(STORAGE_KEYS.ORDERS) || [];
+      const ordIdx = orders.findIndex((o) => o.id === order.id);
+      if (ordIdx > -1) {
+        orders[ordIdx].status = ORDER_STATUS.COMPLETED;
+        storageAdapter.setItem(STORAGE_KEYS.ORDERS, orders);
+      }
+      if (order.tableId) {
+        await tableRepository.updateOperationalStatus(order.tableId, TABLE_STATUS.AVAILABLE, null, actor);
+      }
+    } else if (
       !calc.isSettled &&
       order.status !== ORDER_STATUS.BILLING &&
       !['SERVED', 'READY', 'PREPARING', 'COMPLETED', 'CANCELLED', 'REJECTED'].includes(order.status)

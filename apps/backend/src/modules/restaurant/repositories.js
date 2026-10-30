@@ -77,6 +77,18 @@ export class TableRepository extends BaseMongoRepository {
     return updated;
   }
 
+  async updateTableStatus(tableId, status, activeOrderId = null) {
+    const update = { status };
+    if (activeOrderId !== undefined) {
+      update.activeOrderId = activeOrderId;
+    }
+    return this.updateById(tableId, update);
+  }
+
+  async releaseTable(tableId) {
+    return this.updateById(tableId, { status: 'AVAILABLE', activeOrderId: null });
+  }
+
   async findByBranch(branchId, { areaId = null, status = null, isActive = null } = {}) {
     const query = { branchId };
     if (areaId) query.areaId = areaId;

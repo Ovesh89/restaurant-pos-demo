@@ -882,10 +882,11 @@ export class PrintService {
       const cfg = this.getEffectiveSettings(options);
       const payments = Array.isArray(bill.payments) ? bill.payments : [];
       const isUpiMode =
+        Boolean(options.forceQr) ||
         (options.paymentMode && String(options.paymentMode).toUpperCase().includes('UPI')) ||
         payments.some((p) => ['UPI', 'QR', 'UPI/QR'].includes(String(p.mode || '').toUpperCase())) ||
         String(bill.paymentMode || '').toUpperCase().includes('UPI') ||
-        Boolean(options.forceQr);
+        Boolean(options.upiId && options.forceQr !== false);
 
       let qrDataUrl = options.qrDataUrl || null;
       const upiId = options.upiId || cfg.upiId || 'q705457761@ybl';

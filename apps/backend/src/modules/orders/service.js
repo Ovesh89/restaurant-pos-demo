@@ -364,8 +364,8 @@ class OrderService {
         branchId,
         eventType: 'ORDER_SUBMITTED',
         title: isTableOrder ? `New Order: Table ${tableNumber}` : `New Order: ${tableNumber}`,
-        message: `Order ${orderNumber} submitted by ${captainName} awaiting confirmation.`,
-        recipientRole: 'RECEPTION',
+        message: `Order ${orderNumber} submitted by ${captainName}. Dispatched to kitchen.`,
+        recipientRole: null, // Broadcast to Kitchen, Admin, and Reception
         metadata: { orderId: serializedOrder.id, orderNumber },
       });
     }
@@ -556,6 +556,15 @@ class OrderService {
     if (updatedOrder.tableId) {
       await tableRepository.updateById(updatedOrder.tableId, { status: 'KOT_SENT', activeOrderId: orderId });
     }
+
+    await notificationService.notify({
+      branchId: updatedOrder.branchId,
+      eventType: 'ORDER_CONFIRMED',
+      title: updatedOrder.tableNumber ? `New Order: Table ${updatedOrder.tableNumber}` : 'New Order',
+      message: `Order #${updatedOrder.orderNumber} placed for Table ${updatedOrder.tableNumber || '-'}. Dispatched to kitchen.`,
+      recipientRole: null, // Broadcast to Kitchen, Admin, and Reception
+      metadata: { orderId, orderNumber: updatedOrder.orderNumber, tableNumber: updatedOrder.tableNumber },
+    });
 
     await orderEventRepository.recordEvent({
       orderId,
@@ -763,6 +772,20 @@ class OrderService {
 
     // Automatically synchronize any open pending bill with the new items
     await billingService.syncUnsettledBill(canonicalOrderId);
+
+    await notificationService.notify({
+      branchId: order.branchId,
+      eventType: 'ORDER_ITEMS_MODIFIED',
+      title: order.tableNumber ? `Order Updated: Table ${order.tableNumber}` : 'Order Updated',
+      message: `Order #${order.orderNumber} updated by ${actorName || 'Captain'}. Dispatched to kitchen.`,
+      recipientRole: null, // Broadcast to Kitchen, Admin, and Reception
+      metadata: {
+        orderId: canonicalOrderId,
+        orderNumber: order.orderNumber,
+        tableNumber: order.tableNumber,
+        itemsAdded: itemsToAdd.length,
+      },
+    });
 
     await orderEventRepository.recordEvent({
       orderId: canonicalOrderId,

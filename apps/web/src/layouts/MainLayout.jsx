@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Outlet } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { Outlet, useLocation } from 'react-router-dom';
 import { BellRing, X } from 'lucide-react';
 import { Sidebar } from './Sidebar';
 import { Topbar } from './Topbar';
@@ -7,11 +7,37 @@ import { MobileBottomNav } from './MobileBottomNav';
 import { DevResetBanner } from '../components/dev/DevResetBanner';
 import { OfflineBanner } from '../components/common/OfflineBanner';
 import { useOrderNotifications } from '../hooks/useOrderNotifications';
+import { useAuth } from '../hooks/useAuth';
 
 export const MainLayout = () => {
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   const [isDesktopSidebarOpen, setIsDesktopSidebarOpen] = useState(true);
   const { activeToast, dismissToast } = useOrderNotifications();
+  const { user, role } = useAuth();
+  const location = useLocation();
+  const isCaptain = role === 'captain' || user?.role === 'captain';
+
+  const [captainSelectedArea, setCaptainSelectedArea] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('pos_captain_selected_area');
+    }
+    return null;
+  });
+
+  useEffect(() => {
+    const handleAreaChange = (e) => {
+      setCaptainSelectedArea(e.detail?.areaId ?? localStorage.getItem('pos_captain_selected_area'));
+    };
+    window.addEventListener('pos-area-change', handleAreaChange);
+    window.addEventListener('storage', handleAreaChange);
+    return () => {
+      window.removeEventListener('pos-area-change', handleAreaChange);
+      window.removeEventListener('storage', handleAreaChange);
+    };
+  }, []);
+
+  const isCaptainAreaList = isCaptain && location.pathname === '/tables' && !captainSelectedArea;
+  const isBottomNavHidden = isCaptain && !isCaptainAreaList;
 
   return (
     <div className="h-screen h-[100dvh] w-screen flex flex-col bg-slate-100 antialiased overflow-hidden">
@@ -54,7 +80,7 @@ export const MainLayout = () => {
               }
             }}
           />
-          <main className="flex-1 overflow-y-auto p-3.5 sm:p-4 md:p-6 lg:p-8 pb-24 lg:pb-8">
+          <main className={`flex-1 overflow-y-auto ${isBottomNavHidden ? 'p-2 sm:p-4 pb-2' : 'p-3.5 sm:p-4 md:p-6 lg:p-8 pb-24 lg:pb-8'}`}>
             <Outlet />
           </main>
         </div>

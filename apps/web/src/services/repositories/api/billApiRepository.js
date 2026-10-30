@@ -231,10 +231,15 @@ class BillApiRepository {
     discount = { type: 'FIXED', value: 0, reason: '' },
     taxRate = 5.0,
     customer = null,
-    actor = { id: 'cashier', name: 'Cashier' }
+    actor = { id: 'cashier', name: 'Cashier' },
+    completeOrder = false,
   }) {
     const isCaptain = String(actor?.role || '').toLowerCase() === 'captain';
     const payload = {};
+    if (isCaptain || completeOrder) {
+      payload.completeOrder = true;
+      payload.releaseTable = true;
+    }
     const hasDiscount = !isCaptain && discount && Number(discount.value) > 0;
     if (hasDiscount) {
       payload.discount = {

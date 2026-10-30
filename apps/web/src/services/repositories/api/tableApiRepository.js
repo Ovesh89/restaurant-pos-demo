@@ -82,6 +82,14 @@ class TableApiRepository {
     return table;
   }
 
+  async updateTableStatus(id, newStatus, activeOrderId = null) {
+    return this.updateOperationalStatus(id, newStatus, activeOrderId);
+  }
+
+  async releaseTable(id) {
+    return this.updateOperationalStatus(id, TABLE_STATUS.AVAILABLE, null);
+  }
+
   async transferTable({ fromTableId, toTableId, reason = '' } = {}) {
     const payload = {
       fromTableId,

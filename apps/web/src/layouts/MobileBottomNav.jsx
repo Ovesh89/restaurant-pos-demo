@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { NavLink } from 'react-router-dom';
+import { NavLink, useLocation } from 'react-router-dom';
 import { LayoutDashboard, ShoppingBag, Coffee, Receipt, Menu, User } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 import { useTranslation } from '../hooks/useTranslation';
@@ -8,7 +8,28 @@ import { PERMISSIONS } from '../constants/permissions';
 export const MobileBottomNav = ({ onOpenMenu }) => {
   const { hasAnyPermission, hasPermission, role, user } = useAuth();
   const { t } = useTranslation();
+  const location = useLocation();
   const isCaptain = role === 'captain' || user?.role === 'captain';
+
+  const [captainSelectedArea, setCaptainSelectedArea] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('pos_captain_selected_area');
+    }
+    return null;
+  });
+
+  useEffect(() => {
+    const handleAreaChange = (e) => {
+      setCaptainSelectedArea(e.detail?.areaId ?? localStorage.getItem('pos_captain_selected_area'));
+    };
+    window.addEventListener('pos-area-change', handleAreaChange);
+    window.addEventListener('storage', handleAreaChange);
+    return () => {
+      window.removeEventListener('pos-area-change', handleAreaChange);
+      window.removeEventListener('storage', handleAreaChange);
+    };
+  }, []);
+
   const [isModalOpen, setIsModalOpen] = useState(() => {
     if (typeof document !== 'undefined') {
       return (
@@ -41,6 +62,14 @@ export const MobileBottomNav = ({ onOpenMenu }) => {
       observer.disconnect();
     };
   }, []);
+
+  // For Captain: hide navigation on ALL screens except the Area List (/tables with no selected area)
+  if (isCaptain) {
+    const isAreaList = location.pathname === '/tables' && !captainSelectedArea;
+    if (!isAreaList) {
+      return null;
+    }
+  }
 
   // When any modal or popup is open, hide the bottom navigation menu
   if (isModalOpen) {

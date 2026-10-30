@@ -22,7 +22,7 @@ import {
 const VALID_PAYMENT_MODES = ['CASH', 'UPI', 'CARD', 'OTHER'];
 
 class BillingService {
-  async generateBill({ orderId, actorId, actorName, discountInput = null }) {
+  async generateBill({ orderId, actorId, actorName, discountInput = null, isCaptain = false, completeOrder = false }) {
     const order = await orderRepository.findById(orderId);
     if (!order) {
       throw new NotFoundAppError('Order not found.');
@@ -45,6 +45,41 @@ class BillingService {
       ],
     });
     if (existingBill) {
+      if (isCaptain || completeOrder) {
+        const now = utcNowIso();
+        await orderRepository.updateStatus(canonicalOrderId, 'COMPLETED', {
+          completedAt: now,
+        });
+        if (order.tableId) {
+          await tableRepository.updateById(order.tableId, {
+            status: 'AVAILABLE',
+            activeOrderId: null,
+          });
+        }
+        const tableCol = await tableRepository.collection();
+        await tableCol.updateMany(
+          {
+            $or: [
+              { activeOrderId: canonicalOrderId },
+              { activeOrderId: String(orderId) },
+              ...(order.tableId ? [{ _id: order.tableId }] : []),
+            ],
+          },
+          {
+            $set: {
+              status: 'AVAILABLE',
+              activeOrderId: null,
+              updatedAt: now,
+            },
+          }
+        );
+        const orderIdentifiers = [canonicalOrderId, String(orderId), order.orderNumber, order.orderNo].filter(Boolean);
+        const col = await kotRepository.collection();
+        await col.updateMany(
+          { orderId: { $in: orderIdentifiers }, status: { $nin: ['CANCELLED', 'SERVED'] } },
+          { $set: { status: 'SERVED', servedAt: now, updatedAt: now } }
+        );
+      }
       if (existingBill.status === 'PAYMENT_PENDING') {
         const refreshed = await this.syncUnsettledBill(canonicalOrderId, discountInput);
         if (refreshed) {
@@ -138,13 +173,50 @@ class BillingService {
       });
     }
 
-    // Only update order status to BILLING if order is not already in an operational state like SERVED, READY, or PREPARING.
-    // Reviewing or calculating bill details should not prematurely mark an order as billed before payment is settled.
-    if (!['SERVED', 'READY', 'PREPARING', 'COMPLETED', 'CANCELLED', 'REJECTED'].includes(order.status)) {
-      await orderRepository.updateStatus(orderId, 'BILLING');
-    }
-    if (order.tableId) {
-      await tableRepository.updateById(order.tableId, { status: 'BILL_PENDING' });
+    if (isCaptain || completeOrder) {
+      // When captain generates the bill, the order will be complete and the table should be available
+      const now = utcNowIso();
+      await orderRepository.updateStatus(orderId, 'COMPLETED', {
+        completedAt: now,
+      });
+      if (order.tableId) {
+        await tableRepository.updateById(order.tableId, {
+          status: 'AVAILABLE',
+          activeOrderId: null,
+        });
+      }
+      const tableCol = await tableRepository.collection();
+      await tableCol.updateMany(
+        {
+          $or: [
+            { activeOrderId: orderId },
+            { activeOrderId: String(orderId) },
+            ...(order.tableId ? [{ _id: order.tableId }] : []),
+          ],
+        },
+        {
+          $set: {
+            status: 'AVAILABLE',
+            activeOrderId: null,
+            updatedAt: now,
+          },
+        }
+      );
+      const orderIdentifiers = [orderId, String(orderId), order.orderNumber, order.orderNo].filter(Boolean);
+      const col = await kotRepository.collection();
+      await col.updateMany(
+        { orderId: { $in: orderIdentifiers }, status: { $nin: ['CANCELLED', 'SERVED'] } },
+        { $set: { status: 'SERVED', servedAt: now, updatedAt: now } }
+      );
+    } else {
+      // Only update order status to BILLING if order is not already in an operational state like SERVED, READY, or PREPARING.
+      // Reviewing or calculating bill details should not prematurely mark an order as billed before payment is settled.
+      if (!['SERVED', 'READY', 'PREPARING', 'COMPLETED', 'CANCELLED', 'REJECTED'].includes(order.status)) {
+        await orderRepository.updateStatus(orderId, 'BILLING');
+      }
+      if (order.tableId) {
+        await tableRepository.updateById(order.tableId, { status: 'BILL_PENDING' });
+      }
     }
 
     await orderEventRepository.recordEvent({
