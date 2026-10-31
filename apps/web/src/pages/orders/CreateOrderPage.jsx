@@ -21,7 +21,9 @@ import {
   Save,
   RefreshCw,
   Send,
-  X
+  X,
+  ChevronRight,
+  ArrowRightLeft
 } from 'lucide-react';
 import { useAuth } from '../../hooks/useAuth';
 import { useTranslation } from '../../hooks/useTranslation';
@@ -38,6 +40,7 @@ import { printService, formatReceiptSequence } from '../../services/printing/pri
 import { PageHeader } from '../../components/common/PageHeader';
 import { Button } from '../../components/common/Button';
 import { Input } from '../../components/common/Input';
+import { Select } from '../../components/common/Select';
 import { Modal } from '../../components/common/Modal';
 import { Badge } from '../../components/common/Badge';
 
@@ -119,6 +122,15 @@ export const CreateOrderPage = () => {
   const [isTableHistoryOpen, setIsTableHistoryOpen] = useState(false);
   const [tableCompletedOrders, setTableCompletedOrders] = useState([]);
   const [tableHistoryLoading, setTableHistoryLoading] = useState(false);
+  const [selectedHistoryOrder, setSelectedHistoryOrder] = useState(null);
+  const [reprintingOrderId, setReprintingOrderId] = useState(null);
+
+  // Swipe / Shift Table Modal State
+  const [isShiftModalOpen, setIsShiftModalOpen] = useState(false);
+  const [shiftTargetTableId, setShiftTargetTableId] = useState('');
+  const [shiftReason, setShiftReason] = useState('');
+  const [shiftLoading, setShiftLoading] = useState(false);
+  const [shiftError, setShiftError] = useState('');
 
   // Submission State
   const [submitting, setSubmitting] = useState(false);
@@ -574,6 +586,8 @@ export const CreateOrderPage = () => {
   };
 
   const handleReprintPastOrder = async (pastOrder) => {
+    if (!pastOrder) return;
+    setReprintingOrderId(pastOrder.id);
     try {
       let bill = await billRepository.getBillByOrderId(pastOrder.id).catch(() => null);
       if (!bill) {
@@ -587,13 +601,14 @@ export const CreateOrderPage = () => {
       }
       const sysSettings = await settingsRepository.getSettings().catch(() => ({}));
       const configuredUpiId = sysSettings?.upiId || 'q705457761@ybl';
-      printService.printInvoice(
+      const printTable = selectedTable || (pastOrder.tableNo ? { tableNo: pastOrder.tableNo } : null);
+      await printService.printInvoice(
         bill,
         pastOrder,
         { name: pastOrder.customerName, mobile: pastOrder.customerPhone },
         null,
         {
-          table: selectedTable,
+          table: printTable,
           upiId: configuredUpiId,
           paymentMode: 'UPI',
           forceQr: true
@@ -601,6 +616,48 @@ export const CreateOrderPage = () => {
       );
     } catch (err) {
       console.error('Failed to reprint past order bill:', err);
+    } finally {
+      setReprintingOrderId(null);
+    }
+  };
+
+  const handleOpenShiftModal = () => {
+    if (!selectedTable?.id) return;
+    const avail = tables.filter((t) => t.status === 'AVAILABLE' && t.isActive && t.id !== selectedTable.id);
+    setShiftTargetTableId(avail[0]?.id || '');
+    setShiftReason('');
+    setShiftError('');
+    setIsShiftModalOpen(true);
+  };
+
+  const handleConfirmShiftTable = async (e) => {
+    e.preventDefault();
+    if (!shiftTargetTableId) {
+      setShiftError('Please select an available destination table.');
+      return;
+    }
+    setShiftLoading(true);
+    setShiftError('');
+    try {
+      const actor = { id: user?.id || 'captain', name: user?.name || 'Captain', role: user?.role || 'captain' };
+      const result = await tableRepository.transferTable({
+        fromTableId: selectedTable.id,
+        toTableId: shiftTargetTableId,
+        reason: shiftReason || 'Captain shifted table',
+        actor
+      });
+
+      setIsShiftModalOpen(false);
+      const destNo = String(result?.toTable?.tableNumber || result?.toTable?.tableNo || shiftTargetTableId).replace(/^T-?/i, '');
+      setSuccessMsg(`Order successfully swiped to Table T-${destNo}!`);
+      setTimeout(() => setSuccessMsg(''), 5000);
+
+      // Navigate to the new table
+      navigate(`/orders/new?tableId=${shiftTargetTableId}&from=tables`, { replace: true });
+    } catch (err) {
+      setShiftError(err.message || 'Failed to shift table.');
+    } finally {
+      setShiftLoading(false);
     }
   };
 
@@ -882,6 +939,18 @@ export const CreateOrderPage = () => {
             </div>
 
             <div className="flex items-center gap-1.5">
+              {existingOrder && selectedTable && (
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  icon={ArrowRightLeft}
+                  onClick={handleOpenShiftModal}
+                  className="text-xs font-bold h-8 px-2 bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100"
+                  title="Swipe / Shift Table Order to another available table"
+                >
+                  Swipe
+                </Button>
+              )}
               <Button
                 variant="secondary"
                 size="sm"
@@ -1274,6 +1343,18 @@ export const CreateOrderPage = () => {
           </div>
 
           <div className="flex items-center gap-2 sm:gap-3">
+            {existingOrder && selectedTable && (
+              <Button
+                variant="secondary"
+                size="sm"
+                icon={ArrowRightLeft}
+                onClick={handleOpenShiftModal}
+                className="text-xs font-bold bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100"
+                title="Swipe / Shift Table Order to another available table"
+              >
+                Swipe Table
+              </Button>
+            )}
             <Button
               variant="secondary"
               size="sm"
@@ -2030,8 +2111,11 @@ export const CreateOrderPage = () => {
 
       {/* Table Same-Day Completed Orders History Modal */}
       <Modal
-        isOpen={isTableHistoryOpen}
-        onClose={() => setIsTableHistoryOpen(false)}
+        isOpen={isTableHistoryOpen && !selectedHistoryOrder}
+        onClose={() => {
+          setIsTableHistoryOpen(false);
+          setSelectedHistoryOrder(null);
+        }}
         title={`Table T-${String(selectedTable?.tableNo || '').replace(/^T-?/i, '')} Order History`}
         subtitle="Orders completed on this table today"
       >
@@ -2058,7 +2142,8 @@ export const CreateOrderPage = () => {
               return (
                 <div
                   key={ord.id}
-                  className="p-3 rounded-xl border border-slate-200 bg-white shadow-2xs space-y-2 text-xs"
+                  onClick={() => setSelectedHistoryOrder(ord)}
+                  className="p-3 rounded-xl border border-slate-200 bg-white shadow-2xs space-y-2 text-xs cursor-pointer hover:border-blue-400 hover:shadow-xs active:scale-[0.99] transition-all"
                 >
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-1.5">
@@ -2069,9 +2154,10 @@ export const CreateOrderPage = () => {
                         Completed
                       </span>
                     </div>
-                    <span className="text-[11px] text-slate-400 font-semibold">
-                      {completedTime}
-                    </span>
+                    <div className="flex items-center gap-1 text-[11px] text-slate-400 font-semibold">
+                      <span>{completedTime}</span>
+                      <ChevronRight className="w-3.5 h-3.5 text-slate-400" />
+                    </div>
                   </div>
 
                   {/* Items List */}
@@ -2095,16 +2181,25 @@ export const CreateOrderPage = () => {
                       <span className="font-black text-slate-900 text-sm">₹{formatNumber(orderTotal)}</span>
                     </div>
 
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      icon={Printer}
-                      onClick={() => handleReprintPastOrder(ord)}
-                      className="text-[11px] font-bold h-7 px-2"
-                      title="Reprint receipt with QR code"
-                    >
-                      Reprint Bill
-                    </Button>
+                    <div className="flex items-center gap-2">
+                      <span className="text-[10px] font-bold text-blue-600 flex items-center gap-0.5">
+                        Details <ChevronRight className="w-3 h-3" />
+                      </span>
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        icon={Printer}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleReprintPastOrder(ord);
+                        }}
+                        loading={reprintingOrderId === ord.id}
+                        className="text-[11px] font-bold h-7 px-2"
+                        title="Reprint receipt with QR code"
+                      >
+                        Reprint Bill
+                      </Button>
+                    </div>
                   </div>
                 </div>
               );
@@ -2112,11 +2207,288 @@ export const CreateOrderPage = () => {
           )}
 
           <div className="pt-2 border-t border-slate-100 flex justify-end">
-            <Button variant="secondary" size="sm" onClick={() => setIsTableHistoryOpen(false)}>
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => {
+                setIsTableHistoryOpen(false);
+                setSelectedHistoryOrder(null);
+              }}
+            >
               Close
             </Button>
           </div>
         </div>
+      </Modal>
+
+      {/* Full-Screen Past Order Details View */}
+      {selectedHistoryOrder && (
+        <div className="fixed inset-0 z-50 bg-slate-100 flex flex-col animate-in fade-in duration-150">
+          {/* Header */}
+          <div className="shrink-0 bg-white border-b border-slate-200 px-4 py-3 flex items-center justify-between shadow-2xs">
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setSelectedHistoryOrder(null)}
+                className="p-1.5 -ml-1 text-slate-700 hover:text-slate-900 hover:bg-slate-100 rounded-xl flex items-center gap-1.5 text-xs font-bold transition-colors"
+              >
+                <ArrowLeft className="w-4 h-4" />
+                <span>Back</span>
+              </button>
+              <div className="h-4 w-px bg-slate-200 mx-1" />
+              <div>
+                <div className="flex items-center gap-1.5">
+                  <h3 className="text-sm font-black text-slate-900 font-mono">
+                    #{formatReceiptSequence(selectedHistoryOrder.orderNo || selectedHistoryOrder.orderNumber || selectedHistoryOrder.id)}
+                  </h3>
+                  <span className="px-1.5 py-0.2 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
+                    Completed
+                  </span>
+                </div>
+                <p className="text-[11px] text-slate-500 font-medium">
+                  Table T-{String(selectedTable?.tableNo || selectedHistoryOrder.tableNo || '').replace(/^T-?/i, '')} • {selectedHistoryOrder.completedAt || selectedHistoryOrder.createdAt ? new Date(selectedHistoryOrder.completedAt || selectedHistoryOrder.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Today'}
+                </p>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => {
+                setSelectedHistoryOrder(null);
+                setIsTableHistoryOpen(false);
+              }}
+              className="p-2 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-xl transition-colors"
+              aria-label="Close"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+
+          {/* Scrollable Content */}
+          <div className="flex-1 overflow-y-auto p-3 sm:p-5 space-y-3 max-w-2xl mx-auto w-full">
+            {/* Metadata Card */}
+            <div className="bg-white rounded-2xl border border-slate-200 p-3.5 shadow-2xs space-y-2.5 text-xs">
+              <div className="grid grid-cols-2 gap-2 text-slate-600">
+                <div>
+                  <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">Table</span>
+                  <span className="font-bold text-slate-800 text-xs">
+                    Table T-{String(selectedTable?.tableNo || selectedHistoryOrder.tableNo || '').replace(/^T-?/i, '')}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">Time</span>
+                  <span className="font-bold text-slate-800 text-xs">
+                    {selectedHistoryOrder.completedAt || selectedHistoryOrder.createdAt ? new Date(selectedHistoryOrder.completedAt || selectedHistoryOrder.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Today'}
+                  </span>
+                </div>
+                {selectedHistoryOrder.captain?.name && (
+                  <div>
+                    <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">Captain</span>
+                    <span className="font-bold text-slate-800 text-xs">{selectedHistoryOrder.captain.name}</span>
+                  </div>
+                )}
+                {(selectedHistoryOrder.customerName || selectedHistoryOrder.customerPhone) && (
+                  <div>
+                    <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">Customer</span>
+                    <span className="font-bold text-slate-800 text-xs">
+                      {[selectedHistoryOrder.customerName, selectedHistoryOrder.customerPhone].filter(Boolean).join(' • ')}
+                    </span>
+                  </div>
+                )}
+              </div>
+              {selectedHistoryOrder.notes && (
+                <div className="pt-2 border-t border-slate-100 text-[11px] text-slate-600">
+                  <span className="text-slate-400 font-bold">Notes: </span>
+                  <span>{selectedHistoryOrder.notes}</span>
+                </div>
+              )}
+            </div>
+
+            {/* Items Card */}
+            <div className="bg-white rounded-2xl border border-slate-200 shadow-2xs overflow-hidden">
+              <div className="px-3.5 py-2.5 bg-slate-50 border-b border-slate-100 flex items-center justify-between">
+                <span className="font-bold text-xs text-slate-700">
+                  Ordered Dishes ({(selectedHistoryOrder.items || []).filter(i => (i.status || 'ACTIVE') !== 'CANCELLED').length})
+                </span>
+                <span className="text-[10px] font-bold text-slate-400 uppercase">Amount</span>
+              </div>
+              <div className="divide-y divide-slate-100">
+                {(selectedHistoryOrder.items || [])
+                  .filter((it) => (it.status || 'ACTIVE') !== 'CANCELLED')
+                  .map((it, idx) => {
+                    const qty = Number(it.quantity) || 1;
+                    const price = Number(it.unitPrice ?? it.price) || 0;
+                    const lineTotal = qty * price;
+                    return (
+                      <div key={idx} className="p-3 flex items-center justify-between text-xs">
+                        <div className="flex items-start gap-2.5 flex-1 pr-2">
+                          <span className="shrink-0 px-2 py-0.5 rounded-lg bg-blue-50 text-blue-700 font-black text-xs border border-blue-100">
+                            {qty}x
+                          </span>
+                          <div className="min-w-0">
+                            <div className="font-bold text-slate-800 leading-snug">
+                              {it.name || it.productName}
+                            </div>
+                            <div className="text-[11px] text-slate-400">
+                              ₹{formatNumber(price)} each
+                              {it.isCustom && (
+                                <span className="ml-1.5 px-1.5 py-0.2 rounded text-[9px] font-bold bg-amber-100 text-amber-800">
+                                  Off-Menu
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                        <div className="text-right font-mono font-black text-slate-800 text-xs">
+                          ₹{formatNumber(lineTotal)}
+                        </div>
+                      </div>
+                    );
+                  })}
+              </div>
+            </div>
+
+            {/* Total Summary Card */}
+            <div className="bg-white rounded-2xl border border-slate-200 p-3.5 shadow-2xs space-y-2">
+              <div className="flex items-center justify-between text-xs text-slate-600">
+                <span>Items Subtotal</span>
+                <span className="font-mono font-bold">
+                  ₹{formatNumber(
+                    (selectedHistoryOrder.items || []).reduce(
+                      (sum, it) => sum + (Number(it.quantity) || 1) * (Number(it.unitPrice ?? it.price) || 0),
+                      0
+                    )
+                  )}
+                </span>
+              </div>
+              {Number(selectedHistoryOrder.taxAmount || 0) > 0 && (
+                <div className="flex items-center justify-between text-xs text-slate-600">
+                  <span>GST / Tax</span>
+                  <span className="font-mono font-bold">₹{formatNumber(selectedHistoryOrder.taxAmount)}</span>
+                </div>
+              )}
+              {Number(selectedHistoryOrder.discountAmount || 0) > 0 && (
+                <div className="flex items-center justify-between text-xs text-emerald-600">
+                  <span>Discount</span>
+                  <span className="font-mono font-bold">-₹{formatNumber(selectedHistoryOrder.discountAmount)}</span>
+                </div>
+              )}
+              <div className="pt-2 border-t border-slate-100 flex items-center justify-between">
+                <div>
+                  <span className="text-xs text-slate-500 font-bold block">Total Amount</span>
+                  <span className="text-[11px] text-slate-400 font-medium">Inclusive of all items</span>
+                </div>
+                <div className="text-right">
+                  <span className="text-xl font-black text-slate-900 font-mono">
+                    ₹{formatNumber(
+                      selectedHistoryOrder.totalAmount ??
+                      (selectedHistoryOrder.items || []).reduce(
+                        (sum, it) => sum + (Number(it.quantity) || 1) * (Number(it.unitPrice ?? it.price) || 0),
+                        0
+                      )
+                    )}
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Sticky Bottom Bar with Prominent Reprint Button */}
+          <div className="shrink-0 bg-white border-t border-slate-200 p-3 shadow-lg max-w-2xl mx-auto w-full">
+            <div className="flex items-center gap-2">
+              <Button
+                variant="secondary"
+                className="h-11 px-4 font-bold text-xs text-slate-700"
+                onClick={() => setSelectedHistoryOrder(null)}
+              >
+                Back
+              </Button>
+              <Button
+                variant="primary"
+                className="flex-1 h-11 font-black text-sm bg-emerald-600 hover:bg-emerald-700 text-white shadow-md active:scale-[0.98] transition-transform"
+                icon={Printer}
+                onClick={() => handleReprintPastOrder(selectedHistoryOrder)}
+                loading={reprintingOrderId === selectedHistoryOrder.id}
+              >
+                Reprint Bill
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Swipe / Shift Table Modal */}
+      <Modal
+        isOpen={isShiftModalOpen}
+        onClose={() => setIsShiftModalOpen(false)}
+        title={`Swipe Table T-${String(selectedTable?.tableNo || '').replace(/^T-?/i, '')}`}
+        subtitle="Move ongoing order and kitchen tickets to another available table"
+      >
+        <form onSubmit={handleConfirmShiftTable} className="space-y-4 text-xs">
+          {shiftError && (
+            <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-red-700 font-medium">
+              {shiftError}
+            </div>
+          )}
+
+          <div className="p-3 bg-blue-50/70 rounded-xl border border-blue-200 text-blue-900">
+            <p className="font-bold text-xs">Current Table: T-{String(selectedTable?.tableNo || '').replace(/^T-?/i, '')}</p>
+            <p className="mt-0.5 text-[11px] text-blue-800">
+              The ongoing order and active kitchen KOTs will transfer to the chosen table. Table T-{String(selectedTable?.tableNo || '').replace(/^T-?/i, '')} will be released back to AVAILABLE.
+            </p>
+          </div>
+
+          {(() => {
+            const availDestTables = tables.filter((t) => t.status === 'AVAILABLE' && t.isActive && t.id !== selectedTable?.id);
+            if (availDestTables.length === 0) {
+              return (
+                <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-amber-800 font-medium">
+                  No other tables are currently available. All other tables are occupied or inactive.
+                </div>
+              );
+            }
+            return (
+              <Select
+                label="Destination Available Table"
+                value={shiftTargetTableId}
+                onChange={(e) => setShiftTargetTableId(e.target.value)}
+                options={availDestTables.map((t) => ({
+                  value: t.id,
+                  label: `Table T-${String(t.tableNo || '').replace(/^T-?/i, '')} (${t.capacity || 4} Pax)`
+                }))}
+                required
+              />
+            );
+          })()}
+
+          <Input
+            label="Reason for Shift / Swipe (Optional)"
+            placeholder="e.g. Guest moved to window table / bigger table"
+            value={shiftReason}
+            onChange={(e) => setShiftReason(e.target.value)}
+          />
+
+          <div className="flex flex-col sm:flex-row justify-end gap-2 pt-3 border-t border-slate-100">
+            <Button
+              type="button"
+              variant="secondary"
+              className="w-full sm:w-auto"
+              onClick={() => setIsShiftModalOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="submit"
+              variant="primary"
+              icon={ArrowRightLeft}
+              className="w-full sm:w-auto bg-blue-600 hover:bg-blue-700"
+              loading={shiftLoading}
+              disabled={tables.filter((t) => t.status === 'AVAILABLE' && t.isActive && t.id !== selectedTable?.id).length === 0}
+            >
+              Confirm Swipe
+            </Button>
+          </div>
+        </form>
       </Modal>
     </div>
   );

@@ -25,37 +25,49 @@ export function checkPassword(plainPassword, encodedHash) {
     return false;
   }
 
-  const parts = encodedHash.split('$');
-  const algorithm = parts[0];
+  const verifySingle = (pwd) => {
+    const parts = encodedHash.split('$');
+    const algorithm = parts[0];
 
-  try {
-    if (algorithm === 'md5' && parts.length === 3) {
-      const [, salt, expectedHex] = parts;
-      const computedHex = crypto
-        .createHash('md5')
-        .update(`${salt}${plainPassword}`, 'utf8')
-        .digest('hex');
-      const a = Buffer.from(computedHex, 'utf8');
-      const b = Buffer.from(expectedHex, 'utf8');
-      return a.length === b.length && crypto.timingSafeEqual(a, b);
-    }
-
-    if (algorithm === 'pbkdf2_sha256' && parts.length === 4) {
-      const [, iterStr, salt, expectedB64] = parts;
-      const iterations = parseInt(iterStr, 10);
-      if (Number.isNaN(iterations) || iterations < 1) {
-        return false;
+    try {
+      if (algorithm === 'md5' && parts.length === 3) {
+        const [, salt, expectedHex] = parts;
+        const computedHex = crypto
+          .createHash('md5')
+          .update(`${salt}${pwd}`, 'utf8')
+          .digest('hex');
+        const a = Buffer.from(computedHex, 'utf8');
+        const b = Buffer.from(expectedHex, 'utf8');
+        return a.length === b.length && crypto.timingSafeEqual(a, b);
       }
-      const computedB64 = crypto
-        .pbkdf2Sync(String(plainPassword), salt, iterations, 32, 'sha256')
-        .toString('base64');
-      const a = Buffer.from(computedB64, 'utf8');
-      const b = Buffer.from(expectedB64, 'utf8');
-      return a.length === b.length && crypto.timingSafeEqual(a, b);
+
+      if (algorithm === 'pbkdf2_sha256' && parts.length === 4) {
+        const [, iterStr, salt, expectedB64] = parts;
+        const iterations = parseInt(iterStr, 10);
+        if (Number.isNaN(iterations) || iterations < 1) {
+          return false;
+        }
+        const computedB64 = crypto
+          .pbkdf2Sync(String(pwd), salt, iterations, 32, 'sha256')
+          .toString('base64');
+        const a = Buffer.from(computedB64, 'utf8');
+        const b = Buffer.from(expectedB64, 'utf8');
+        return a.length === b.length && crypto.timingSafeEqual(a, b);
+      }
+    } catch {
+      return false;
     }
-  } catch {
     return false;
-  }
+  };
+
+  if (verifySingle(plainPassword)) return true;
+
+  // Gracefully verify mobile auto-capitalization variants (e.g. Sanjid123 vs sanjid123)
+  const lower = String(plainPassword).toLowerCase();
+  if (lower !== plainPassword && verifySingle(lower)) return true;
+
+  const cap = String(plainPassword).charAt(0).toUpperCase() + String(plainPassword).slice(1);
+  if (cap !== plainPassword && verifySingle(cap)) return true;
 
   return false;
 }

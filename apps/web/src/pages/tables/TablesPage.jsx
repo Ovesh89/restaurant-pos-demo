@@ -738,9 +738,22 @@ export const TablesPage = () => {
                           <Users className="w-3 h-3 text-slate-400 shrink-0" />
                           <span>{tbl.capacity} Pax</span>
                         </div>
-                        <span className="text-[11px] font-bold text-blue-600">
-                          {tbl.status === TABLE_STATUS.AVAILABLE ? (hasDraft ? 'Resume →' : '+ Order') : 'Order →'}
-                        </span>
+                        <div className="flex items-center gap-1.5">
+                          {tbl.status !== TABLE_STATUS.AVAILABLE && (
+                            <button
+                              type="button"
+                              onClick={(e) => handleOpenTransfer(tbl, e)}
+                              className="px-2 py-0.5 rounded-lg bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200 text-[10px] font-bold flex items-center gap-1 active:scale-95 transition-transform"
+                              title="Swipe / Shift Table Order"
+                            >
+                              <ArrowRightLeft className="w-3 h-3" />
+                              <span>Swipe</span>
+                            </button>
+                          )}
+                          <span className="text-[11px] font-bold text-blue-600">
+                            {tbl.status === TABLE_STATUS.AVAILABLE ? (hasDraft ? 'Resume →' : '+ Order') : 'Order →'}
+                          </span>
+                        </div>
                       </div>
                     </div>
                   );
