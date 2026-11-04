@@ -16,6 +16,8 @@ function extractReportParams(req) {
 
   return {
     branchId,
+    date: req.query.date || null,
+    session: req.query.session || null,
     dateFrom: req.query.dateFrom || null,
     dateTo: req.query.dateTo || null,
     categoryId: req.query.categoryId || null,

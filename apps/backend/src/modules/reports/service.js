@@ -1,7 +1,16 @@
 import { getCollection } from '../../config/database.js';
 import { toDecimal, roundMoney, formatMoney } from '../../utils/decimal.js';
+import { resolveOperationalTimeRange } from '../../utils/operationalTime.js';
 
-function buildDateFilter(dateFrom = null, dateTo = null) {
+function buildDateFilter(dateFrom = null, dateTo = null, session = null, date = null) {
+  if (!date && !dateFrom && !dateTo && !session) return null;
+  if (session || date) {
+    const range = resolveOperationalTimeRange({ date, session, dateFrom, dateTo });
+    const filter = {};
+    if (range.start) filter.$gte = range.start;
+    if (range.end) filter.$lte = range.end;
+    return Object.keys(filter).length > 0 ? filter : null;
+  }
   if (!dateFrom && !dateTo) return null;
   const filter = {};
   if (dateFrom) {
@@ -17,13 +26,13 @@ function buildDateFilter(dateFrom = null, dateTo = null) {
 }
 
 class ReportService {
-  async getSalesReport({ branchId, dateFrom = null, dateTo = null }) {
+  async getSalesReport({ branchId, date = null, session = null, dateFrom = null, dateTo = null }) {
     const billsCol = await getCollection('bills');
     const query = {
       branchId,
       status: { $in: ['COMPLETED', 'PAID'] },
     };
-    const dateFilter = buildDateFilter(dateFrom, dateTo);
+    const dateFilter = buildDateFilter(dateFrom, dateTo, session, date);
     if (dateFilter) {
       query.generatedAt = dateFilter;
     }
@@ -107,6 +116,8 @@ class ReportService {
 
   async getItemsReport({
     branchId,
+    date = null,
+    session = null,
     dateFrom = null,
     dateTo = null,
     categoryId = null,
@@ -116,7 +127,7 @@ class ReportService {
       branchId,
       status: { $in: ['COMPLETED', 'PAID'] },
     };
-    const dateFilter = buildDateFilter(dateFrom, dateTo);
+    const dateFilter = buildDateFilter(dateFrom, dateTo, session, date);
     if (dateFilter) {
       query.generatedAt = dateFilter;
     }
@@ -166,7 +177,7 @@ class ReportService {
       });
   }
 
-  async getCaptainsReport({ branchId, dateFrom = null, dateTo = null }) {
+  async getCaptainsReport({ branchId, date = null, session = null, dateFrom = null, dateTo = null }) {
     const ordersCol = await getCollection('orders');
     const billsCol = await getCollection('bills');
 
@@ -174,7 +185,7 @@ class ReportService {
       branchId,
       status: { $in: ['COMPLETED', 'SERVED', 'BILLING', 'BILL_PENDING', 'PAID'] },
     };
-    const dateFilter = buildDateFilter(dateFrom, dateTo);
+    const dateFilter = buildDateFilter(dateFrom, dateTo, session, date);
     if (dateFilter) {
       orderQuery.createdAt = dateFilter;
     }
@@ -229,13 +240,13 @@ class ReportService {
     return results.sort((a, b) => b.totalOrders - a.totalOrders);
   }
 
-  async getPaymentsReport({ branchId, dateFrom = null, dateTo = null }) {
+  async getPaymentsReport({ branchId, date = null, session = null, dateFrom = null, dateTo = null }) {
     const paymentsCol = await getCollection('payments');
     const query = {
       branchId,
       status: { $in: ['VALID', 'SUCCESS'] },
     };
-    const dateFilter = buildDateFilter(dateFrom, dateTo);
+    const dateFilter = buildDateFilter(dateFrom, dateTo, session, date);
     if (dateFilter) {
       query.collectedAt = dateFilter;
     }
@@ -285,10 +296,10 @@ class ReportService {
     };
   }
 
-  async getDiscountsReport({ branchId, dateFrom = null, dateTo = null }) {
+  async getDiscountsReport({ branchId, date = null, session = null, dateFrom = null, dateTo = null }) {
     const discountsCol = await getCollection('discounts');
     const query = { branchId };
-    const dateFilter = buildDateFilter(dateFrom, dateTo);
+    const dateFilter = buildDateFilter(dateFrom, dateTo, session, date);
     if (dateFilter) {
       query.appliedAt = dateFilter;
     }
@@ -317,7 +328,7 @@ class ReportService {
     };
   }
 
-  async getCancellationsReport({ branchId, dateFrom = null, dateTo = null }) {
+  async getCancellationsReport({ branchId, date = null, session = null, dateFrom = null, dateTo = null }) {
     const eventsCol = await getCollection('order_events');
     const query = {
       branchId,
@@ -326,7 +337,7 @@ class ReportService {
         { type: { $in: ['ORDER_CANCELLED', 'ORDER_REJECTED'] } },
       ],
     };
-    const dateFilter = buildDateFilter(dateFrom, dateTo);
+    const dateFilter = buildDateFilter(dateFrom, dateTo, session, date);
     if (dateFilter) {
       query.timestamp = dateFilter;
     }

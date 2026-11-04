@@ -427,9 +427,10 @@ export class PrintService {
     const rName = (cfg.restaurantName || 'GREEN TANDOOR SE').toUpperCase();
     const rSubtitle = cfg.tagline !== undefined ? cfg.tagline : 'Garden Restaurant';
     const rAddress = cfg.address || 'Opp. SP Petrol Pump, Gandhinagar, Chiloda Cross Road';
-    const rGstin = cfg.gstin || '';
-    const rPhone = cfg.phone || '';
-    const rFooter = cfg.receiptFooter || 'Order once placed will not be cancelled. Thank You for Dining With Us!';
+    let rPhone = cfg.phone || '8866515313, 9737581238';
+    if (!rPhone || rPhone === '+91 97375 81238' || rPhone === '+91 9737581238' || rPhone === '9737581238') {
+      rPhone = '8866515313, 9737581238';
+    }
 
     const rawBillNo = bill.billNo || bill.billNumber || 'INV-000';
     const rawOrderNo = bill.orderNo || bill.orderNumber || order?.orderNo || order?.orderNumber || 'N/A';
@@ -515,6 +516,28 @@ export class PrintService {
             size: 80mm auto;
             margin: 0mm;
           }
+          @media print {
+            @page {
+              size: 80mm auto;
+              margin: 0 !important;
+            }
+            html, body {
+              margin: 0 !important;
+              padding: 0 !important;
+              height: auto !important;
+              min-height: auto !important;
+              overflow: hidden !important;
+            }
+            .receipt-container {
+              margin: 0 auto !important;
+              padding-top: 1mm !important;
+              padding-bottom: 0 !important;
+              page-break-after: avoid !important;
+              break-after: avoid !important;
+              page-break-inside: avoid !important;
+              break-inside: avoid !important;
+            }
+          }
           * {
             box-sizing: border-box;
             -webkit-print-color-adjust: exact !important;
@@ -525,19 +548,24 @@ export class PrintService {
             padding: 0;
             background: #fff;
             color: #000;
+            height: auto;
           }
           body {
             font-family: 'Consolas', 'Courier New', Courier, monospace;
-            font-size: 11.5px;
+            font-size: 10px;
             font-weight: 600;
-            line-height: 1.35;
+            line-height: 1.25;
             color: #000;
           }
           .receipt-container {
             width: 250px;
             max-width: 250px;
             margin: 0 auto;
-            padding: 2mm 0 6mm 0;
+            padding: 1.5mm 0 0 0;
+            page-break-inside: avoid;
+            break-inside: avoid;
+            page-break-after: avoid;
+            break-after: avoid;
           }
           .center { text-align: center; }
           .right { text-align: right; }
@@ -545,43 +573,43 @@ export class PrintService {
           .divider {
             width: 250px;
             border-top: 1.5px dashed #000;
-            margin: 5px 0;
+            margin: 4px 0;
           }
           .double-divider {
             width: 250px;
             border-top: 2px solid #000;
-            margin: 5px 0;
+            margin: 4px 0;
           }
           .header {
             width: 250px;
             text-align: center;
-            margin-bottom: 4px;
+            margin-bottom: 3px;
           }
           .receipt-logo {
-            width: 60px;
+            width: 55px;
             height: auto;
-            max-height: 60px;
-            margin: 0 auto 4px auto;
+            max-height: 55px;
+            margin: 0 auto 3px auto;
             display: block;
             object-fit: contain;
           }
           .title {
-            font-size: 15px;
+            font-size: 13.5px;
             font-weight: 900;
             letter-spacing: 0.5px;
             margin-bottom: 2px;
             word-break: break-word;
           }
           .subtitle {
-            font-size: 10px;
+            font-size: 9px;
             font-weight: 600;
-            margin-bottom: 4px;
-            line-height: 1.3;
+            margin-bottom: 3px;
+            line-height: 1.25;
           }
           .invoice-badge {
-            font-size: 12.5px;
+            font-size: 11px;
             font-weight: 900;
-            margin: 4px 0 2px 0;
+            margin: 3px 0 2px 0;
             letter-spacing: 0.5px;
           }
 
@@ -590,7 +618,8 @@ export class PrintService {
             justify-content: space-between;
             align-items: center;
             width: 250px;
-            padding: 1.5px 0;
+            padding: 1px 0;
+            font-size: 10px;
           }
           .meta-left {
             width: 140px;
@@ -621,17 +650,17 @@ export class PrintService {
             align-items: center;
             width: 250px;
             border-bottom: 1.5px dashed #000;
-            padding-bottom: 3px;
+            padding-bottom: 2px;
             margin-bottom: 2px;
-            font-size: 11.5px;
+            font-size: 10px;
             font-weight: 800;
           }
           .item-row {
             display: flex;
             align-items: center;
             width: 250px;
-            padding: 2px 0;
-            font-size: 11.5px;
+            padding: 1.5px 0;
+            font-size: 10px;
             font-weight: 600;
           }
           .col-item {
@@ -662,7 +691,8 @@ export class PrintService {
             justify-content: space-between;
             align-items: center;
             width: 250px;
-            padding: 1.5px 0;
+            padding: 1px 0;
+            font-size: 10px;
           }
           .tot-label {
             width: 140px;
@@ -682,27 +712,31 @@ export class PrintService {
             justify-content: space-between;
             align-items: center;
             width: 250px;
-            font-size: 14.5px;
+            font-size: 12.5px;
             font-weight: 900;
-            padding: 4px 0;
+            padding: 3px 0;
           }
           .upi-qr-container {
             width: 250px;
             text-align: center;
-            margin: 6px 0;
+            margin: 4px 0 2px 0;
           }
           .upi-qr-img {
-            width: 120px;
-            height: 120px;
+            width: 110px;
+            height: 110px;
             margin: 0 auto;
             display: block;
             image-rendering: pixelated;
           }
           .footer {
-            font-size: 10px;
-            font-weight: 600;
-            margin-top: 8px;
-            line-height: 1.35;
+            font-size: 9.5px;
+            font-weight: 700;
+            margin-top: 4px;
+            margin-bottom: 0;
+            padding-bottom: 0;
+            line-height: 1.25;
+            page-break-inside: avoid;
+            break-inside: avoid;
           }
         </style>
       </head>
@@ -714,7 +748,7 @@ export class PrintService {
             <div class="subtitle">
               ${rSubtitle ? `<div>${rSubtitle}</div>` : ''}
               ${rAddress ? `<div>${rAddress}</div>` : ''}
-              ${(rGstin || rPhone) ? `<div>${rGstin ? 'GSTIN: ' + rGstin : ''}${rGstin && rPhone ? ' | ' : ''}${rPhone ? 'Ph: ' + rPhone : ''}</div>` : ''}
+              ${rPhone ? `<div>Mo: ${rPhone}</div>` : ''}
             </div>
             <div class="invoice-badge">*** TAX INVOICE ***</div>
           </div>
@@ -800,43 +834,21 @@ export class PrintService {
           </div>
           <div class="double-divider"></div>
 
-          <div class="bold" style="margin-top: 5px; font-size: 11.5px;">Payment Breakdown:</div>
-          ${payments
-            .map(
-              (p) => `
-            <div class="tot-row">
-              <span class="tot-label">* ${p.mode || 'CASH'}${p.reference ? ' (' + p.reference + ')' : ''}</span>
-              <span class="bold tot-val">₹${formatMoney(p.amount)}</span>
-            </div>
-          `
-            )
-            .join('')}
-          <div class="tot-row" style="margin-top: 3px;">
-            <span class="tot-label">Total Paid:</span>
-            <span class="bold tot-val">₹${formatMoney(paidAmount)}</span>
-          </div>
-          <div class="tot-row">
-            <span class="tot-label">Balance Due:</span>
-            <span class="bold tot-val">₹${formatMoney(balance)}</span>
-          </div>
-
           ${
             options.qrDataUrl
               ? `
-          <div class="divider"></div>
           <div class="center upi-qr-container">
-            <div class="bold" style="font-size: 11px; margin-bottom: 3px; text-transform: uppercase; letter-spacing: 0.5px;">Scan &amp; Pay via UPI</div>
+            <div class="bold" style="font-size: 10px; margin-bottom: 2px; text-transform: uppercase; letter-spacing: 0.5px;">Scan &amp; Pay via UPI</div>
             <img src="${options.qrDataUrl}" alt="UPI QR Code" class="upi-qr-img" />
-            <div style="font-size: 10px; font-weight: 800; margin-top: 3px; color: #000;">${options.upiId || 'q705457761@ybl'}</div>
-            <div style="font-size: 9px; font-weight: 700; color: #000; margin-top: 1px;">Google Pay / PhonePe / Paytm / BHIM</div>
+            <div style="font-size: 9.5px; font-weight: 800; margin-top: 2px; color: #000;">${options.upiId || 'q705457761@ybl'}</div>
+            <div style="font-size: 8.5px; font-weight: 700; color: #000; margin-top: 1px;">Google Pay / PhonePe / Paytm / BHIM</div>
           </div>
+          <div class="divider"></div>
           `
               : ''
           }
 
-          <div class="divider"></div>
           <div class="center footer">
-            <div>${rFooter}</div>
             <div>Please Visit Again.</div>
           </div>
         </div>

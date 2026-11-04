@@ -83,6 +83,8 @@ router.get(
 
     const history = await orderService.getOrderHistory({
       branchId,
+      date: req.query.date || null,
+      session: req.query.session || null,
       dateFrom: req.query.dateFrom || req.query.startDate || null,
       dateTo: req.query.dateTo || req.query.endDate || null,
       month: req.query.month || null,

@@ -15,6 +15,7 @@ import billingRoutes from './modules/billing/routes.js';
 import customerRoutes from './modules/customers/routes.js';
 import reportRoutes from './modules/reports/routes.js';
 import auditRoutes from './modules/audit/routes.js';
+import accountsRoutes from './modules/accounts/routes.js';
 
 export function createApp() {
   const app = express();
@@ -67,6 +68,8 @@ export function createApp() {
   app.use('/api/v1', customerRoutes);
   app.use('/api/v1', reportRoutes);
   app.use('/api/v1', auditRoutes);
+  app.use('/api/v1', accountsRoutes);
+  app.use('/api', accountsRoutes);
 
   // 404 & Central Error Handling
   app.use(notFoundHandler);

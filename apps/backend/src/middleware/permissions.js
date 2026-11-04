@@ -73,7 +73,15 @@ export function requireRole(allowedRoles = []) {
     if (!req.user) {
       return next(new AuthenticationAppError());
     }
-    const userRoles = (req.user.roleCodes || []).map((r) => String(r).toUpperCase());
+    const userRoles = [
+      ...(req.user.roleCodes || []),
+      ...(Array.isArray(req.user.roles)
+        ? req.user.roles.map((r) => (typeof r === 'string' ? r : r.code || r.name))
+        : [req.user.roles]),
+      req.user.role || '',
+    ]
+      .filter(Boolean)
+      .map((r) => String(r).toUpperCase());
     const hasRole = userRoles.some((r) => normalized.includes(r));
     if (!hasRole) {
       return next(

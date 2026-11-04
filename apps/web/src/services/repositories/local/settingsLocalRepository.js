@@ -9,7 +9,7 @@ export const DEFAULT_SETTINGS = {
   tagline: 'Pure Vegetarian Dining & Banquet',
   branchName: 'Main Branch (Gandhinagar)',
   address: 'Opp. SP Petrol Pump, Gandhinagar, Chiloda Cross Road, Gandhinagar.',
-  phone: '+91 97375 81238',
+  phone: '8866515313, 9737581238',
   email: 'greentandoorse@gmail.com',
   gstin: '24AABCG1234F1Z8',
   fssai: '13320001000123',

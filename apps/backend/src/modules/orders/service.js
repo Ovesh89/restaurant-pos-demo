@@ -17,6 +17,7 @@ import { kotRepository } from '../kot/repository.js';
 import { notificationService } from '../notifications/service.js';
 import { auditService } from '../audit/service.js';
 import { orderRepository, orderEventRepository } from './repositories.js';
+import { resolveOperationalTimeRange } from '../../utils/operationalTime.js';
 
 
 export function calculateOrderFinancials(items = []) {
@@ -1194,6 +1195,8 @@ class OrderService {
 
   async getOrderHistory({
     branchId = 'branch-main',
+    date = null,
+    session = null,
     dateFrom = null,
     dateTo = null,
     month = null,
@@ -1207,7 +1210,11 @@ class OrderService {
     let start = dateFrom;
     let end = dateTo;
 
-    if (month && String(month).trim()) {
+    if (session || date) {
+      const range = resolveOperationalTimeRange({ date, session, dateFrom, dateTo, month });
+      start = range.start;
+      end = range.end;
+    } else if (month && String(month).trim()) {
       const match = /^(\d{4})-(\d{1,2})$/.exec(String(month).trim());
       if (match) {
         const year = parseInt(match[1], 10);
