@@ -1,5 +1,9 @@
 import { apiClient } from '../../api/apiClient.js';
 import { APP_CONFIG } from '../../../config/appConfig.js';
+import { queryClient } from '../../../config/queryClient.js';
+import { queryKeys } from '../../../constants/queryKeys.js';
+import { CACHE_POLICIES } from '../../../config/cachePolicies.js';
+import { cacheInvalidationService } from '../../cache/cacheInvalidationService.js';
 
 class KOTApiRepository {
   normalizeKOT(kot) {
@@ -53,38 +57,53 @@ class KOTApiRepository {
   }
 
   async getKOTs(filters = {}) {
-    const params = {
-      branchId: filters.branchId || APP_CONFIG.DEFAULT_BRANCH_ID || 'branch-main',
-      limit: 100
-    };
+    const branchId = filters.branchId || APP_CONFIG.DEFAULT_BRANCH_ID || 'branch-main';
+    return queryClient.fetchQuery({
+      queryKey: queryKeys.kotQueue(branchId, filters),
+      queryFn: async () => {
+        const params = {
+          branchId,
+          limit: 100
+        };
 
-    if (filters.station && filters.station !== 'ALL' && filters.station !== 'All Stations') {
-      params.kitchenStation = filters.station;
-    }
+        if (filters.station && filters.station !== 'ALL' && filters.station !== 'All Stations') {
+          params.kitchenStation = filters.station;
+        }
 
-    if (filters.status) {
-      params.status = filters.status;
-    }
+        if (filters.status) {
+          params.status = filters.status;
+        }
 
-    if (filters.orderId) {
-      params.orderId = filters.orderId;
-    }
+        if (filters.orderId) {
+          params.orderId = filters.orderId;
+        }
 
-    const res = await apiClient.get('/kots', { params });
-    const rawList = Array.isArray(res) ? res : (res?.items || []);
-    let list = rawList.map((k) => this.normalizeKOT(k));
+        const res = await apiClient.get('/kots', { params });
+        const rawList = Array.isArray(res) ? res : (res?.items || []);
+        let list = rawList.map((k) => this.normalizeKOT(k));
 
-    if (filters.tableId) {
-      list = list.filter((k) => k.tableId === filters.tableId);
-    }
+        if (filters.tableId) {
+          list = list.filter((k) => k.tableId === filters.tableId);
+        }
 
-    return list.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+        return list.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+      },
+      staleTime: CACHE_POLICIES.KOT_QUEUE.staleTime,
+      gcTime: CACHE_POLICIES.KOT_QUEUE.gcTime,
+    });
   }
 
   async getKOTById(id) {
     if (!id) return null;
-    const res = await apiClient.get(`/kots/${id}`);
-    return this.normalizeKOT(res);
+    return queryClient.fetchQuery({
+      queryKey: queryKeys.kot(id),
+      queryFn: async () => {
+        const res = await apiClient.get(`/kots/${id}`);
+        return this.normalizeKOT(res);
+      },
+      staleTime: CACHE_POLICIES.KOT_QUEUE.staleTime,
+      gcTime: CACHE_POLICIES.KOT_QUEUE.gcTime,
+    });
   }
 
   async createKOT(kotData) {
@@ -105,6 +124,8 @@ class KOTApiRepository {
     };
 
     const res = await apiClient.post(`/kots/${kotId}/status`, payload);
+    queryClient.invalidateQueries({ queryKey: ['kot-queue'] });
+    queryClient.invalidateQueries({ queryKey: ['orders'] });
     return this.normalizeKOT(res);
   }
 

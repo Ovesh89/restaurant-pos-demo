@@ -43,6 +43,8 @@ import { ORDER_STATUS } from '../../constants/orderStatus';
 import { PERMISSIONS } from '../../constants/permissions';
 import { DiningAreaManager } from '../../components/restaurant/DiningAreaManager.jsx';
 import { useTranslation } from '../../hooks/useTranslation';
+import { queryClient } from '../../config/queryClient';
+import { queryKeys } from '../../constants/queryKeys';
 
 export const TablesPage = () => {
   const { user, hasPermission, hasAnyPermission } = useAuth();
@@ -51,8 +53,22 @@ export const TablesPage = () => {
   const canManage = hasPermission(PERMISSIONS.TABLE_MANAGE);
 
   const isCaptain = user?.role === 'captain' || hasPermission('role.captain');
-  const [tables, setTables] = useState([]);
-  const [areas, setAreas] = useState([]);
+  const [tables, setTables] = useState(() => {
+    try {
+      const cached = queryClient.getQueryData(queryKeys.tables('branch-main', { areaId: null }));
+      return Array.isArray(cached) && cached.length > 0 ? cached : [];
+    } catch {
+      return [];
+    }
+  });
+  const [areas, setAreas] = useState(() => {
+    try {
+      const cached = queryClient.getQueryData(queryKeys.areas('branch-main'));
+      return Array.isArray(cached) && cached.length > 0 ? cached : [];
+    } catch {
+      return [];
+    }
+  });
   const [selectedAreaId, setSelectedAreaId] = useState('ALL');
   const [captainMobileArea, setCaptainMobileArea] = useState(() => {
     return localStorage.getItem('pos_captain_selected_area') || null;
@@ -96,7 +112,14 @@ export const TablesPage = () => {
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
   }, []);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(() => {
+    try {
+      const cached = queryClient.getQueryData(queryKeys.tables('branch-main', { areaId: null }));
+      return !(Array.isArray(cached) && cached.length > 0);
+    } catch {
+      return true;
+    }
+  });
 
   // Dining Areas Modal State
   const [isAreaModalOpen, setIsAreaModalOpen] = useState(false);
@@ -137,9 +160,11 @@ export const TablesPage = () => {
   const [transferError, setTransferError] = useState('');
   const [transferLoading, setTransferLoading] = useState(false);
 
-  const loadFloor = async () => {
+  const loadFloor = async (forceLoading = false) => {
     try {
-      setLoading(true);
+      if (forceLoading || tables.length === 0) {
+        setLoading(true);
+      }
       const [tList, aList, oList] = await Promise.all([
         tableRepository.getTables(),
         branchRepository.getAreas(),
@@ -711,7 +736,9 @@ export const TablesPage = () => {
                       key={tbl.id}
                       onClick={() => {
                         if (!tbl.isActive) return;
-                        navigate(`/orders/new?tableId=${tbl.id}&from=tables`);
+                        navigate(`/orders/new?tableId=${tbl.id}&from=tables`, {
+                          state: { table: tbl, activeOrder: tbl.activeOrder || null }
+                        });
                       }}
                       className={`rounded-2xl border bg-white p-3 shadow-2xs transition-all flex flex-col justify-between min-h-[125px] cursor-pointer active:scale-[0.98] ${
                         !tbl.isActive
@@ -886,7 +913,9 @@ export const TablesPage = () => {
                 // Common for all: Clicking table redirects directly to add/update order page
                 const handleCardClick = () => {
                   if (!tbl.isActive) return;
-                  navigate(`/orders/new?tableId=${tbl.id}&from=tables`);
+                  navigate(`/orders/new?tableId=${tbl.id}&from=tables`, {
+                    state: { table: tbl, activeOrder: tbl.activeOrder || null }
+                  });
                 };
 
                 return (
@@ -932,7 +961,9 @@ export const TablesPage = () => {
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
-                            navigate(`/orders/new?tableId=${tbl.id}&from=tables`);
+                            navigate(`/orders/new?tableId=${tbl.id}&from=tables`, {
+                              state: { table: tbl, activeOrder: tbl.activeOrder || null }
+                            });
                           }}
                           className="text-[11px] font-bold text-blue-600 hover:text-blue-700 bg-blue-50 px-2 py-0.5 rounded-lg border border-blue-200"
                         >
@@ -943,7 +974,9 @@ export const TablesPage = () => {
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
-                              navigate(`/orders/new?tableId=${tbl.id}&from=tables`);
+                              navigate(`/orders/new?tableId=${tbl.id}&from=tables`, {
+                                state: { table: tbl, activeOrder: tbl.activeOrder || null }
+                              });
                             }}
                             className="text-[11px] font-bold text-blue-700 hover:text-blue-800 bg-blue-50 px-2 py-0.5 rounded-lg border border-blue-200 flex items-center gap-1"
                             title="Add dishes or modify order"

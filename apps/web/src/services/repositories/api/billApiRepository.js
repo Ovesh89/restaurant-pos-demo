@@ -1,6 +1,10 @@
 import { apiClient } from '../../api/apiClient.js';
 import { APP_CONFIG } from '../../../config/appConfig.js';
 import { BILL_STATUS } from '../local/billLocalRepository.js';
+import { queryClient } from '../../../config/queryClient.js';
+import { queryKeys } from '../../../constants/queryKeys.js';
+import { CACHE_POLICIES } from '../../../config/cachePolicies.js';
+import { cacheInvalidationService } from '../../cache/cacheInvalidationService.js';
 
 class BillApiRepository {
   normalizeBill(bill) {
@@ -152,72 +156,87 @@ class BillApiRepository {
   }
 
   async getBills(filters = {}) {
-    const params = {
-      branchId: filters.branchId || APP_CONFIG.DEFAULT_BRANCH_ID || 'branch-main',
-    };
+    const branchId = filters.branchId || APP_CONFIG.DEFAULT_BRANCH_ID || 'branch-main';
+    return queryClient.fetchQuery({
+      queryKey: queryKeys.bills(branchId, filters),
+      queryFn: async () => {
+        const params = {
+          branchId,
+        };
 
-    if (filters.page) {
-      params.page = filters.page;
-    }
-    if (filters.limit) {
-      params.limit = filters.limit;
-    } else if (!filters.page) {
-      params.limit = 100;
-    }
+        if (filters.page) {
+          params.page = filters.page;
+        }
+        if (filters.limit) {
+          params.limit = filters.limit;
+        } else if (!filters.page) {
+          params.limit = 100;
+        }
 
-    if (filters.status) {
-      if (filters.status === BILL_STATUS.PAID) {
-        params.status = 'COMPLETED';
-      } else if (filters.status === BILL_STATUS.PENDING) {
-        params.status = 'PAYMENT_PENDING';
-      } else {
-        params.status = filters.status;
-      }
-    }
+        if (filters.status) {
+          if (filters.status === BILL_STATUS.PAID) {
+            params.status = 'COMPLETED';
+          } else if (filters.status === BILL_STATUS.PENDING) {
+            params.status = 'PAYMENT_PENDING';
+          } else {
+            params.status = filters.status;
+          }
+        }
 
-    if (filters.orderId) {
-      params.orderId = filters.orderId;
-    }
+        if (filters.orderId) {
+          params.orderId = filters.orderId;
+        }
 
-    if (filters.dateFrom) {
-      params.dateFrom = filters.dateFrom;
-    }
+        if (filters.dateFrom) {
+          params.dateFrom = filters.dateFrom;
+        }
 
-    if (filters.dateTo) {
-      params.dateTo = filters.dateTo;
-    }
+        if (filters.dateTo) {
+          params.dateTo = filters.dateTo;
+        }
 
-    if (filters.search && String(filters.search).trim()) {
-      params.search = String(filters.search).trim();
-    }
+        if (filters.search && String(filters.search).trim()) {
+          params.search = String(filters.search).trim();
+        }
 
-    const res = await apiClient.get('/bills', { params });
-    const rawList = Array.isArray(res) ? res : (res?.items || []);
-    let list = rawList.map((b) => this.normalizeBill(b));
+        const res = await apiClient.get('/bills', { params });
+        const rawList = Array.isArray(res) ? res : (res?.items || []);
+        let list = rawList.map((b) => this.normalizeBill(b));
 
-    const total = Number(res?.pagination?.total ?? list.length);
-    const pageNum = Number(res?.pagination?.page ?? filters.page ?? 1);
-    const limitNum = Number(res?.pagination?.limit ?? filters.limit ?? list.length ?? 20);
-    const totalPages = Number(res?.pagination?.totalPages ?? res?.pagination?.pages ?? Math.max(1, Math.ceil(total / (limitNum || 1))));
+        const total = Number(res?.pagination?.total ?? list.length);
+        const pageNum = Number(res?.pagination?.page ?? filters.page ?? 1);
+        const limitNum = Number(res?.pagination?.limit ?? filters.limit ?? list.length ?? 20);
+        const totalPages = Number(res?.pagination?.totalPages ?? res?.pagination?.pages ?? Math.max(1, Math.ceil(total / (limitNum || 1))));
 
-    list.pagination = res?.pagination || {
-      total,
-      page: pageNum,
-      limit: limitNum,
-      totalPages,
-      pages: totalPages,
-      hasNext: pageNum < totalPages,
-      hasPrev: pageNum > 1,
-    };
-    list.items = list;
+        list.pagination = res?.pagination || {
+          total,
+          page: pageNum,
+          limit: limitNum,
+          totalPages,
+          pages: totalPages,
+          hasNext: pageNum < totalPages,
+          hasPrev: pageNum > 1,
+        };
+        list.items = list;
 
-    return list;
+        return list;
+      },
+      staleTime: CACHE_POLICIES.BILLS.staleTime,
+      gcTime: CACHE_POLICIES.BILLS.gcTime,
+    });
   }
 
   async getBillById(id) {
     if (!id) return null;
-    const res = await apiClient.get(`/bills/${id}`);
-    return this.normalizeBill(res);
+    return queryClient.fetchQuery({
+      queryKey: queryKeys.bill(id),
+      queryFn: async () => {
+        const res = await apiClient.get(`/bills/${id}`);
+        return this.normalizeBill(res);
+      },
+      staleTime: CACHE_POLICIES.BILLS.staleTime,
+      gcTime: CACHE_POLICIES.BILLS.gcTime,
+    });
   }
 
   async getBillByOrderId(orderId) {
@@ -270,6 +289,7 @@ class BillApiRepository {
       }
     }
 
+    cacheInvalidationService.invalidateBills('branch-main');
     return bill;
   }
 
@@ -283,6 +303,7 @@ class BillApiRepository {
       reason: discount.reason?.trim() || 'Post-settlement discount'
     };
     const res = await apiClient.post(`/bills/${billId}/discount`, payload);
+    cacheInvalidationService.invalidateBills('branch-main');
     return this.normalizeBill(res);
   }
 
@@ -314,6 +335,9 @@ class BillApiRepository {
       }
     }
 
+    cacheInvalidationService.invalidateBills('branch-main');
+    cacheInvalidationService.invalidateTables('branch-main');
+    cacheInvalidationService.invalidateOrders('branch-main');
     return { bill, payment, isSettled: isNowSettled };
   }
 
@@ -322,6 +346,9 @@ class BillApiRepository {
       throw new Error('Captains are not permitted to alter or close bills.');
     }
     const closedRes = await apiClient.post(`/bills/${billId}/close`);
+    cacheInvalidationService.invalidateBills('branch-main');
+    cacheInvalidationService.invalidateTables('branch-main');
+    cacheInvalidationService.invalidateOrders('branch-main');
     return this.normalizeBill(closedRes);
   }
 

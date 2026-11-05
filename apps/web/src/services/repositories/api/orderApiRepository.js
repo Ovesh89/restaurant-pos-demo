@@ -2,6 +2,10 @@ import { apiClient } from '../../api/apiClient.js';
 import { APP_CONFIG } from '../../../config/appConfig.js';
 import { ORDER_STATUS } from '../../../constants/orderStatus.js';
 import { kotApiRepository } from './kotApiRepository.js';
+import { queryClient } from '../../../config/queryClient.js';
+import { queryKeys } from '../../../constants/queryKeys.js';
+import { CACHE_POLICIES } from '../../../config/cachePolicies.js';
+import { cacheInvalidationService } from '../../cache/cacheInvalidationService.js';
 
 class OrderApiRepository {
   normalizeOrder(order) {
@@ -83,66 +87,81 @@ class OrderApiRepository {
 
 
   async getOrders(filters = {}) {
-    const params = {
-      branchId: filters.branchId || APP_CONFIG.DEFAULT_BRANCH_ID || 'branch-main',
-    };
+    const branchId = filters.branchId || APP_CONFIG.DEFAULT_BRANCH_ID || 'branch-main';
+    return queryClient.fetchQuery({
+      queryKey: queryKeys.orders(branchId, filters),
+      queryFn: async () => {
+        const params = {
+          branchId,
+        };
 
-    if (filters.page) {
-      params.page = filters.page;
-    }
-    if (filters.limit) {
-      params.limit = filters.limit;
-    } else if (!filters.page) {
-      params.limit = 100;
-    }
+        if (filters.page) {
+          params.page = filters.page;
+        }
+        if (filters.limit) {
+          params.limit = filters.limit;
+        } else if (!filters.page) {
+          params.limit = 100;
+        }
 
-    if (filters.status) {
-      if (Array.isArray(filters.status)) {
-        params.status = filters.status.join(',');
-      } else {
-        params.status = filters.status;
-      }
-    }
+        if (filters.status) {
+          if (Array.isArray(filters.status)) {
+            params.status = filters.status.join(',');
+          } else {
+            params.status = filters.status;
+          }
+        }
 
-    if (filters.tableId) {
-      params.tableId = filters.tableId;
-    }
+        if (filters.tableId) {
+          params.tableId = filters.tableId;
+        }
 
-    if (filters.captainId) {
-      params.captainId = filters.captainId;
-    }
+        if (filters.captainId) {
+          params.captainId = filters.captainId;
+        }
 
-    if (filters.search && String(filters.search).trim()) {
-      params.search = String(filters.search).trim();
-    }
+        if (filters.search && String(filters.search).trim()) {
+          params.search = String(filters.search).trim();
+        }
 
-    const res = await apiClient.get('/orders', { params });
-    const rawList = Array.isArray(res) ? res : (res?.items || []);
-    let list = rawList.map((o) => this.normalizeOrder(o));
+        const res = await apiClient.get('/orders', { params });
+        const rawList = Array.isArray(res) ? res : (res?.items || []);
+        let list = rawList.map((o) => this.normalizeOrder(o));
 
-    const total = Number(res?.pagination?.total ?? list.length);
-    const pageNum = Number(res?.pagination?.page ?? filters.page ?? 1);
-    const limitNum = Number(res?.pagination?.limit ?? filters.limit ?? list.length ?? 20);
-    const totalPages = Number(res?.pagination?.totalPages ?? res?.pagination?.pages ?? Math.max(1, Math.ceil(total / (limitNum || 1))));
+        const total = Number(res?.pagination?.total ?? list.length);
+        const pageNum = Number(res?.pagination?.page ?? filters.page ?? 1);
+        const limitNum = Number(res?.pagination?.limit ?? filters.limit ?? list.length ?? 20);
+        const totalPages = Number(res?.pagination?.totalPages ?? res?.pagination?.pages ?? Math.max(1, Math.ceil(total / (limitNum || 1))));
 
-    list.pagination = res?.pagination || {
-      total,
-      page: pageNum,
-      limit: limitNum,
-      totalPages,
-      pages: totalPages,
-      hasNext: pageNum < totalPages,
-      hasPrev: pageNum > 1,
-    };
-    list.items = list;
+        list.pagination = res?.pagination || {
+          total,
+          page: pageNum,
+          limit: limitNum,
+          totalPages,
+          pages: totalPages,
+          hasNext: pageNum < totalPages,
+          hasPrev: pageNum > 1,
+        };
+        list.items = list;
 
-    return list;
+        return list;
+      },
+      staleTime: CACHE_POLICIES.ACTIVE_ORDERS.staleTime,
+      gcTime: CACHE_POLICIES.ACTIVE_ORDERS.gcTime,
+    });
   }
 
   async getOrderById(id) {
     if (!id) return null;
-    const res = await apiClient.get(`/orders/${id}`);
-    return this.normalizeOrder(res);
+    return queryClient.fetchQuery({
+      queryKey: queryKeys.order(id),
+      queryFn: async () => {
+        const res = await apiClient.get(`/orders/${id}`);
+        return this.normalizeOrder(res);
+      },
+      staleTime: CACHE_POLICIES.ACTIVE_ORDERS.staleTime,
+      gcTime: CACHE_POLICIES.ACTIVE_ORDERS.gcTime,
+    });
   }
 
   async getActiveOrderByTable(tableId) {
@@ -222,17 +241,22 @@ class OrderApiRepository {
     };
 
     const res = await apiClient.post('/orders', payload);
+    cacheInvalidationService.invalidateOrders('branch-main');
+    cacheInvalidationService.invalidateTables('branch-main');
     return this.normalizeOrder(res);
   }
 
-
   async submitOrder(orderId, actor) {
     const res = await apiClient.post(`/orders/${orderId}/submit`);
+    cacheInvalidationService.invalidateOrders('branch-main');
+    cacheInvalidationService.invalidateTables('branch-main');
     return this.normalizeOrder(res);
   }
 
   async confirmOrder(orderId, actor = { id: 'reception', name: 'Reception Staff' }) {
     const res = await apiClient.post(`/orders/${orderId}/confirm`);
+    cacheInvalidationService.invalidateOrders('branch-main');
+    cacheInvalidationService.invalidateTables('branch-main');
     const order = this.normalizeOrder(res?.order || res);
     const kotTicket = res?.kot ? kotApiRepository.normalizeKOT(res.kot) : null;
     return { order, kotTicket };
@@ -250,6 +274,8 @@ class OrderApiRepository {
     const res = await apiClient.post(`/orders/${orderId}/reject`, {
       reason: reason.trim()
     });
+    cacheInvalidationService.invalidateOrders('branch-main');
+    cacheInvalidationService.invalidateTables('branch-main');
     return this.normalizeOrder(res);
   }
 
@@ -258,6 +284,8 @@ class OrderApiRepository {
       status,
       reason: reason ? reason.trim() : undefined,
     });
+    cacheInvalidationService.invalidateOrders('branch-main');
+    cacheInvalidationService.invalidateTables('branch-main');
     return this.normalizeOrder(res);
   }
 
@@ -375,6 +403,9 @@ class OrderApiRepository {
         : null;
     }
 
+    cacheInvalidationService.invalidateOrders('branch-main');
+    cacheInvalidationService.invalidateTables('branch-main');
+
     const freshOrder = await this.getOrderById(targetOrderId);
     return { order: freshOrder, deltaKOT };
   }
@@ -387,6 +418,8 @@ class OrderApiRepository {
       itemId,
       reason: reason.trim(),
     });
+    cacheInvalidationService.invalidateOrders('branch-main');
+    cacheInvalidationService.invalidateTables('branch-main');
     return this.normalizeOrder(res?.order || res);
   }
 
@@ -399,6 +432,8 @@ class OrderApiRepository {
     const res = await apiClient.post(`/orders/${orderId}/cancel`, {
       reason: reason.trim()
     });
+    cacheInvalidationService.invalidateOrders('branch-main');
+    cacheInvalidationService.invalidateTables('branch-main');
     return this.normalizeOrder(res);
   }
 

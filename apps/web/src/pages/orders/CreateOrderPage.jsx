@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams, useLocation } from 'react-router-dom';
 import {
   UtensilsCrossed,
   Search,
@@ -23,6 +23,10 @@ import {
   Send,
   X,
   ChevronRight,
+  ChevronLeft,
+  ChevronDown,
+  Filter,
+  Check,
   ArrowRightLeft
 } from 'lucide-react';
 import { useAuth } from '../../hooks/useAuth';
@@ -43,6 +47,8 @@ import { Input } from '../../components/common/Input';
 import { Select } from '../../components/common/Select';
 import { Modal } from '../../components/common/Modal';
 import { Badge } from '../../components/common/Badge';
+import { queryClient } from '../../config/queryClient';
+import { queryKeys } from '../../constants/queryKeys';
 
 export const CreateOrderPage = () => {
   const { user, role } = useAuth();
@@ -51,14 +57,50 @@ export const CreateOrderPage = () => {
   const { settings } = useRestaurant();
   const requireOrderApproval = settings?.requireOrderApproval !== false;
   const navigate = useNavigate();
+  const location = useLocation();
+  const navStateTable = location.state?.table;
+  const navStateActiveOrder = location.state?.activeOrder;
   const [searchParams] = useSearchParams();
   const preselectedTableId = searchParams.get('tableId');
   const isFromTables = Boolean(preselectedTableId || searchParams.get('from') === 'tables');
 
-  const [tables, setTables] = useState([]);
-  const [categories, setCategories] = useState([]);
-  const [products, setProducts] = useState([]);
-  const [loading, setLoading] = useState(true);
+  // Key for persisting draft items for unsubmitted tables
+  const getTableDraftKey = (tableId) => `pos_captain_draft_table_${tableId}`;
+
+  // Centralized Master Data Cached States
+  const [tables, setTables] = useState(() => {
+    try {
+      const cached = queryClient.getQueryData(queryKeys.tables('branch-main', { areaId: null }));
+      return Array.isArray(cached) && cached.length > 0 ? cached : [];
+    } catch {
+      return [];
+    }
+  });
+  const [categories, setCategories] = useState(() => {
+    try {
+      const cached = queryClient.getQueryData(queryKeys.categories('branch-main', false));
+      return Array.isArray(cached) && cached.length > 0 ? cached : [];
+    } catch {
+      return [];
+    }
+  });
+  const [products, setProducts] = useState(() => {
+    try {
+      const cached = queryClient.getQueryData(queryKeys.products('branch-main', { onlyAvailable: true }));
+      return Array.isArray(cached) && cached.length > 0 ? cached : [];
+    } catch {
+      return [];
+    }
+  });
+  const [loading, setLoading] = useState(() => {
+    try {
+      const p = queryClient.getQueryData(queryKeys.products('branch-main', { onlyAvailable: true }));
+      const c = queryClient.getQueryData(queryKeys.categories('branch-main', false));
+      return !(Array.isArray(p) && p.length > 0 && Array.isArray(c) && c.length > 0);
+    } catch {
+      return true;
+    }
+  });
   const [loadError, setLoadError] = useState('');
 
   // Mobile active tab: 'menu' | 'cart'
@@ -81,20 +123,35 @@ export const CreateOrderPage = () => {
   }, []);
 
   const isCaptainMobile = isCaptain && isMobileView;
-
-  // Key for persisting draft items for unsubmitted tables
-  const getTableDraftKey = (tableId) => `pos_captain_draft_table_${tableId}`;
   const loadedTableIdRef = useRef(null);
 
   // Selected Table & Order Type
-  const [selectedTable, setSelectedTable] = useState(null);
-  const [orderType, setOrderType] = useState('DINE_IN'); // DINE_IN, TAKEAWAY, ZOMATO, SWIGGY, ONLINE_OTHER
-  const [customerName, setCustomerName] = useState('');
-  const [customerPhone, setCustomerPhone] = useState('');
+  const [selectedTable, setSelectedTable] = useState(() => {
+    if (navStateTable && (!preselectedTableId || navStateTable.id === preselectedTableId)) {
+      return navStateTable;
+    }
+    if (preselectedTableId) {
+      try {
+        const cached = queryClient.getQueryData(queryKeys.tables('branch-main', { areaId: null }));
+        if (Array.isArray(cached)) {
+          return cached.find((t) => t.id === preselectedTableId) || null;
+        }
+      } catch {}
+    }
+    return null;
+  });
+  const [orderType, setOrderType] = useState(() => navStateActiveOrder?.orderType || 'DINE_IN');
+  const [customerName, setCustomerName] = useState(() => navStateActiveOrder?.customerName || '');
+  const [customerPhone, setCustomerPhone] = useState(() => navStateActiveOrder?.customerPhone || '');
   const [onlineOrderRef, setOnlineOrderRef] = useState('');
 
   // Active / Existing Order & Bill States (For modification and on-page bill generation)
-  const [existingOrder, setExistingOrder] = useState(null);
+  const [existingOrder, setExistingOrder] = useState(() => {
+    if (navStateActiveOrder && !['COMPLETED', 'CANCELLED', 'REJECTED'].includes(navStateActiveOrder.status)) {
+      return navStateActiveOrder;
+    }
+    return null;
+  });
   const [activeBill, setActiveBill] = useState(null);
   const isBillLockedForCaptain = isCaptain && Boolean(activeBill);
   const [billLoading, setBillLoading] = useState(false);
@@ -102,13 +159,77 @@ export const CreateOrderPage = () => {
   const [successMsg, setSuccessMsg] = useState('');
 
   // Cart
-  const [cart, setCart] = useState([]);
-  const [orderNotes, setOrderNotes] = useState('');
+  const [cart, setCart] = useState(() => {
+    if (navStateActiveOrder && Array.isArray(navStateActiveOrder.items)) {
+      return (navStateActiveOrder.items || [])
+        .filter((i) => (i.status || 'ACTIVE') !== 'CANCELLED')
+        .map((i) => {
+          const pId = i.productId || i.id || i._id;
+          const pPrice = i.unitPrice !== undefined ? Number(i.unitPrice) : Number(i.price || 0);
+          const isCustomItem = Boolean(i.isCustom || String(pId || '').startsWith('custom-') || i.code === 'OFF-MENU');
+          return {
+            productId: pId,
+            id: i.id || i._id || pId,
+            name: i.name || i.productName || 'Special Item',
+            productName: i.productName || i.name || 'Special Item',
+            code: i.code || (isCustomItem ? 'OFF-MENU' : ''),
+            price: pPrice,
+            unitPrice: pPrice,
+            taxRate: i.taxRate !== undefined ? Number(i.taxRate) : (i.taxConfig?.rate ? Number(i.taxConfig.rate) : 5),
+            station: i.station || 'Main Curry',
+            kotRequired: i.kotRequired !== false,
+            isCustom: isCustomItem,
+            quantity: Number(i.quantity) || 1,
+            notes: i.notes || i.note || '',
+          };
+        });
+    }
+    if (preselectedTableId) {
+      try {
+        const draftStr = localStorage.getItem(`pos_captain_draft_table_${preselectedTableId}`);
+        if (draftStr) {
+          const draft = JSON.parse(draftStr);
+          if (Array.isArray(draft?.cart) && draft.cart.length > 0) {
+            return draft.cart;
+          }
+        }
+      } catch {}
+    }
+    return [];
+  });
+  const [orderNotes, setOrderNotes] = useState(() => navStateActiveOrder?.notes || '');
   const [spiceLevel, setSpiceLevel] = useState('');
 
   // Filtering
   const [activeCategory, setActiveCategory] = useState('ALL');
+  const [selectedCategoryIds, setSelectedCategoryIds] = useState([]);
+  const [isCategoryDropdownOpen, setIsCategoryDropdownOpen] = useState(false);
+  const [categoryFilterSearch, setCategoryFilterSearch] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
+  const categoryDropdownRef = useRef(null);
+  const categoryScrollRef = useRef(null);
+
+  // Close category dropdown on outside click or Escape
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (categoryDropdownRef.current && !categoryDropdownRef.current.contains(e.target)) {
+        setIsCategoryDropdownOpen(false);
+      }
+    };
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        setIsCategoryDropdownOpen(false);
+      }
+    };
+    if (isCategoryDropdownOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+      document.addEventListener('keydown', handleKeyDown);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [isCategoryDropdownOpen]);
 
   // Item Note Modal
   const [editingItemNote, setEditingItemNote] = useState(null);
@@ -136,7 +257,61 @@ export const CreateOrderPage = () => {
   const [submitting, setSubmitting] = useState(false);
   const [actionError, setActionError] = useState('');
 
-  const loadActiveOrderForTable = async (tbl) => {
+  const applyActiveOrder = (activeOrd, tbl) => {
+    setExistingOrder(activeOrd);
+    if (tbl?.id) {
+      localStorage.removeItem(getTableDraftKey(tbl.id));
+    }
+    const activeItems = (activeOrd.items || [])
+      .filter((i) => (i.status || 'ACTIVE') !== 'CANCELLED')
+      .map((i) => {
+        const pId = i.productId || i.id || i._id;
+        const pPrice = i.unitPrice !== undefined ? Number(i.unitPrice) : Number(i.price || 0);
+        const isCustomItem = Boolean(i.isCustom || String(pId || '').startsWith('custom-') || i.code === 'OFF-MENU');
+        return {
+          productId: pId,
+          id: i.id || i._id || pId,
+          name: i.name || i.productName || 'Special Item',
+          productName: i.productName || i.name || 'Special Item',
+          code: i.code || (isCustomItem ? 'OFF-MENU' : ''),
+          price: pPrice,
+          unitPrice: pPrice,
+          taxRate: i.taxRate !== undefined ? Number(i.taxRate) : (i.taxConfig?.rate ? Number(i.taxConfig.rate) : 5),
+          station: i.station || 'Main Curry',
+          kotRequired: i.kotRequired !== false,
+          isCustom: isCustomItem,
+          quantity: Number(i.quantity) || 1,
+          notes: i.notes || i.note || '',
+        };
+      });
+    setCart(activeItems);
+    if (activeOrd.customerName) setCustomerName(activeOrd.customerName);
+    if (activeOrd.customerPhone) setCustomerPhone(activeOrd.customerPhone);
+    if (activeOrd.notes) setOrderNotes(activeOrd.notes);
+    if (activeOrd.orderType) setOrderType(activeOrd.orderType);
+  };
+
+  const applyTableDraft = (tblId) => {
+    setExistingOrder(null);
+    setActiveBill(null);
+    const draftStr = localStorage.getItem(getTableDraftKey(tblId));
+    if (draftStr) {
+      try {
+        const draft = JSON.parse(draftStr);
+        if (Array.isArray(draft?.cart) && draft.cart.length > 0) {
+          setCart(draft.cart);
+          if (draft.orderNotes) setOrderNotes(draft.orderNotes);
+          if (draft.spiceLevel) setSpiceLevel(draft.spiceLevel);
+          if (draft.customerName) setCustomerName(draft.customerName);
+          if (draft.customerPhone) setCustomerPhone(draft.customerPhone);
+          return;
+        }
+      } catch {}
+    }
+    setCart([]);
+  };
+
+  const loadActiveOrderForTable = async (tbl, initialActiveOrder = null) => {
     if (!tbl) {
       setExistingOrder(null);
       setActiveBill(null);
@@ -145,8 +320,41 @@ export const CreateOrderPage = () => {
     }
     loadedTableIdRef.current = null;
     try {
-      let activeOrd = await orderRepository.getActiveOrderByTable(tbl.id);
-      if (!activeOrd) {
+      let activeOrd = initialActiveOrder;
+
+      // 1. Fast path from cache if not passed via navigation state
+      if (!activeOrd || (activeOrd.tableId && activeOrd.tableId !== tbl.id)) {
+        try {
+          const cachedOrders = queryClient.getQueryData(queryKeys.orders('branch-main', { tableId: tbl.id }));
+          if (Array.isArray(cachedOrders)) {
+            activeOrd = cachedOrders.find(
+              (o) => !['COMPLETED', 'CANCELLED', 'REJECTED'].includes(o.status)
+            );
+          }
+        } catch {}
+
+        if (!activeOrd) {
+          try {
+            const cachedAll = queryClient.getQueryData(queryKeys.orders('branch-main', { limit: 200 }));
+            const list = Array.isArray(cachedAll?.items) ? cachedAll.items : (Array.isArray(cachedAll) ? cachedAll : []);
+            const cleanNo = String(tbl.tableNo || '').replace(/^T-?/i, '');
+            activeOrd = list.find(
+              (o) =>
+                (o.tableId === tbl.id || String(o.tableNo || '').replace(/^T-?/i, '') === cleanNo) &&
+                !['COMPLETED', 'CANCELLED', 'REJECTED'].includes(o.status)
+            );
+          } catch {}
+        }
+      }
+
+      // If active order was resolved from cache/state, populate cart immediately without waiting
+      if (activeOrd) {
+        applyActiveOrder(activeOrd, tbl);
+      }
+
+      // 2. Fetch fresh order state from server (served from queryClient or fresh network)
+      let serverActiveOrd = await orderRepository.getActiveOrderByTable(tbl.id);
+      if (!serverActiveOrd) {
         const cleanNo = String(tbl.tableNo || '').replace(/^T-?/i, '');
         const allOrdersRes = await orderRepository.getOrders({ limit: 100 }).catch(() => []);
         const allOrders = Array.isArray(allOrdersRes?.items)
@@ -154,7 +362,7 @@ export const CreateOrderPage = () => {
           : Array.isArray(allOrdersRes)
           ? allOrdersRes
           : [];
-        activeOrd = allOrders.find(
+        serverActiveOrd = allOrders.find(
           (o) =>
             (o.tableId === tbl.id ||
               String(o.tableNo || '').replace(/^T-?/i, '') === cleanNo) &&
@@ -162,65 +370,12 @@ export const CreateOrderPage = () => {
         );
       }
 
-      if (activeOrd) {
-        setExistingOrder(activeOrd);
-        // Remove stale draft since active order exists on server
-        localStorage.removeItem(getTableDraftKey(tbl.id));
-        const activeItems = (activeOrd.items || [])
-          .filter((i) => (i.status || 'ACTIVE') !== 'CANCELLED')
-          .map((i) => {
-            const pId = i.productId || i.id || i._id;
-            const pPrice = i.unitPrice !== undefined ? Number(i.unitPrice) : Number(i.price || 0);
-            const isCustomItem = Boolean(i.isCustom || String(pId || '').startsWith('custom-') || i.code === 'OFF-MENU');
-            return {
-              productId: pId,
-              id: i.id || i._id || pId,
-              name: i.name || i.productName || 'Special Item',
-              productName: i.productName || i.name || 'Special Item',
-              code: i.code || (isCustomItem ? 'OFF-MENU' : ''),
-              price: pPrice,
-              unitPrice: pPrice,
-              taxRate: i.taxRate !== undefined ? Number(i.taxRate) : (i.taxConfig?.rate ? Number(i.taxConfig.rate) : 5),
-              station: i.station || 'Main Curry',
-              kotRequired: i.kotRequired !== false,
-              isCustom: isCustomItem,
-              quantity: Number(i.quantity) || 1,
-              notes: i.notes || i.note || '',
-            };
-          });
-        setCart(activeItems);
-        if (activeOrd.customerName) setCustomerName(activeOrd.customerName);
-        if (activeOrd.customerPhone) setCustomerPhone(activeOrd.customerPhone);
-        if (activeOrd.notes) setOrderNotes(activeOrd.notes);
-        if (activeOrd.orderType) setOrderType(activeOrd.orderType);
-
-        // Fetch bill if exists
-        const b = await billRepository.getBillByOrderId(activeOrd.id).catch(() => null);
+      if (serverActiveOrd) {
+        applyActiveOrder(serverActiveOrd, tbl);
+        const b = await billRepository.getBillByOrderId(serverActiveOrd.id).catch(() => null);
         setActiveBill(b || null);
       } else {
-        setExistingOrder(null);
-        setActiveBill(null);
-
-        // Restore draft order items for this table if saved previously
-        const draftStr = localStorage.getItem(getTableDraftKey(tbl.id));
-        if (draftStr) {
-          try {
-            const draft = JSON.parse(draftStr);
-            if (Array.isArray(draft?.cart) && draft.cart.length > 0) {
-              setCart(draft.cart);
-              if (draft.orderNotes) setOrderNotes(draft.orderNotes);
-              if (draft.spiceLevel) setSpiceLevel(draft.spiceLevel);
-              if (draft.customerName) setCustomerName(draft.customerName);
-              if (draft.customerPhone) setCustomerPhone(draft.customerPhone);
-            } else {
-              setCart([]);
-            }
-          } catch {
-            setCart([]);
-          }
-        } else {
-          setCart([]);
-        }
+        applyTableDraft(tbl.id);
       }
     } catch (err) {
       console.warn('Failed to load active order for table:', err);
@@ -231,7 +386,9 @@ export const CreateOrderPage = () => {
 
   const initData = async () => {
     try {
-      setLoading(true);
+      if (products.length === 0 || categories.length === 0) {
+        setLoading(true);
+      }
       setLoadError('');
       const [tList, cList, pList] = await Promise.all([
         tableRepository.getTables(),
@@ -242,17 +399,20 @@ export const CreateOrderPage = () => {
       setTables(tList);
       setCategories(cList);
       setProducts(pList);
+      setLoading(false); // Unblock menu immediately!
 
-      let targetTable = null;
+      let targetTable = selectedTable;
       if (preselectedTableId) {
         const match = tList.find((t) => t.id === preselectedTableId);
         if (match) targetTable = match;
-      } else if (tList.length > 0) {
+      } else if (!targetTable && tList.length > 0) {
         targetTable = tList[0];
       }
-      setSelectedTable(targetTable);
       if (targetTable) {
-        await loadActiveOrderForTable(targetTable);
+        if (!selectedTable || selectedTable.id !== targetTable.id) {
+          setSelectedTable(targetTable);
+        }
+        await loadActiveOrderForTable(targetTable, navStateActiveOrder);
       }
     } catch (err) {
       console.error('Failed to load order entry data:', err);
@@ -854,6 +1014,64 @@ export const CreateOrderPage = () => {
     return map;
   }, [categories]);
 
+  // Product counts per category for badges and dropdown
+  const categoryCounts = useMemo(() => {
+    const counts = {};
+    (products || []).forEach((p) => {
+      if (p.categoryId) {
+        counts[p.categoryId] = (counts[p.categoryId] || 0) + 1;
+      }
+    });
+    return counts;
+  }, [products]);
+
+  // Search filter inside the category dropdown
+  const filteredCategoriesForDropdown = useMemo(() => {
+    if (!categoryFilterSearch.trim()) return categories;
+    const q = categoryFilterSearch.trim().toLowerCase();
+    return categories.filter((c) => (c.name || '').toLowerCase().includes(q));
+  }, [categories, categoryFilterSearch]);
+
+  // Toggle category selection for multiple-select dropdown
+  const toggleCategorySelection = (categoryId) => {
+    if (categoryId === 'ALL') {
+      setSelectedCategoryIds([]);
+      setActiveCategory('ALL');
+      return;
+    }
+    setSelectedCategoryIds((prev) => {
+      const next = prev.includes(categoryId)
+        ? prev.filter((id) => id !== categoryId)
+        : [...prev, categoryId];
+      if (next.length === 0) {
+        setActiveCategory('ALL');
+      } else if (next.length === 1) {
+        setActiveCategory(next[0]);
+      } else {
+        setActiveCategory('MULTI');
+      }
+      return next;
+    });
+  };
+
+  // Quick single-category selection on horizontal pills (click again toggles to all)
+  const selectSingleCategory = (categoryId) => {
+    if (categoryId === 'ALL' || (selectedCategoryIds.length === 1 && selectedCategoryIds[0] === categoryId)) {
+      setSelectedCategoryIds([]);
+      setActiveCategory('ALL');
+    } else {
+      setSelectedCategoryIds([categoryId]);
+      setActiveCategory(categoryId);
+    }
+  };
+
+  // Scroll categories horizontally
+  const scrollCategories = (direction) => {
+    if (categoryScrollRef.current) {
+      categoryScrollRef.current.scrollBy({ left: direction * 220, behavior: 'smooth' });
+    }
+  };
+
   // Filter products by category, search text, or voice transcript
   const filteredProducts = useMemo(() => {
     if (isCaptainMobile) {
@@ -894,14 +1112,18 @@ export const CreateOrderPage = () => {
     }
 
     return products.filter((p) => {
-      const matchesCat = activeCategory === 'ALL' || p.categoryId === activeCategory;
+      const matchesCat =
+        selectedCategoryIds.length === 0 ||
+        selectedCategoryIds.includes('ALL') ||
+        selectedCategoryIds.includes(p.categoryId) ||
+        (activeCategory !== 'ALL' && selectedCategoryIds.length === 0 && p.categoryId === activeCategory);
       const matchesSearch =
         !searchQuery.trim() ||
         p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
         p.code.toLowerCase().includes(searchQuery.toLowerCase());
       return matchesCat && matchesSearch;
     });
-  }, [products, searchQuery, activeCategory, categoryMap, isCaptainMobile]);
+  }, [products, searchQuery, activeCategory, selectedCategoryIds, categoryMap, isCaptainMobile]);
 
   const subtotal = cart.reduce((acc, item) => acc + item.quantity * item.price, 0);
   const totalCartItems = cart.reduce((a, b) => a + b.quantity, 0);
@@ -1581,44 +1803,243 @@ export const CreateOrderPage = () => {
             mobileTab === 'menu' ? 'flex' : 'hidden'
           } lg:flex lg:w-2/3 flex-col bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden min-h-0 flex-1`}
         >
-          {/* Search & Category Tabs */}
-          <div className="p-3 sm:p-4 border-b border-slate-100 space-y-2.5 sm:space-y-3">
-            <div className="w-full">
-              <Input
-                icon={Search}
-                placeholder={t('orders.searchDishes', null, 'Search dishes by name or SKU...')}
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-              />
+          {/* Search & Category Tabs (Compact single-line with Multi-Select Dropdown) */}
+          <div className="p-2.5 sm:p-3 border-b border-slate-100 space-y-2">
+            {/* Row 1: Search dishes + Multi-Select Category Dropdown */}
+            <div className="flex items-center gap-2">
+              <div className="flex-1 min-w-0">
+                <Input
+                  icon={Search}
+                  placeholder={t('orders.searchDishes', null, 'Search dishes by name or SKU...')}
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                />
+              </div>
+
+              {/* Multi-Select Category Dropdown */}
+              <div className="relative shrink-0" ref={categoryDropdownRef}>
+                <button
+                  type="button"
+                  onClick={() => setIsCategoryDropdownOpen((prev) => !prev)}
+                  className={`min-h-[40px] sm:min-h-[38px] px-3 rounded-lg border text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-2xs select-none ${
+                    selectedCategoryIds.length > 0
+                      ? 'bg-blue-50 border-blue-400 text-blue-700 hover:bg-blue-100'
+                      : 'bg-white border-slate-300 text-slate-700 hover:bg-slate-50'
+                  }`}
+                  title={t('orders.categoryFilter', null, 'Filter categories (multiple selection)')}
+                >
+                  <Filter className={`w-3.5 h-3.5 shrink-0 ${selectedCategoryIds.length > 0 ? 'text-blue-600' : 'text-slate-400'}`} />
+                  <span className="hidden sm:inline">
+                    {selectedCategoryIds.length === 0
+                      ? `${t('orders.allCategories', null, 'All Categories')} (${formatNumber(categories.length)})`
+                      : selectedCategoryIds.length === 1
+                      ? (categories.find((c) => c.id === selectedCategoryIds[0])?.name || '1 Category')
+                      : `${selectedCategoryIds.length} ${t('orders.selected', null, 'Selected')}`}
+                  </span>
+                  <span className="sm:hidden font-bold">
+                    {selectedCategoryIds.length === 0 ? t('common.all', null, 'All') : selectedCategoryIds.length}
+                  </span>
+                  {selectedCategoryIds.length > 0 ? (
+                    <span
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setSelectedCategoryIds([]);
+                        setActiveCategory('ALL');
+                      }}
+                      className="p-0.5 hover:bg-blue-200 text-blue-600 rounded-full transition-colors ml-0.5"
+                      title={t('common.clear', null, 'Clear filter')}
+                    >
+                      <X className="w-3 h-3" />
+                    </span>
+                  ) : (
+                    <ChevronDown className={`w-3.5 h-3.5 shrink-0 transition-transform duration-200 ${isCategoryDropdownOpen ? 'rotate-180 text-blue-600' : 'text-slate-400'}`} />
+                  )}
+                </button>
+
+                {/* Dropdown Popover */}
+                {isCategoryDropdownOpen && (
+                  <div className="absolute right-0 top-full mt-1.5 w-72 sm:w-80 bg-white rounded-2xl shadow-xl border border-slate-200 z-50 p-3 space-y-2.5 animate-in fade-in duration-150">
+                    <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+                      <div className="flex items-center gap-1.5 text-xs font-bold text-slate-800">
+                        <Filter className="w-3.5 h-3.5 text-blue-600" />
+                        <span>{t('orders.filterCategories', null, 'Category Filter')}</span>
+                        {selectedCategoryIds.length > 0 && (
+                          <span className="bg-blue-100 text-blue-700 text-[10px] font-extrabold px-1.5 py-0.2 rounded-full">
+                            {selectedCategoryIds.length}
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2 text-xs">
+                        {selectedCategoryIds.length > 0 ? (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSelectedCategoryIds([]);
+                              setActiveCategory('ALL');
+                            }}
+                            className="text-xs text-blue-600 hover:text-blue-800 font-semibold transition-colors"
+                          >
+                            {t('common.clearAll', null, 'Clear All')}
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const allIds = categories.map((c) => c.id);
+                              setSelectedCategoryIds(allIds);
+                              setActiveCategory('MULTI');
+                            }}
+                            className="text-xs text-blue-600 hover:text-blue-800 font-semibold transition-colors"
+                          >
+                            {t('common.selectAll', null, 'Select All')}
+                          </button>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Search inside Dropdown */}
+                    {categories.length > 6 && (
+                      <div className="relative">
+                        <Search className="w-3.5 h-3.5 absolute left-2.5 top-2.5 text-slate-400 pointer-events-none" />
+                        <input
+                          type="text"
+                          placeholder={t('orders.searchCategory', null, 'Find category...')}
+                          value={categoryFilterSearch}
+                          onChange={(e) => setCategoryFilterSearch(e.target.value)}
+                          className="w-full text-xs pl-8 pr-2.5 py-1.5 rounded-lg border border-slate-200 focus:outline-none focus:ring-1 focus:ring-blue-500 bg-slate-50 focus:bg-white"
+                        />
+                        {categoryFilterSearch && (
+                          <button
+                            type="button"
+                            onClick={() => setCategoryFilterSearch('')}
+                            className="absolute right-2 top-2 text-slate-400 hover:text-slate-600"
+                          >
+                            <X className="w-3 h-3" />
+                          </button>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Checkbox List */}
+                    <div className="max-h-56 overflow-y-auto space-y-1 pr-1 custom-sidebar-scroll">
+                      {filteredCategoriesForDropdown.length === 0 ? (
+                        <p className="text-center py-4 text-xs text-slate-400">
+                          {t('orders.noCategoriesMatch', null, 'No categories found')}
+                        </p>
+                      ) : (
+                        filteredCategoriesForDropdown.map((c) => {
+                          const isChecked = selectedCategoryIds.includes(c.id);
+                          const count = categoryCounts[c.id] || 0;
+                          return (
+                            <label
+                              key={c.id}
+                              className={`flex items-center justify-between p-1.5 rounded-lg cursor-pointer text-xs select-none transition-colors ${
+                                isChecked ? 'bg-blue-50 text-blue-800 font-bold' : 'hover:bg-slate-50 text-slate-700'
+                              }`}
+                            >
+                              <div className="flex items-center gap-2 min-w-0">
+                                <input
+                                  type="checkbox"
+                                  checked={isChecked}
+                                  onChange={() => toggleCategorySelection(c.id)}
+                                  className="w-3.5 h-3.5 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                                />
+                                <span className="truncate">{c.name}</span>
+                              </div>
+                              <span
+                                className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full shrink-0 ml-1.5 ${
+                                  isChecked ? 'bg-blue-100 text-blue-700' : 'bg-slate-100 text-slate-400'
+                                }`}
+                              >
+                                {formatNumber(count)}
+                              </span>
+                            </label>
+                          );
+                        })
+                      )}
+                    </div>
+
+                    {/* Popover Footer */}
+                    <div className="pt-2 border-t border-slate-100 flex items-center justify-between">
+                      <span className="text-[11px] text-slate-400">
+                        {formatNumber(filteredProducts.length)} {t('orders.dishes', null, 'dishes')}
+                      </span>
+                      <Button
+                        size="sm"
+                        variant="primary"
+                        onClick={() => setIsCategoryDropdownOpen(false)}
+                        className="text-xs py-1 px-3 h-auto"
+                      >
+                        {t('common.done', null, 'Done')}
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
 
-            {/* Category Filter Pills (Wrapped for complete visibility across all categories) */}
-            <div className="grid grid-cols-2 gap-1.5 sm:flex sm:flex-wrap sm:items-center sm:gap-2 text-xs max-h-48 overflow-y-auto pr-1 pos-tag-grid">
+            {/* Row 2: Single-line horizontally scrollable category pills with navigation arrows */}
+            <div className="flex items-center gap-1 min-w-0">
               <button
                 type="button"
-                onClick={() => setActiveCategory('ALL')}
-                className={`px-3 py-1.5 rounded-xl font-bold whitespace-nowrap cursor-pointer transition-all ${
-                  activeCategory === 'ALL'
-                    ? 'bg-blue-600 text-white shadow-xs'
-                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                }`}
+                onClick={() => scrollCategories(-1)}
+                className="p-1 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 shrink-0 transition-colors cursor-pointer"
+                title={t('common.scrollLeft', null, 'Scroll left')}
+                aria-label="Scroll left"
               >
-                {t('menu.productsTitle', null, 'All Menu')} ({formatNumber(products.length)})
+                <ChevronLeft className="w-4 h-4" />
               </button>
-              {categories.map((c) => (
+
+              <div
+                ref={categoryScrollRef}
+                className="flex-1 flex items-center gap-1.5 overflow-x-auto no-scrollbar scroll-smooth flex-nowrap whitespace-nowrap min-w-0 py-0.5"
+              >
                 <button
-                  key={c.id}
                   type="button"
-                  onClick={() => setActiveCategory(c.id)}
-                  className={`px-3 py-1.5 rounded-xl font-bold whitespace-nowrap cursor-pointer transition-all ${
-                    activeCategory === c.id
+                  onClick={() => {
+                    setSelectedCategoryIds([]);
+                    setActiveCategory('ALL');
+                  }}
+                  className={`px-3 py-1.5 rounded-xl font-bold whitespace-nowrap cursor-pointer transition-all shrink-0 text-xs ${
+                    selectedCategoryIds.length === 0
                       ? 'bg-blue-600 text-white shadow-xs'
                       : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
                   }`}
                 >
-                  {c.name}
+                  {t('menu.productsTitle', null, 'All Menu')} ({formatNumber(products.length)})
                 </button>
-              ))}
+                {categories.map((c) => {
+                  const isSelected = selectedCategoryIds.includes(c.id);
+                  const count = categoryCounts[c.id] || 0;
+                  return (
+                    <button
+                      key={c.id}
+                      type="button"
+                      onClick={() => selectSingleCategory(c.id)}
+                      className={`px-3 py-1.5 rounded-xl font-bold whitespace-nowrap cursor-pointer transition-all shrink-0 text-xs flex items-center gap-1 ${
+                        isSelected
+                          ? 'bg-blue-600 text-white shadow-xs'
+                          : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                      }`}
+                    >
+                      <span>{c.name}</span>
+                      <span className={`text-[10px] ${isSelected ? 'text-blue-100 font-extrabold' : 'text-slate-400 font-semibold'}`}>
+                        ({formatNumber(count)})
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+
+              <button
+                type="button"
+                onClick={() => scrollCategories(1)}
+                className="p-1 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 shrink-0 transition-colors cursor-pointer"
+                title={t('common.scrollRight', null, 'Scroll right')}
+                aria-label="Scroll right"
+              >
+                <ChevronRight className="w-4 h-4" />
+              </button>
             </div>
           </div>
 

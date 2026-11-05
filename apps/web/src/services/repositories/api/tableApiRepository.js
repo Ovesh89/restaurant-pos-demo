@@ -126,6 +126,7 @@ class TableApiRepository {
     };
     const result = await apiClient.post('/tables/transfer', payload);
     cacheInvalidationService.invalidateTables('branch-main');
+    cacheInvalidationService.invalidateOrders('branch-main');
     return {
       order: result?.order,
       fromTable: this.normalizeTable(result?.fromTable),

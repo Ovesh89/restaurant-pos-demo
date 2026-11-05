@@ -81,6 +81,12 @@ class CacheInvalidationService {
       case 'INVALIDATE_ROLES':
         this.invalidateRolesLocally();
         break;
+      case 'INVALIDATE_ORDERS':
+        this.invalidateOrdersLocally(payload.branchId);
+        break;
+      case 'INVALIDATE_BILLS':
+        this.invalidateBillsLocally(payload.branchId);
+        break;
       case 'INVALIDATE_ALL_MASTER_DATA':
         this.invalidateAllMasterDataLocally(payload.branchId);
         break;
@@ -212,6 +218,40 @@ class CacheInvalidationService {
   invalidateRoles() {
     this.invalidateRolesLocally();
     this.broadcast('INVALIDATE_ROLES');
+  }
+
+  // --- Orders ---
+  invalidateOrdersLocally(branchId) {
+    queryClient.invalidateQueries({
+      predicate: (query) => {
+        const key = query.queryKey;
+        if (key[0] !== 'orders') return false;
+        if (!branchId || key[1] === branchId || key[1] === 'all') return true;
+        return false;
+      },
+    });
+  }
+
+  invalidateOrders(branchId) {
+    this.invalidateOrdersLocally(branchId);
+    this.broadcast('INVALIDATE_ORDERS', { branchId });
+  }
+
+  // --- Bills ---
+  invalidateBillsLocally(branchId) {
+    queryClient.invalidateQueries({
+      predicate: (query) => {
+        const key = query.queryKey;
+        if (key[0] !== 'bills') return false;
+        if (!branchId || key[1] === branchId || key[1] === 'all') return true;
+        return false;
+      },
+    });
+  }
+
+  invalidateBills(branchId) {
+    this.invalidateBillsLocally(branchId);
+    this.broadcast('INVALIDATE_BILLS', { branchId });
   }
 
   // --- Invalidate All Master Data for Branch ---
