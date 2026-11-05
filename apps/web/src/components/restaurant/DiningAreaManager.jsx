@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Plus, Edit2, Trash2, CheckCircle2, XCircle, Layers, AlertCircle } from 'lucide-react';
 import { branchRepository } from '../../services/repositories/branchRepository.js';
+import { cacheInvalidationService } from '../../services/cache/cacheInvalidationService.js';
 import { Button } from '../common/Button.jsx';
 import { Input } from '../common/Input.jsx';
 import { Modal } from '../common/Modal.jsx';
@@ -73,6 +74,7 @@ export const DiningAreaManager = ({ onAreasChanged = null }) => {
         setSuccessMsg(`Dining Area "${formData.name}" created successfully.`);
       }
       setIsModalOpen(false);
+      cacheInvalidationService.invalidateAreas();
       await loadAreas();
       setTimeout(() => setSuccessMsg(''), 4000);
     } catch (err) {
@@ -85,6 +87,7 @@ export const DiningAreaManager = ({ onAreasChanged = null }) => {
   const handleToggleStatus = async (area) => {
     try {
       await branchRepository.toggleAreaStatus(area.id);
+      cacheInvalidationService.invalidateAreas();
       setSuccessMsg(`Dining Area "${area.name}" is now ${area.isActive ? 'Inactive' : 'Active'}.`);
       await loadAreas();
       setTimeout(() => setSuccessMsg(''), 4000);
@@ -100,6 +103,7 @@ export const DiningAreaManager = ({ onAreasChanged = null }) => {
 
     try {
       await branchRepository.deleteArea(area.id);
+      cacheInvalidationService.invalidateAreas();
       setSuccessMsg(`Dining Area "${area.name}" deleted successfully.`);
       await loadAreas();
       setTimeout(() => setSuccessMsg(''), 4000);

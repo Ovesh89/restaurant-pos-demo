@@ -8,6 +8,7 @@
     "dev:backend": "npm --prefix apps/backend run dev",
     "start:backend": "npm --prefix apps/backend start",
     "test:backend": "npm --prefix apps/backend test",
+    "test:web": "npm --prefix apps/web test",
     "dev:web": "npm --prefix apps/web run dev",
     "build:web": "npm --prefix apps/web run build",
     "db:indexes": "node scripts/init-indexes.js",

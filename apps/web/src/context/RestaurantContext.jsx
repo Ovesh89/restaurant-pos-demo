@@ -4,6 +4,7 @@ import { storageAdapter } from '../services/storage/localStorageAdapter.js';
 import { STORAGE_KEYS } from '../constants/storageKeys.js';
 import { apiClient } from '../services/api/apiClient.js';
 import { APP_CONFIG } from '../config/appConfig.js';
+import { cacheInvalidationService } from '../services/cache/cacheInvalidationService.js';
 
 const RestaurantContext = createContext(null);
 
@@ -93,6 +94,7 @@ export const RestaurantProvider = ({ children }) => {
     setSettings(updated);
     storageAdapter.setItem(STORAGE_KEYS.SETTINGS, updated);
     updateDocumentBranding(updated);
+    cacheInvalidationService.invalidateSettings();
     return updated;
   };
 

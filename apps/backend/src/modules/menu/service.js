@@ -5,6 +5,7 @@ import {
 import { ensureBranchAccess } from '../../middleware/permissions.js';
 import { formatMoney, toDecimal } from '../../utils/decimal.js';
 import { auditService } from '../audit/service.js';
+import { revisionService } from '../meta/revisionService.js';
 import {
   categoryRepository,
   priceHistoryRepository,
@@ -66,6 +67,8 @@ export class MenuService {
       after: created,
     });
 
+    await revisionService.bumpRevision(branchId, 'categories');
+
     return created;
   }
 
@@ -98,6 +101,8 @@ export class MenuService {
       after: updated,
     });
 
+    await revisionService.bumpRevision(beforeDoc.branchId, 'categories');
+
     return updated;
   }
 
@@ -126,6 +131,8 @@ export class MenuService {
       actorName: actor.displayName,
       before: beforeDoc,
     });
+
+    await revisionService.bumpRevision(beforeDoc.branchId, 'categories');
 
     return { success: true, id: categoryId, name: beforeDoc.name };
   }
@@ -248,6 +255,8 @@ export class MenuService {
       after: created,
     });
 
+    await revisionService.bumpRevision(branchId, 'products');
+
     return created;
   }
 
@@ -300,6 +309,8 @@ export class MenuService {
       after: updated,
     });
 
+    await revisionService.bumpRevision(branchId, 'products');
+
     return updated;
   }
 
@@ -325,6 +336,8 @@ export class MenuService {
       before: { isActive: beforeDoc.isActive },
       after: { isActive: Boolean(isActive) },
     });
+
+    await revisionService.bumpRevision(branchId, 'products');
 
     return updated;
   }
@@ -378,6 +391,8 @@ export class MenuService {
       metadata: { reason: String(reason).trim() },
     });
 
+    await revisionService.bumpRevision(branchId, 'products');
+
     return updated;
   }
 
@@ -410,6 +425,8 @@ export class MenuService {
       actorName: actor.displayName,
       before: beforeDoc,
     });
+
+    await revisionService.bumpRevision(branchId, 'products');
 
     return { success: true, id: productId, name: beforeDoc.name };
   }

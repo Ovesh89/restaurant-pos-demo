@@ -5,6 +5,7 @@ import {
 } from '../../middleware/errorHandler.js';
 import { ensureBranchAccess } from '../../middleware/permissions.js';
 import { auditService } from '../audit/service.js';
+import { revisionService } from '../meta/revisionService.js';
 import { orderRepository, orderEventRepository } from '../orders/repositories.js';
 import { kotRepository } from '../kot/repository.js';
 import { billRepository } from '../billing/repositories.js';
@@ -118,6 +119,9 @@ export class RestaurantService {
       after: created,
     });
 
+    await revisionService.bumpRevision(created.id, 'branches');
+    await revisionService.bumpRevision(created.id, 'settings');
+
     return created;
   }
 
@@ -163,6 +167,9 @@ export class RestaurantService {
       after: updated,
     });
 
+    await revisionService.bumpRevision(beforeDoc.id, 'branches');
+    await revisionService.bumpRevision(beforeDoc.id, 'settings');
+
     return updated;
   }
 
@@ -206,6 +213,8 @@ export class RestaurantService {
       after: created,
     });
 
+    await revisionService.bumpRevision(branchId, 'areas');
+
     return created;
   }
 
@@ -233,6 +242,8 @@ export class RestaurantService {
       before: beforeDoc,
       after: updated,
     });
+
+    await revisionService.bumpRevision(beforeDoc.branchId, 'areas');
 
     return updated;
   }
@@ -262,6 +273,8 @@ export class RestaurantService {
       actorName: actor.displayName,
       before: beforeDoc,
     });
+
+    await revisionService.bumpRevision(beforeDoc.branchId, 'areas');
 
     return { success: true, message: `Dining Area '${beforeDoc.name}' deleted successfully.` };
   }
@@ -346,6 +359,8 @@ export class RestaurantService {
       after: created,
     });
 
+    await revisionService.bumpRevision(branchId, 'kitchenStations');
+
     return created;
   }
 
@@ -380,6 +395,8 @@ export class RestaurantService {
       after: updated,
     });
 
+    await revisionService.bumpRevision(beforeDoc.branchId, 'kitchenStations');
+
     return updated;
   }
 
@@ -401,6 +418,8 @@ export class RestaurantService {
       actorName: actor.displayName,
       before: beforeDoc,
     });
+
+    await revisionService.bumpRevision(beforeDoc.branchId, 'kitchenStations');
 
     return { success: true, message: `Kitchen Station '${beforeDoc.name}' deleted successfully.` };
   }
@@ -562,6 +581,9 @@ export class RestaurantService {
       after: created,
     });
 
+    await revisionService.bumpRevision(branchId, 'tables');
+
+
     return created;
   }
 
@@ -632,6 +654,8 @@ export class RestaurantService {
       before: beforeDoc,
       after: updated,
     });
+
+    await revisionService.bumpRevision(branchId, 'tables');
 
     return updated;
   }
@@ -835,6 +859,8 @@ export class RestaurantService {
     const updatedOrder = await orderRepository.findById(orderId);
     const updatedFromTable = await this.tableRepo.findById(fromTable.id || fromTable._id);
     const updatedToTable = await this.tableRepo.findById(toTable.id || toTable._id);
+
+    await revisionService.bumpRevision(branchId, 'tables');
 
     return {
       order: updatedOrder,

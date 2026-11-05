@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { Plus, Search, Edit2, CheckCircle2, XCircle, Layers, Trash2 } from 'lucide-react';
 import { categoryRepository } from '../../services/repositories/categoryRepository';
+import { useCategories } from '../../hooks/data/useMasterData';
+import { cacheInvalidationService } from '../../services/cache/cacheInvalidationService';
 import { useAuth } from '../../hooks/useAuth';
 import { PageHeader } from '../../components/common/PageHeader';
 import { Button } from '../../components/common/Button';
@@ -28,21 +30,28 @@ export const CategoriesPage = () => {
   const [formError, setFormError] = useState('');
   const [formLoading, setFormLoading] = useState(false);
 
+  const { data: cachedCategories, isLoading: queryLoading, refetch: refetchCategories } = useCategories('branch-main', true);
+
+  useEffect(() => {
+    if (cachedCategories) {
+      setCategories(cachedCategories);
+      setLoading(false);
+    }
+  }, [cachedCategories]);
+
   const loadCategories = async () => {
     try {
       setLoading(true);
-      const data = await categoryRepository.getCategories(true);
-      setCategories(data);
+      const data = await refetchCategories();
+      if (data?.data) {
+        setCategories(data.data);
+      }
     } catch (err) {
       console.error('Failed to load categories:', err);
     } finally {
       setLoading(false);
     }
   };
-
-  useEffect(() => {
-    loadCategories();
-  }, []);
 
   const handleOpenAdd = () => {
     setEditingCategory(null);
@@ -76,6 +85,7 @@ export const CategoriesPage = () => {
         await categoryRepository.createCategory(formData, actor);
       }
       setIsModalOpen(false);
+      cacheInvalidationService.invalidateCategories('branch-main');
       await loadCategories();
     } catch (err) {
       setFormError(err.message || 'Error saving category.');
@@ -88,6 +98,7 @@ export const CategoriesPage = () => {
     try {
       const actor = { id: user?.id || 'admin', name: user?.name || 'Admin' };
       await categoryRepository.toggleCategoryStatus(cat.id, actor);
+      cacheInvalidationService.invalidateCategories('branch-main');
       await loadCategories();
     } catch (err) {
       alert(err.message);
@@ -101,6 +112,7 @@ export const CategoriesPage = () => {
     try {
       const actor = { id: user?.id || 'admin', name: user?.name || 'Admin' };
       await categoryRepository.deleteCategory(cat.id, actor);
+      cacheInvalidationService.invalidateCategories('branch-main');
       await loadCategories();
     } catch (err) {
       alert(err.message || 'Failed to delete category.');

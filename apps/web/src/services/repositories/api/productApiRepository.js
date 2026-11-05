@@ -1,9 +1,14 @@
 /**
  * API Product Repository
- * Connects to Django REST API product and price history endpoints (/api/v1/menu/products/*)
+ * Connects to Django/Express REST API product and price history endpoints (/api/v1/menu/products/*)
+ * Integrated with central TanStack Query client for unified cross-screen caching
  */
 
 import { apiClient, AppError } from '../../api/apiClient.js';
+import { queryClient } from '../../../config/queryClient.js';
+import { queryKeys } from '../../../constants/queryKeys.js';
+import { CACHE_POLICIES } from '../../../config/cachePolicies.js';
+import { cacheInvalidationService } from '../../cache/cacheInvalidationService.js';
 
 class ProductApiRepository {
   normalizeProduct(prod) {
@@ -38,57 +43,72 @@ class ProductApiRepository {
   }
 
   async getProducts(filters = {}) {
-    const params = new URLSearchParams();
-    if (filters.categoryId) params.append('categoryId', filters.categoryId);
-    if (filters.onlyAvailable) params.append('isAvailableOnly', 'true');
-    if (filters.search) params.append('search', filters.search);
-    if (filters.station) params.append('station', filters.station);
-    if (filters.branchId) params.append('branchId', filters.branchId);
-    if (filters.page) params.append('page', String(filters.page));
-    if (filters.limit) params.append('limit', String(filters.limit));
-    else if (!filters.page) params.append('limit', '200');
+    const branchId = filters.branchId || 'branch-main';
+    return queryClient.fetchQuery({
+      queryKey: queryKeys.products(branchId, filters),
+      queryFn: async () => {
+        const params = new URLSearchParams();
+        if (filters.categoryId) params.append('categoryId', filters.categoryId);
+        if (filters.onlyAvailable) params.append('isAvailableOnly', 'true');
+        if (filters.search) params.append('search', filters.search);
+        if (filters.station) params.append('station', filters.station);
+        if (filters.branchId) params.append('branchId', filters.branchId);
+        if (filters.page) params.append('page', String(filters.page));
+        if (filters.limit) params.append('limit', String(filters.limit));
+        else if (!filters.page) params.append('limit', '200');
 
-    const queryStr = params.toString() ? `?${params.toString()}` : '';
-    const response = await apiClient.get(`/menu/products${queryStr}`);
-    const rawList = Array.isArray(response)
-      ? response
-      : (Array.isArray(response?.items)
-        ? response.items
-        : (Array.isArray(response?.products)
-          ? response.products
-          : []));
+        const queryStr = params.toString() ? `?${params.toString()}` : '';
+        const response = await apiClient.get(`/menu/products${queryStr}`);
+        const rawList = Array.isArray(response)
+          ? response
+          : (Array.isArray(response?.items)
+            ? response.items
+            : (Array.isArray(response?.products)
+              ? response.products
+              : []));
 
-    let list = rawList.map((p) => this.normalizeProduct(p)).filter(Boolean);
+        let list = rawList.map((p) => this.normalizeProduct(p)).filter(Boolean);
 
-    if (filters.onlyAvailable) {
-      list = list.filter((p) => p.isAvailable && p.isActive);
-    }
+        if (filters.onlyAvailable) {
+          list = list.filter((p) => p.isAvailable && p.isActive);
+        }
 
-    const total = Number(response?.pagination?.total ?? list.length);
-    const pageNum = Number(response?.pagination?.page ?? filters.page ?? 1);
-    const limitNum = Number(response?.pagination?.limit ?? filters.limit ?? list.length ?? 20);
-    const totalPages = Number(response?.pagination?.totalPages ?? response?.pagination?.pages ?? Math.max(1, Math.ceil(total / (limitNum || 1))));
+        const total = Number(response?.pagination?.total ?? list.length);
+        const pageNum = Number(response?.pagination?.page ?? filters.page ?? 1);
+        const limitNum = Number(response?.pagination?.limit ?? filters.limit ?? list.length ?? 20);
+        const totalPages = Number(response?.pagination?.totalPages ?? response?.pagination?.pages ?? Math.max(1, Math.ceil(total / (limitNum || 1))));
 
-    list.pagination = response?.pagination || {
-      total,
-      page: pageNum,
-      limit: limitNum,
-      totalPages,
-      pages: totalPages,
-      hasNext: pageNum < totalPages,
-      hasPrev: pageNum > 1,
-    };
-    list.items = list;
+        list.pagination = response?.pagination || {
+          total,
+          page: pageNum,
+          limit: limitNum,
+          totalPages,
+          pages: totalPages,
+          hasNext: pageNum < totalPages,
+          hasPrev: pageNum > 1,
+        };
+        list.items = list;
 
-    return list;
+        return list;
+      },
+      staleTime: CACHE_POLICIES.PRODUCTS.staleTime,
+      gcTime: CACHE_POLICIES.PRODUCTS.gcTime,
+    });
   }
 
   async getProductById(id) {
-    const res = await apiClient.get(`/menu/products/${id}`);
-    const item = (res && typeof res === 'object' && !Array.isArray(res) && ('item' in res || 'product' in res))
-      ? (res.item || res.product)
-      : res;
-    return this.normalizeProduct(item);
+    return queryClient.fetchQuery({
+      queryKey: queryKeys.product(id),
+      queryFn: async () => {
+        const res = await apiClient.get(`/menu/products/${id}`);
+        const item = (res && typeof res === 'object' && !Array.isArray(res) && ('item' in res || 'product' in res))
+          ? (res.item || res.product)
+          : res;
+        return this.normalizeProduct(item);
+      },
+      staleTime: CACHE_POLICIES.PRODUCTS.staleTime,
+      gcTime: CACHE_POLICIES.PRODUCTS.gcTime,
+    });
   }
 
   async createProduct(productData) {
@@ -116,7 +136,9 @@ class ProductApiRepository {
     const item = (created && typeof created === 'object' && ('item' in created || 'product' in created))
       ? (created.item || created.product)
       : created;
-    return this.normalizeProduct(item);
+    const normalized = this.normalizeProduct(item);
+    cacheInvalidationService.invalidateProducts('branch-main');
+    return normalized;
   }
 
   async updateProduct(id, productData, actor = {}, priceChangeReason = '') {
@@ -145,7 +167,9 @@ class ProductApiRepository {
     const item = (updated && typeof updated === 'object' && ('item' in updated || 'product' in updated))
       ? (updated.item || updated.product)
       : updated;
-    return this.normalizeProduct(item);
+    const normalized = this.normalizeProduct(item);
+    cacheInvalidationService.invalidateProducts('branch-main', id);
+    return normalized;
   }
 
   async toggleProductAvailability(id) {
@@ -156,7 +180,9 @@ class ProductApiRepository {
     const item = (updated && typeof updated === 'object' && ('item' in updated || 'product' in updated))
       ? (updated.item || updated.product)
       : updated;
-    return this.normalizeProduct(item);
+    const normalized = this.normalizeProduct(item);
+    cacheInvalidationService.invalidateProducts('branch-main', id);
+    return normalized;
   }
 
   async toggleProductStatus(id) {
@@ -168,7 +194,9 @@ class ProductApiRepository {
     const item = (updated && typeof updated === 'object' && ('item' in updated || 'product' in updated))
       ? (updated.item || updated.product)
       : updated;
-    return this.normalizeProduct(item);
+    const normalized = this.normalizeProduct(item);
+    cacheInvalidationService.invalidateProducts('branch-main', id);
+    return normalized;
   }
 
   async getPriceHistory(productId = null) {
@@ -188,15 +216,20 @@ class ProductApiRepository {
       newPrice: Number(newPrice).toFixed(2),
       reason: reason?.trim() || 'Manual price adjustment'
     });
+    cacheInvalidationService.invalidateProducts('branch-main', productId);
     return res?.historyEntry || res;
   }
 
   async deleteProduct(id) {
-    return apiClient.delete(`/menu/products/${id}`);
+    const res = await apiClient.delete(`/menu/products/${id}`);
+    cacheInvalidationService.invalidateProducts('branch-main', id);
+    return res;
   }
 
   async deletePriceHistory(historyId, productId) {
-    return apiClient.delete(`/menu/products/${productId}/price-history/${historyId}`);
+    const res = await apiClient.delete(`/menu/products/${productId}/price-history/${historyId}`);
+    cacheInvalidationService.invalidateProducts('branch-main', productId);
+    return res;
   }
 }
 

@@ -1,9 +1,14 @@
 /**
  * API Branch & Area Repository
- * Connects to Django REST API branch and area endpoints (/api/v1/branches, /api/v1/areas)
+ * Connects to Django/Express REST API branch and area endpoints (/api/v1/branches, /api/v1/areas)
+ * Integrated with central TanStack Query client for unified cross-screen caching
  */
 
 import { apiClient } from '../../api/apiClient.js';
+import { queryClient } from '../../../config/queryClient.js';
+import { queryKeys } from '../../../constants/queryKeys.js';
+import { CACHE_POLICIES } from '../../../config/cachePolicies.js';
+import { cacheInvalidationService } from '../../cache/cacheInvalidationService.js';
 
 class BranchApiRepository {
   normalizeBranch(branch) {
@@ -23,29 +28,47 @@ class BranchApiRepository {
   }
 
   async getBranches() {
-    const branches = await apiClient.get('/branches');
-    const items = Array.isArray(branches) ? branches : [];
-    return items.map((b) => this.normalizeBranch(b));
+    return queryClient.fetchQuery({
+      queryKey: queryKeys.branches(),
+      queryFn: async () => {
+        const branches = await apiClient.get('/branches');
+        const items = Array.isArray(branches) ? branches : [];
+        return items.map((b) => this.normalizeBranch(b));
+      },
+      staleTime: CACHE_POLICIES.BRANCHES.staleTime,
+      gcTime: CACHE_POLICIES.BRANCHES.gcTime,
+    });
   }
 
   async getAreas(branchId = 'branch-main') {
-    const query = branchId ? `?branchId=${branchId}` : '';
-    const areas = await apiClient.get(`/areas${query}`);
-    const items = Array.isArray(areas) ? areas : [];
-    return items
-      .map((a) => this.normalizeArea(a))
-      .sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0));
+    const currentBranch = branchId || 'branch-main';
+    return queryClient.fetchQuery({
+      queryKey: queryKeys.areas(currentBranch),
+      queryFn: async () => {
+        const query = currentBranch ? `?branchId=${currentBranch}` : '';
+        const areas = await apiClient.get(`/areas${query}`);
+        const items = Array.isArray(areas) ? areas : [];
+        return items
+          .map((a) => this.normalizeArea(a))
+          .sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0));
+      },
+      staleTime: CACHE_POLICIES.AREAS.staleTime,
+      gcTime: CACHE_POLICIES.AREAS.gcTime,
+    });
   }
 
   async createArea(areaData) {
+    const branchId = areaData.branchId || 'branch-main';
     const payload = {
-      branchId: areaData.branchId || 'branch-main',
+      branchId,
       name: areaData.name.trim(),
       sortOrder: Number(areaData.sortOrder) || 1,
       isActive: true
     };
     const created = await apiClient.post('/areas', payload);
-    return this.normalizeArea(created);
+    const normalized = this.normalizeArea(created);
+    cacheInvalidationService.invalidateAreas(branchId);
+    return normalized;
   }
 
   async updateArea(id, areaData) {
@@ -55,7 +78,9 @@ class BranchApiRepository {
     if (areaData.isActive !== undefined) payload.isActive = Boolean(areaData.isActive);
 
     const updated = await apiClient.patch(`/areas/${id}`, payload);
-    return this.normalizeArea(updated);
+    const normalized = this.normalizeArea(updated);
+    cacheInvalidationService.invalidateAreas(areaData.branchId || 'branch-main');
+    return normalized;
   }
 
   async toggleAreaStatus(id) {
@@ -66,14 +91,16 @@ class BranchApiRepository {
     const updated = await apiClient.patch(`/areas/${id}`, {
       isActive: newStatus
     });
-    return this.normalizeArea(updated);
+    const normalized = this.normalizeArea(updated);
+    cacheInvalidationService.invalidateAreas('branch-main');
+    return normalized;
   }
 
   async deleteArea(id) {
     const res = await apiClient.delete(`/areas/${id}`);
+    cacheInvalidationService.invalidateAreas('branch-main');
     return res;
   }
 }
-
 
 export const branchApiRepository = new BranchApiRepository();

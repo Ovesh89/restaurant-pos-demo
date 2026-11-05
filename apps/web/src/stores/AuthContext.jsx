@@ -1,6 +1,7 @@
 import React, { createContext, useState, useEffect } from 'react';
 import { authRepository } from '../services/repositories/authRepository';
 import { storageAdapter } from '../services/storage/localStorageAdapter';
+import { cacheInvalidationService } from '../services/cache/cacheInvalidationService';
 
 export const AuthContext = createContext(null);
 
@@ -50,6 +51,7 @@ export const AuthProvider = ({ children }) => {
 
   const logout = async () => {
     await authRepository.logout();
+    await cacheInvalidationService.clearOnLogout();
     setSession(null);
   };
 

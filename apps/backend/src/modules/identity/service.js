@@ -1,3 +1,4 @@
+import { revisionService } from '../meta/revisionService.js';
 import { ALL_PERMISSIONS, expandPermissions } from '../../config/permissions.js';
 import {
   AuthenticationAppError,
@@ -447,6 +448,8 @@ export class IdentityService {
       actorName: actor.displayName,
       after: created,
     });
+
+    await revisionService.bumpRevision(null, 'roles');
 
     return created;
   }

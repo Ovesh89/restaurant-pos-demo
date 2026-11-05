@@ -1,9 +1,14 @@
 /**
  * API Menu Category Repository
- * Connects to Django REST API menu category endpoints (/api/v1/menu/categories/*)
+ * Connects to Express/Django REST API menu category endpoints (/api/v1/menu/categories/*)
+ * Integrated with central TanStack Query client for unified cross-screen caching
  */
 
 import { apiClient } from '../../api/apiClient.js';
+import { queryClient } from '../../../config/queryClient.js';
+import { queryKeys } from '../../../constants/queryKeys.js';
+import { CACHE_POLICIES } from '../../../config/cachePolicies.js';
+import { cacheInvalidationService } from '../../cache/cacheInvalidationService.js';
 
 class CategoryApiRepository {
   normalizeCategory(cat) {
@@ -18,23 +23,38 @@ class CategoryApiRepository {
   }
 
   async getCategories(includeInactive = true) {
-    const query = includeInactive ? '' : '?isActiveOnly=true';
-    const categories = await apiClient.get(`/menu/categories${query}`);
-    const items = Array.isArray(categories)
-      ? categories
-      : (Array.isArray(categories?.items)
-        ? categories.items
-        : (Array.isArray(categories?.categories)
-          ? categories.categories
-          : []));
-    return items
-      .map((c) => this.normalizeCategory(c))
-      .sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0));
+    const branchId = 'branch-main';
+    return queryClient.fetchQuery({
+      queryKey: queryKeys.categories(branchId, includeInactive),
+      queryFn: async () => {
+        const query = includeInactive ? '' : '?isActiveOnly=true';
+        const categories = await apiClient.get(`/menu/categories${query}`);
+        const items = Array.isArray(categories)
+          ? categories
+          : (Array.isArray(categories?.items)
+            ? categories.items
+            : (Array.isArray(categories?.categories)
+              ? categories.categories
+              : []));
+        return items
+          .map((c) => this.normalizeCategory(c))
+          .sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0));
+      },
+      staleTime: CACHE_POLICIES.CATEGORIES.staleTime,
+      gcTime: CACHE_POLICIES.CATEGORIES.gcTime,
+    });
   }
 
   async getCategoryById(id) {
-    const cat = await apiClient.get(`/menu/categories/${id}`);
-    return this.normalizeCategory(cat);
+    return queryClient.fetchQuery({
+      queryKey: queryKeys.category(id),
+      queryFn: async () => {
+        const cat = await apiClient.get(`/menu/categories/${id}`);
+        return this.normalizeCategory(cat);
+      },
+      staleTime: CACHE_POLICIES.CATEGORIES.staleTime,
+      gcTime: CACHE_POLICIES.CATEGORIES.gcTime,
+    });
   }
 
   async createCategory(categoryData) {
@@ -46,7 +66,9 @@ class CategoryApiRepository {
       kotRequired: categoryData.kotRequired !== undefined ? Boolean(categoryData.kotRequired) : true,
     };
     const created = await apiClient.post('/menu/categories', payload);
-    return this.normalizeCategory(created);
+    const normalized = this.normalizeCategory(created);
+    cacheInvalidationService.invalidateCategories('branch-main');
+    return normalized;
   }
 
   async updateCategory(id, categoryData) {
@@ -58,20 +80,25 @@ class CategoryApiRepository {
     if (categoryData.kotRequired !== undefined) payload.kotRequired = Boolean(categoryData.kotRequired);
 
     const updated = await apiClient.patch(`/menu/categories/${id}`, payload);
-    return this.normalizeCategory(updated);
+    const normalized = this.normalizeCategory(updated);
+    cacheInvalidationService.invalidateCategories('branch-main');
+    return normalized;
   }
-
 
   async toggleCategoryStatus(id) {
     const current = await this.getCategoryById(id);
     const updated = await apiClient.patch(`/menu/categories/${id}`, {
       isActive: !current.isActive
     });
-    return this.normalizeCategory(updated);
+    const normalized = this.normalizeCategory(updated);
+    cacheInvalidationService.invalidateCategories('branch-main');
+    return normalized;
   }
 
   async deleteCategory(id) {
-    return apiClient.delete(`/menu/categories/${id}`);
+    const res = await apiClient.delete(`/menu/categories/${id}`);
+    cacheInvalidationService.invalidateCategories('branch-main');
+    return res;
   }
 }
 

@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { productRepository } from '../../services/repositories/productRepository';
 import { categoryRepository } from '../../services/repositories/categoryRepository';
+import { cacheInvalidationService } from '../../services/cache/cacheInvalidationService';
 import { useAuth } from '../../hooks/useAuth';
 import { PageHeader } from '../../components/common/PageHeader';
 import { Button } from '../../components/common/Button';
@@ -182,6 +183,7 @@ export const ProductsPage = () => {
         await productRepository.createProduct(formData, actor);
       }
       setIsModalOpen(false);
+      cacheInvalidationService.invalidateProducts('branch-main', editingProduct?.id);
       await loadData();
     } catch (err) {
       setFormError(err.message || 'Error saving product.');
@@ -220,6 +222,7 @@ export const ProductsPage = () => {
         priceReason
       );
       setIsPriceModalOpen(false);
+      cacheInvalidationService.invalidateProducts('branch-main', priceProduct?.id);
       await loadData();
     } catch (err) {
       setPriceError(err.message || 'Failed to update price.');
@@ -232,6 +235,7 @@ export const ProductsPage = () => {
     try {
       const actor = { id: user?.id || 'admin', name: user?.name || 'Admin' };
       await productRepository.toggleProductAvailability(p.id, actor);
+      cacheInvalidationService.invalidateProducts('branch-main', p.id);
       await loadData();
     } catch (err) {
       alert(err.message);
@@ -242,6 +246,7 @@ export const ProductsPage = () => {
     try {
       const actor = { id: user?.id || 'admin', name: user?.name || 'Admin' };
       await productRepository.toggleProductStatus(p.id, actor);
+      cacheInvalidationService.invalidateProducts('branch-main', p.id);
       await loadData();
     } catch (err) {
       alert(err.message);
@@ -255,6 +260,7 @@ export const ProductsPage = () => {
     try {
       const actor = { id: user?.id || 'admin', name: user?.name || 'Admin' };
       await productRepository.deleteProduct(p.id, actor);
+      cacheInvalidationService.invalidateProducts('branch-main', p.id);
       await loadData();
     } catch (err) {
       alert(err.message || 'Failed to delete product.');

@@ -1,10 +1,15 @@
 /**
  * API Table Repository
- * Connects to Django REST API table endpoints (/api/v1/tables/*)
+ * Connects to Django/Express REST API table endpoints (/api/v1/tables/*)
+ * Integrated with central TanStack Query client for unified cross-screen caching
  */
 
 import { apiClient, AppError } from '../../api/apiClient.js';
 import { TABLE_STATUS } from '../../../constants/tableStatus.js';
+import { queryClient } from '../../../config/queryClient.js';
+import { queryKeys } from '../../../constants/queryKeys.js';
+import { CACHE_POLICIES } from '../../../config/cachePolicies.js';
+import { cacheInvalidationService } from '../../cache/cacheInvalidationService.js';
 
 class TableApiRepository {
   normalizeTable(table) {
@@ -25,25 +30,41 @@ class TableApiRepository {
   }
 
   async getTables(branchId = 'branch-main', areaId = null) {
-    let query = `?branchId=${branchId || 'branch-main'}`;
-    if (areaId) query += `&areaId=${areaId}`;
+    const currentBranch = branchId || 'branch-main';
+    return queryClient.fetchQuery({
+      queryKey: queryKeys.tables(currentBranch, { areaId: areaId || null }),
+      queryFn: async () => {
+        let query = `?branchId=${currentBranch}`;
+        if (areaId) query += `&areaId=${areaId}`;
 
-    const tables = await apiClient.get(`/tables${query}`);
-    const items = Array.isArray(tables) ? tables : [];
-    return items
-      .map((t) => this.normalizeTable(t))
-      .sort((a, b) => a.tableNo.localeCompare(b.tableNo, undefined, { numeric: true }));
+        const tables = await apiClient.get(`/tables${query}`);
+        const items = Array.isArray(tables) ? tables : [];
+        return items
+          .map((t) => this.normalizeTable(t))
+          .sort((a, b) => a.tableNo.localeCompare(b.tableNo, undefined, { numeric: true }));
+      },
+      staleTime: CACHE_POLICIES.TABLES.staleTime,
+      gcTime: CACHE_POLICIES.TABLES.gcTime,
+    });
   }
 
   async getTableById(id) {
-    const table = await apiClient.get(`/tables/${id}`);
-    return this.normalizeTable(table);
+    return queryClient.fetchQuery({
+      queryKey: queryKeys.table(id),
+      queryFn: async () => {
+        const table = await apiClient.get(`/tables/${id}`);
+        return this.normalizeTable(table);
+      },
+      staleTime: CACHE_POLICIES.TABLES.staleTime,
+      gcTime: CACHE_POLICIES.TABLES.gcTime,
+    });
   }
 
   async createTable(tableData) {
     const tableNum = String(tableData.tableNo || tableData.tableNumber || '').trim();
+    const branchId = tableData.branchId || 'branch-main';
     const payload = {
-      branchId: tableData.branchId || 'branch-main',
+      branchId,
       areaId: tableData.areaId,
       tableNumber: tableNum,
       capacity: Number(tableData.capacity) || 4,
@@ -51,7 +72,9 @@ class TableApiRepository {
     };
 
     const created = await apiClient.post('/tables', payload);
-    return this.normalizeTable(created);
+    const normalized = this.normalizeTable(created);
+    cacheInvalidationService.invalidateTables(branchId);
+    return normalized;
   }
 
   async updateTable(id, tableData) {
@@ -64,7 +87,9 @@ class TableApiRepository {
     if (tableData.isActive !== undefined) payload.isActive = Boolean(tableData.isActive);
 
     const updated = await apiClient.patch(`/tables/${id}`, payload);
-    return this.normalizeTable(updated);
+    const normalized = this.normalizeTable(updated);
+    cacheInvalidationService.invalidateTables(tableData.branchId || 'branch-main');
+    return normalized;
   }
 
   async toggleTableActive(id) {
@@ -72,12 +97,15 @@ class TableApiRepository {
     const updated = await apiClient.patch(`/tables/${id}`, {
       isActive: !table.isActive
     });
-    return this.normalizeTable(updated);
+    const normalized = this.normalizeTable(updated);
+    cacheInvalidationService.invalidateTables('branch-main');
+    return normalized;
   }
 
   async updateOperationalStatus(id, newStatus, activeOrderId = null) {
     // In backend, table statuses are managed authoritatively via order & KOT endpoints.
-    // Fetch and return the latest canonical table status:
+    // Invalidate local cache and return fresh status:
+    cacheInvalidationService.invalidateTables('branch-main');
     const table = await this.getTableById(id);
     return table;
   }
@@ -97,6 +125,7 @@ class TableApiRepository {
       reason: reason || ''
     };
     const result = await apiClient.post('/tables/transfer', payload);
+    cacheInvalidationService.invalidateTables('branch-main');
     return {
       order: result?.order,
       fromTable: this.normalizeTable(result?.fromTable),

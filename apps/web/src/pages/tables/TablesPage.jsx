@@ -25,6 +25,7 @@ import {
 } from 'lucide-react';
 import { tableRepository } from '../../services/repositories/tableRepository';
 import { branchRepository } from '../../services/repositories/branchRepository';
+import { cacheInvalidationService } from '../../services/cache/cacheInvalidationService';
 import { orderRepository } from '../../services/repositories/orderRepository';
 import { productRepository } from '../../services/repositories/productRepository';
 import { categoryRepository } from '../../services/repositories/categoryRepository';
@@ -272,6 +273,7 @@ export const TablesPage = () => {
         await tableRepository.createTable(formData, actor);
       }
       setIsModalOpen(false);
+      cacheInvalidationService.invalidateTables('branch-main');
       await loadFloor();
     } catch (err) {
       setFormError(err.message || 'Error saving table.');
@@ -285,6 +287,7 @@ export const TablesPage = () => {
     try {
       const actor = { id: user?.id || 'admin', name: user?.name || 'Admin' };
       await tableRepository.toggleTableActive(tbl.id, actor);
+      cacheInvalidationService.invalidateTables('branch-main');
       await loadFloor();
     } catch (err) {
       alert(err.message);
@@ -320,6 +323,7 @@ export const TablesPage = () => {
         actor
       });
       setIsTransferModalOpen(false);
+      cacheInvalidationService.invalidateTables('branch-main');
       await loadFloor();
     } catch (err) {
       setTransferError(err.message || 'Transfer failed.');
