@@ -3,9 +3,9 @@ import { storageAdapter } from '../../storage/localStorageAdapter.js';
 import { auditRepository } from '../auditRepository.js';
 
 class CategoryLocalRepository {
-  async getCategories(includeInactive = true) {
+  async getCategories(includeInactive = false) {
     const categories = storageAdapter.getItem(STORAGE_KEYS.CATEGORIES) || [];
-    const list = includeInactive ? categories : categories.filter((c) => c.isActive);
+    const list = categories.filter((c) => !c.isDeleted && (includeInactive ? true : c.isActive !== false));
     return list.sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0));
   }
 
@@ -91,30 +91,35 @@ class CategoryLocalRepository {
   }
 
   async toggleCategoryStatus(id, actor = { id: 'admin', name: 'Admin' }) {
-    const categories = await this.getCategories(true);
+    const categories = storageAdapter.getItem(STORAGE_KEYS.CATEGORIES) || [];
     const index = categories.findIndex((c) => c.id === id);
     if (index === -1) {
       throw new Error('Category not found.');
     }
 
-    categories[index].isActive = !categories[index].isActive;
+    const willBeActive = !categories[index].isActive;
+    categories[index].isActive = willBeActive;
+    if (!willBeActive) {
+      categories[index].isDeleted = true;
+      categories[index].deletedAt = new Date().toISOString();
+    }
     categories[index].updatedAt = new Date().toISOString();
     storageAdapter.setItem(STORAGE_KEYS.CATEGORIES, categories);
 
     await auditRepository.logEvent({
       actorId: actor.id,
       actorName: actor.name,
-      action: categories[index].isActive ? 'CATEGORY_ACTIVATED' : 'CATEGORY_DEACTIVATED',
+      action: willBeActive ? 'CATEGORY_ACTIVATED' : 'CATEGORY_DEACTIVATED',
       entityType: 'Category',
       entityId: id,
-      details: `Category "${categories[index].name}" was ${categories[index].isActive ? 'activated' : 'deactivated'}.`
+      details: `Category "${categories[index].name}" was ${willBeActive ? 'activated' : 'soft deleted'}.`
     });
 
     return categories[index];
   }
 
   async deleteCategory(id, actor = { id: 'admin', name: 'Admin' }) {
-    const categories = await this.getCategories(true);
+    const categories = storageAdapter.getItem(STORAGE_KEYS.CATEGORIES) || [];
     const index = categories.findIndex((c) => c.id === id);
     if (index === -1) {
       throw new Error('Category not found.');
@@ -122,12 +127,14 @@ class CategoryLocalRepository {
     const catName = categories[index].name;
 
     const products = storageAdapter.getItem(STORAGE_KEYS.PRODUCTS) || [];
-    const productCount = products.filter((p) => p.categoryId === id).length;
+    const productCount = products.filter((p) => p.categoryId === id && !p.isDeleted).length;
     if (productCount > 0) {
-      throw new Error(`Cannot delete category "${catName}" because ${productCount} product(s) are assigned to it.`);
+      throw new Error(`Cannot delete category "${catName}" because ${productCount} active product(s) are assigned to it.`);
     }
 
-    categories.splice(index, 1);
+    categories[index].isDeleted = true;
+    categories[index].deletedAt = new Date().toISOString();
+    categories[index].isActive = false;
     storageAdapter.setItem(STORAGE_KEYS.CATEGORIES, categories);
 
     await auditRepository.logEvent({
@@ -136,7 +143,7 @@ class CategoryLocalRepository {
       action: 'CATEGORY_DELETED',
       entityType: 'Category',
       entityId: id,
-      details: `Deleted category "${catName}".`
+      details: `Soft deleted category "${catName}".`
     });
 
     return { success: true, id };

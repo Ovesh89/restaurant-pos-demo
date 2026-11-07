@@ -5,7 +5,7 @@ import { auditRepository } from '../auditRepository.js';
 class ProductLocalRepository {
   async getProducts(filters = {}) {
     const products = storageAdapter.getItem(STORAGE_KEYS.PRODUCTS) || [];
-    let list = [...products];
+    let list = products.filter((p) => !p.isDeleted && p.isActive !== false);
 
     if (filters.categoryId) {
       list = list.filter((p) => p.categoryId === filters.categoryId);
@@ -199,23 +199,29 @@ class ProductLocalRepository {
   }
 
   async toggleProductStatus(id, actor = { id: 'admin', name: 'Admin' }) {
-    const products = await this.getProducts();
+    const products = storageAdapter.getItem(STORAGE_KEYS.PRODUCTS) || [];
     const index = products.findIndex((p) => p.id === id);
     if (index === -1) {
       throw new Error('Product not found.');
     }
 
-    products[index].isActive = !products[index].isActive;
+    const willBeActive = !products[index].isActive;
+    products[index].isActive = willBeActive;
+    if (!willBeActive) {
+      products[index].isDeleted = true;
+      products[index].available = false;
+      products[index].deletedAt = new Date().toISOString();
+    }
     products[index].updatedAt = new Date().toISOString();
     storageAdapter.setItem(STORAGE_KEYS.PRODUCTS, products);
 
     await auditRepository.logEvent({
       actorId: actor.id,
       actorName: actor.name,
-      action: products[index].isActive ? 'PRODUCT_ACTIVATED' : 'PRODUCT_DEACTIVATED',
+      action: willBeActive ? 'PRODUCT_ACTIVATED' : 'PRODUCT_DEACTIVATED',
       entityType: 'Product',
       entityId: id,
-      details: `Product "${products[index].name}" was ${products[index].isActive ? 'activated' : 'deactivated'}.`
+      details: `Product "${products[index].name}" was ${willBeActive ? 'activated' : 'soft deleted'}.`
     });
 
     return products[index];
@@ -241,18 +247,17 @@ class ProductLocalRepository {
   }
 
   async deleteProduct(id, actor = { id: 'admin', name: 'Admin' }) {
-    const products = await this.getProducts();
+    const products = storageAdapter.getItem(STORAGE_KEYS.PRODUCTS) || [];
     const index = products.findIndex((p) => p.id === id);
     if (index === -1) {
       throw new Error('Product not found.');
     }
     const prodName = products[index].name;
-    products.splice(index, 1);
+    products[index].isDeleted = true;
+    products[index].deletedAt = new Date().toISOString();
+    products[index].isActive = false;
+    products[index].isAvailable = false;
     storageAdapter.setItem(STORAGE_KEYS.PRODUCTS, products);
-
-    const history = storageAdapter.getItem(STORAGE_KEYS.PRICE_HISTORY) || [];
-    const remainingHistory = history.filter((h) => h.productId !== id);
-    storageAdapter.setItem(STORAGE_KEYS.PRICE_HISTORY, remainingHistory);
 
     await auditRepository.logEvent({
       actorId: actor.id,
@@ -260,7 +265,7 @@ class ProductLocalRepository {
       action: 'PRODUCT_DELETED',
       entityType: 'Product',
       entityId: id,
-      details: `Deleted product "${prodName}".`
+      details: `Soft deleted product "${prodName}".`
     });
 
     return { success: true, id };

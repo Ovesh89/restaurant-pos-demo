@@ -67,7 +67,9 @@ class ProductApiRepository {
               ? response.products
               : []));
 
-        let list = rawList.map((p) => this.normalizeProduct(p)).filter(Boolean);
+        let list = rawList
+          .map((p) => this.normalizeProduct(p))
+          .filter((p) => p && !p.isDeleted && p.isActive !== false);
 
         if (filters.onlyAvailable) {
           list = list.filter((p) => p.isAvailable && p.isActive);
@@ -104,7 +106,9 @@ class ProductApiRepository {
         const item = (res && typeof res === 'object' && !Array.isArray(res) && ('item' in res || 'product' in res))
           ? (res.item || res.product)
           : res;
-        return this.normalizeProduct(item);
+        const normalized = this.normalizeProduct(item);
+        if (normalized?.isDeleted) return null;
+        return normalized;
       },
       staleTime: CACHE_POLICIES.PRODUCTS.staleTime,
       gcTime: CACHE_POLICIES.PRODUCTS.gcTime,

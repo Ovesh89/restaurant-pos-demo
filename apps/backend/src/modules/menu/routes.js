@@ -25,8 +25,9 @@ router.get(
   requirePermissions(['menu.view']),
   asyncHandler(async (req, res) => {
     const branchId = resolveBranchId(req);
-    const isActiveOnly = ['true', '1', 'yes'].includes(
-      String(req.query.isActiveOnly || 'false').toLowerCase()
+    // User requirement: soft deleted and inactive items should not be listed
+    const isActiveOnly = !['false', '0', 'no'].includes(
+      String(req.query.isActiveOnly ?? 'true').toLowerCase()
     );
     const categories = await menuService.listCategories(
       branchId,
@@ -108,7 +109,7 @@ router.get(
       limit = 50,
     } = req.query;
 
-    let isActive = null;
+    let isActive = true;
     if (isActiveParam !== undefined && isActiveParam !== null && isActiveParam !== '') {
       isActive = ['true', '1', 'yes'].includes(String(isActiveParam).toLowerCase());
     }

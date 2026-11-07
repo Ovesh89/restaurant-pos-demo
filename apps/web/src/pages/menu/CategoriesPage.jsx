@@ -30,11 +30,11 @@ export const CategoriesPage = () => {
   const [formError, setFormError] = useState('');
   const [formLoading, setFormLoading] = useState(false);
 
-  const { data: cachedCategories, isLoading: queryLoading, refetch: refetchCategories } = useCategories('branch-main', true);
+  const { data: cachedCategories, isLoading: queryLoading, refetch: refetchCategories } = useCategories('branch-main', false);
 
   useEffect(() => {
     if (cachedCategories) {
-      setCategories(cachedCategories);
+      setCategories(cachedCategories.filter((c) => !c.isDeleted && c.isActive !== false));
       setLoading(false);
     }
   }, [cachedCategories]);
@@ -44,7 +44,7 @@ export const CategoriesPage = () => {
       setLoading(true);
       const data = await refetchCategories();
       if (data?.data) {
-        setCategories(data.data);
+        setCategories(data.data.filter((c) => !c.isDeleted && c.isActive !== false));
       }
     } catch (err) {
       console.error('Failed to load categories:', err);
@@ -97,7 +97,8 @@ export const CategoriesPage = () => {
   const handleToggleStatus = async (cat) => {
     try {
       const actor = { id: user?.id || 'admin', name: user?.name || 'Admin' };
-      await categoryRepository.toggleCategoryStatus(cat.id, actor);
+      // Soft-delete category so it is removed from the page
+      await categoryRepository.deleteCategory(cat.id, actor);
       cacheInvalidationService.invalidateCategories('branch-main');
       await loadCategories();
     } catch (err) {
@@ -106,7 +107,7 @@ export const CategoriesPage = () => {
   };
 
   const handleDeleteCategory = async (cat) => {
-    if (!window.confirm(`Are you sure you want to permanently delete category "${cat.name}"? This action cannot be undone.`)) {
+    if (!window.confirm(`Are you sure you want to soft delete category "${cat.name}"? This item will no longer appear in the menu.`)) {
       return;
     }
     try {
@@ -121,8 +122,10 @@ export const CategoriesPage = () => {
 
   const filteredCategories = categories.filter(
     (c) =>
-      c.name.toLowerCase().includes(search.toLowerCase()) ||
-      c.code?.toLowerCase().includes(search.toLowerCase())
+      !c.isDeleted &&
+      c.isActive !== false &&
+      (c.name.toLowerCase().includes(search.toLowerCase()) ||
+      c.code?.toLowerCase().includes(search.toLowerCase()))
   );
 
   const columns = [

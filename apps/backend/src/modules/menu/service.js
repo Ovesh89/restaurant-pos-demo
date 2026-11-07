@@ -28,7 +28,7 @@ export class MenuService {
 
   async getCategory(categoryId, user) {
     const cat = await this.categoryRepo.findById(categoryId);
-    if (!cat) {
+    if (!cat || cat.isDeleted === true) {
       throw new NotFoundAppError(`Category '${categoryId}' not found.`);
     }
     ensureBranchAccess(user, cat.branchId);
@@ -84,7 +84,13 @@ export class MenuService {
     if (data.name !== undefined) updateFields.name = String(data.name).trim();
     if (data.description !== undefined) updateFields.description = data.description;
     if (data.sortOrder !== undefined) updateFields.sortOrder = Number(data.sortOrder);
-    if (data.isActive !== undefined) updateFields.isActive = Boolean(data.isActive);
+    if (data.isActive !== undefined) {
+      updateFields.isActive = Boolean(data.isActive);
+      if (!data.isActive) {
+        updateFields.isDeleted = true;
+        updateFields.deletedAt = new Date().toISOString();
+      }
+    }
     if (data.kotRequired !== undefined) updateFields.kotRequired = Boolean(data.kotRequired);
 
 
@@ -108,19 +114,23 @@ export class MenuService {
 
   async deleteCategory(categoryId, actor) {
     const beforeDoc = await this.categoryRepo.findById(categoryId);
-    if (!beforeDoc) {
+    if (!beforeDoc || beforeDoc.isDeleted === true) {
       throw new NotFoundAppError(`Category '${categoryId}' not found.`);
     }
     ensureBranchAccess(actor, beforeDoc.branchId);
 
-    const productCount = await this.productRepo.count({ categoryId });
+    const productCount = await this.productRepo.count({ categoryId, isDeleted: { $ne: true } });
     if (productCount > 0) {
       throw new ValidationAppError(
-        `Cannot delete category '${beforeDoc.name}' because ${productCount} dish(es) are assigned to it. Please reassign or delete those dishes first.`
+        `Cannot delete category '${beforeDoc.name}' because ${productCount} active dish(es) are assigned to it. Please reassign or delete those dishes first.`
       );
     }
 
-    await this.categoryRepo.deleteById(categoryId);
+    const updated = await this.categoryRepo.updateById(categoryId, {
+      isDeleted: true,
+      deletedAt: new Date().toISOString(),
+      isActive: false,
+    });
 
     await auditService.logAction({
       branchId: beforeDoc.branchId,
@@ -130,6 +140,7 @@ export class MenuService {
       actorUserId: actor.id,
       actorName: actor.displayName,
       before: beforeDoc,
+      after: updated,
     });
 
     await revisionService.bumpRevision(beforeDoc.branchId, 'categories');
@@ -165,7 +176,7 @@ export class MenuService {
 
   async getProduct(productId, user) {
     const prod = await this.productRepo.findById(productId);
-    if (!prod) {
+    if (!prod || prod.isDeleted === true) {
       throw new NotFoundAppError(`Product '${productId}' not found.`);
     }
     ensureBranchAccess(user, prod.branchId);
@@ -183,7 +194,7 @@ export class MenuService {
     }
 
     const cat = await this.categoryRepo.findById(categoryId);
-    if (!cat || cat.branchId !== branchId) {
+    if (!cat || cat.branchId !== branchId || cat.isDeleted === true) {
       throw new ValidationAppError(
         `Category '${categoryId}' does not exist in branch '${branchId}'.`
       );
@@ -271,7 +282,7 @@ export class MenuService {
     const updateFields = {};
     if (data.categoryId !== undefined) {
       const cat = await this.categoryRepo.findById(data.categoryId);
-      if (!cat || cat.branchId !== branchId) {
+      if (!cat || cat.branchId !== branchId || cat.isDeleted === true) {
         throw new ValidationAppError(
           `Category '${data.categoryId}' does not exist in branch '${branchId}'.`
         );
@@ -316,15 +327,22 @@ export class MenuService {
 
   async setProductActiveStatus(productId, isActive, actor) {
     const beforeDoc = await this.productRepo.findById(productId);
-    if (!beforeDoc) {
+    if (!beforeDoc || beforeDoc.isDeleted === true) {
       throw new NotFoundAppError(`Product '${productId}' not found.`);
     }
     const branchId = beforeDoc.branchId;
     ensureBranchAccess(actor, branchId);
 
-    const updated = await this.productRepo.updateById(productId, {
+    const updateFields = {
       isActive: Boolean(isActive),
-    });
+    };
+    if (!isActive) {
+      updateFields.isDeleted = true;
+      updateFields.available = false;
+      updateFields.deletedAt = new Date().toISOString();
+    }
+
+    const updated = await this.productRepo.updateById(productId, updateFields);
 
     await auditService.logAction({
       branchId,
@@ -407,14 +425,18 @@ export class MenuService {
 
   async deleteProduct(productId, actor) {
     const beforeDoc = await this.productRepo.findById(productId);
-    if (!beforeDoc) {
+    if (!beforeDoc || beforeDoc.isDeleted === true) {
       throw new NotFoundAppError(`Product '${productId}' not found.`);
     }
     const branchId = beforeDoc.branchId;
     ensureBranchAccess(actor, branchId);
 
-    await this.productRepo.deleteById(productId);
-    await this.priceHistoryRepo.deleteMany({ productId });
+    const updated = await this.productRepo.updateById(productId, {
+      isDeleted: true,
+      deletedAt: new Date().toISOString(),
+      isActive: false,
+      available: false,
+    });
 
     await auditService.logAction({
       branchId,
@@ -424,6 +446,7 @@ export class MenuService {
       actorUserId: actor.id,
       actorName: actor.displayName,
       before: beforeDoc,
+      after: updated,
     });
 
     await revisionService.bumpRevision(branchId, 'products');

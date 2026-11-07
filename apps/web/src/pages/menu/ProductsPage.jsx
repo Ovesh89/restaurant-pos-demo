@@ -90,10 +90,10 @@ export const ProductsPage = () => {
           page: overridePage,
           limit: overrideLimit,
         }),
-        categoryRepository.getCategories(true)
+        categoryRepository.getCategories(false)
       ]);
-      setProducts(prods);
-      setCategories(cats);
+      setProducts(prods.filter((p) => !p.isDeleted && p.isActive !== false));
+      setCategories(cats.filter((c) => !c.isDeleted && c.isActive !== false));
       setPagination(
         prods.pagination || {
           total: prods.length,
@@ -245,7 +245,8 @@ export const ProductsPage = () => {
   const handleToggleStatus = async (p) => {
     try {
       const actor = { id: user?.id || 'admin', name: user?.name || 'Admin' };
-      await productRepository.toggleProductStatus(p.id, actor);
+      // Soft-delete inactive product so it is not listed in the page
+      await productRepository.deleteProduct(p.id, actor);
       cacheInvalidationService.invalidateProducts('branch-main', p.id);
       await loadData();
     } catch (err) {
@@ -254,7 +255,7 @@ export const ProductsPage = () => {
   };
 
   const handleDeleteProduct = async (p) => {
-    if (!window.confirm(`Are you sure you want to permanently delete the dish "${p.name}"? This action cannot be undone.`)) {
+    if (!window.confirm(`Are you sure you want to soft delete the dish "${p.name}"? This item will no longer appear in the menu.`)) {
       return;
     }
     try {

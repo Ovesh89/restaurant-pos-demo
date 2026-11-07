@@ -110,7 +110,7 @@ class OrderService {
         throw new NotFoundAppError(`Product ${prodId} not found or inactive.`);
       }
 
-      if (prod && prod.isActive === false) {
+      if (prod && (prod.isActive === false || prod.isDeleted === true)) {
         throw new NotFoundAppError(`Product ${prodId} not found or inactive.`);
       }
 

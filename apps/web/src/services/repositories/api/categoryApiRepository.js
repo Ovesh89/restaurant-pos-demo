@@ -22,12 +22,12 @@ class CategoryApiRepository {
     };
   }
 
-  async getCategories(includeInactive = true) {
+  async getCategories(includeInactive = false) {
     const branchId = 'branch-main';
     return queryClient.fetchQuery({
       queryKey: queryKeys.categories(branchId, includeInactive),
       queryFn: async () => {
-        const query = includeInactive ? '' : '?isActiveOnly=true';
+        const query = includeInactive ? '?isActiveOnly=false' : '?isActiveOnly=true';
         const categories = await apiClient.get(`/menu/categories${query}`);
         const items = Array.isArray(categories)
           ? categories
@@ -37,6 +37,7 @@ class CategoryApiRepository {
               ? categories.categories
               : []));
         return items
+          .filter((c) => !c.isDeleted && (includeInactive ? true : c.isActive !== false))
           .map((c) => this.normalizeCategory(c))
           .sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0));
       },
@@ -50,6 +51,7 @@ class CategoryApiRepository {
       queryKey: queryKeys.category(id),
       queryFn: async () => {
         const cat = await apiClient.get(`/menu/categories/${id}`);
+        if (cat?.isDeleted) return null;
         return this.normalizeCategory(cat);
       },
       staleTime: CACHE_POLICIES.CATEGORIES.staleTime,

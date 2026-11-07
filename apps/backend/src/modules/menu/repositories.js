@@ -6,7 +6,7 @@ export class CategoryRepository extends BaseMongoRepository {
   }
 
   async findByBranch(branchId, isActiveOnly = false) {
-    const query = { branchId };
+    const query = { branchId, isDeleted: { $ne: true } };
     if (isActiveOnly) query.isActive = true;
     return this.findMany(query, { sort: [['sortOrder', 1], ['name', 1]] });
   }
@@ -27,7 +27,7 @@ export class ProductRepository extends BaseMongoRepository {
     page = 1,
     limit = 50,
   }) {
-    const query = { branchId };
+    const query = { branchId, isDeleted: { $ne: true } };
     if (categoryId) query.categoryId = categoryId;
     if (station && station !== 'ALL') {
       query.$or = [{ station }, { kitchenStation: station }];
