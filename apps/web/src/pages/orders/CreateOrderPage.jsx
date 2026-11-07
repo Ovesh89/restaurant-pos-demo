@@ -124,6 +124,7 @@ export const CreateOrderPage = () => {
 
   const isCaptainMobile = isCaptain && isMobileView;
   const loadedTableIdRef = useRef(null);
+  const userHasModifiedCartRef = useRef(false);
 
   // Selected Table & Order Type
   const [selectedTable, setSelectedTable] = useState(() => {
@@ -141,8 +142,28 @@ export const CreateOrderPage = () => {
     return null;
   });
   const [orderType, setOrderType] = useState(() => navStateActiveOrder?.orderType || 'DINE_IN');
-  const [customerName, setCustomerName] = useState(() => navStateActiveOrder?.customerName || '');
-  const [customerPhone, setCustomerPhone] = useState(() => navStateActiveOrder?.customerPhone || '');
+  const [customerName, setCustomerName] = useState(() => {
+    if (navStateActiveOrder?.customerName) return navStateActiveOrder.customerName;
+    const tid = preselectedTableId || navStateTable?.id;
+    if (tid) {
+      try {
+        const draft = JSON.parse(localStorage.getItem(`pos_captain_draft_table_${tid}`));
+        if (draft?.customerName) return draft.customerName;
+      } catch {}
+    }
+    return '';
+  });
+  const [customerPhone, setCustomerPhone] = useState(() => {
+    if (navStateActiveOrder?.customerPhone) return navStateActiveOrder.customerPhone;
+    const tid = preselectedTableId || navStateTable?.id;
+    if (tid) {
+      try {
+        const draft = JSON.parse(localStorage.getItem(`pos_captain_draft_table_${tid}`));
+        if (draft?.customerPhone) return draft.customerPhone;
+      } catch {}
+    }
+    return '';
+  });
   const [onlineOrderRef, setOnlineOrderRef] = useState('');
 
   // Active / Existing Order & Bill States (For modification and on-page bill generation)
@@ -184,9 +205,10 @@ export const CreateOrderPage = () => {
           };
         });
     }
-    if (preselectedTableId) {
+    const targetTableId = preselectedTableId || navStateTable?.id;
+    if (targetTableId) {
       try {
-        const draftStr = localStorage.getItem(`pos_captain_draft_table_${preselectedTableId}`);
+        const draftStr = localStorage.getItem(`pos_captain_draft_table_${targetTableId}`);
         if (draftStr) {
           const draft = JSON.parse(draftStr);
           if (Array.isArray(draft?.cart) && draft.cart.length > 0) {
@@ -197,8 +219,30 @@ export const CreateOrderPage = () => {
     }
     return [];
   });
-  const [orderNotes, setOrderNotes] = useState(() => navStateActiveOrder?.notes || '');
-  const [spiceLevel, setSpiceLevel] = useState('');
+  const cartRef = useRef(cart);
+  cartRef.current = cart;
+
+  const [orderNotes, setOrderNotes] = useState(() => {
+    if (navStateActiveOrder?.notes) return navStateActiveOrder.notes;
+    const tid = preselectedTableId || navStateTable?.id;
+    if (tid) {
+      try {
+        const draft = JSON.parse(localStorage.getItem(`pos_captain_draft_table_${tid}`));
+        if (draft?.orderNotes) return draft.orderNotes;
+      } catch {}
+    }
+    return '';
+  });
+  const [spiceLevel, setSpiceLevel] = useState(() => {
+    const tid = preselectedTableId || navStateTable?.id;
+    if (tid) {
+      try {
+        const draft = JSON.parse(localStorage.getItem(`pos_captain_draft_table_${tid}`));
+        if (draft?.spiceLevel) return draft.spiceLevel;
+      } catch {}
+    }
+    return '';
+  });
 
   // Filtering
   const [activeCategory, setActiveCategory] = useState('ALL');
@@ -284,16 +328,53 @@ export const CreateOrderPage = () => {
           notes: i.notes || i.note || '',
         };
       });
-    setCart(activeItems);
+
+    // If the user already added extra dishes during this session before the active order resolved, merge them
+    if (userHasModifiedCartRef.current && cartRef.current && cartRef.current.length > 0) {
+      const merged = [...activeItems];
+      for (const userItem of cartRef.current) {
+        const existingIdx = merged.findIndex((m) => m.productId === userItem.productId);
+        if (existingIdx > -1) {
+          if (merged[existingIdx].quantity < userItem.quantity) {
+            merged[existingIdx] = { ...merged[existingIdx], quantity: userItem.quantity };
+          }
+        } else {
+          merged.push(userItem);
+        }
+      }
+      setCart(merged);
+    } else {
+      setCart(activeItems);
+    }
+
     if (activeOrd.customerName) setCustomerName(activeOrd.customerName);
     if (activeOrd.customerPhone) setCustomerPhone(activeOrd.customerPhone);
     if (activeOrd.notes) setOrderNotes(activeOrd.notes);
     if (activeOrd.orderType) setOrderType(activeOrd.orderType);
   };
 
-  const applyTableDraft = (tblId) => {
+  const applyTableDraft = (tblId, isExplicitTableSwitch = false) => {
     setExistingOrder(null);
     setActiveBill(null);
+
+    // If the user has already added items during this session to this table and didn't switch tables,
+    // NEVER overwrite or clear out their cart!
+    if (!isExplicitTableSwitch && (userHasModifiedCartRef.current || (cartRef.current && cartRef.current.length > 0))) {
+      if (cartRef.current && cartRef.current.length > 0) {
+        try {
+          localStorage.setItem(getTableDraftKey(tblId), JSON.stringify({
+            cart: cartRef.current,
+            orderNotes,
+            spiceLevel,
+            customerName,
+            customerPhone,
+            savedAt: Date.now()
+          }));
+        } catch {}
+      }
+      return;
+    }
+
     const draftStr = localStorage.getItem(getTableDraftKey(tblId));
     if (draftStr) {
       try {
@@ -308,17 +389,18 @@ export const CreateOrderPage = () => {
         }
       } catch {}
     }
+
+    // Only clear if user has not added items in this session or explicitly switched to a blank table
     setCart([]);
   };
 
-  const loadActiveOrderForTable = async (tbl, initialActiveOrder = null) => {
+  const loadActiveOrderForTable = async (tbl, initialActiveOrder = null, isExplicitTableSwitch = false) => {
     if (!tbl) {
       setExistingOrder(null);
       setActiveBill(null);
       loadedTableIdRef.current = null;
       return;
     }
-    loadedTableIdRef.current = null;
     try {
       let activeOrd = initialActiveOrder;
 
@@ -375,7 +457,7 @@ export const CreateOrderPage = () => {
         const b = await billRepository.getBillByOrderId(serverActiveOrd.id).catch(() => null);
         setActiveBill(b || null);
       } else {
-        applyTableDraft(tbl.id);
+        applyTableDraft(tbl.id, isExplicitTableSwitch);
       }
     } catch (err) {
       console.warn('Failed to load active order for table:', err);
@@ -412,7 +494,7 @@ export const CreateOrderPage = () => {
         if (!selectedTable || selectedTable.id !== targetTable.id) {
           setSelectedTable(targetTable);
         }
-        await loadActiveOrderForTable(targetTable, navStateActiveOrder);
+        await loadActiveOrderForTable(targetTable, navStateActiveOrder, false);
       }
     } catch (err) {
       console.error('Failed to load order entry data:', err);
@@ -423,8 +505,26 @@ export const CreateOrderPage = () => {
   };
 
   const handleSelectTable = async (tbl) => {
+    if (!tbl) return;
+    if (selectedTable?.id === tbl.id) return;
+
+    // Save draft for current table before switching if user has added items
+    if (selectedTable?.id && !existingOrder && cartRef.current && cartRef.current.length > 0) {
+      try {
+        localStorage.setItem(getTableDraftKey(selectedTable.id), JSON.stringify({
+          cart: cartRef.current,
+          orderNotes,
+          spiceLevel,
+          customerName,
+          customerPhone,
+          savedAt: Date.now()
+        }));
+      } catch {}
+    }
+
+    userHasModifiedCartRef.current = false;
     setSelectedTable(tbl);
-    await loadActiveOrderForTable(tbl);
+    await loadActiveOrderForTable(tbl, null, true);
   };
 
   useEffect(() => {
@@ -434,8 +534,6 @@ export const CreateOrderPage = () => {
   // Auto-persist draft orders for new/unsubmitted tables
   useEffect(() => {
     if (!selectedTable?.id) return;
-    // CRITICAL: Only save after the draft/active order has been fully loaded for this table!
-    if (loadedTableIdRef.current !== selectedTable.id) return;
 
     if (!existingOrder) {
       if (cart && cart.length > 0) {
@@ -451,7 +549,7 @@ export const CreateOrderPage = () => {
         } catch (e) {
           console.warn('Failed to save draft order to storage:', e);
         }
-      } else {
+      } else if (loadedTableIdRef.current === selectedTable.id && userHasModifiedCartRef.current) {
         localStorage.removeItem(getTableDraftKey(selectedTable.id));
       }
     }
@@ -463,6 +561,7 @@ export const CreateOrderPage = () => {
       setActionError('Bill has already been generated. Captains cannot alter or modify orders after bill generation.');
       return;
     }
+    userHasModifiedCartRef.current = true;
     const cat = categories.find((c) => c.id === product.categoryId);
     const kotRequired = cat ? cat.kotRequired !== false : (product.kotRequired !== false);
 
@@ -498,6 +597,7 @@ export const CreateOrderPage = () => {
       setActionError('Bill has already been generated. Captains cannot alter or modify orders after bill generation.');
       return;
     }
+    userHasModifiedCartRef.current = true;
     setCart((prev) =>
       prev
         .map((item) => {
@@ -516,6 +616,7 @@ export const CreateOrderPage = () => {
       setActionError('Bill has already been generated. Captains cannot alter or modify orders after bill generation.');
       return;
     }
+    userHasModifiedCartRef.current = true;
     setCart((prev) => prev.filter((item) => item.productId !== productId));
   };
 
@@ -530,6 +631,7 @@ export const CreateOrderPage = () => {
 
   const handleSaveItemNote = () => {
     if (!editingItemNote) return;
+    userHasModifiedCartRef.current = true;
     setCart((prev) =>
       prev.map((item) =>
         item.productId === editingItemNote.productId ? { ...item, notes: noteText.trim() } : item
@@ -546,6 +648,7 @@ export const CreateOrderPage = () => {
     }
     if (!customItem.name.trim() || !customItem.price) return;
 
+    userHasModifiedCartRef.current = true;
     const customId = `custom-${Date.now()}`;
     const cleanName = `${customItem.name.trim()} (Special)`;
     const priceNum = Number(customItem.price) || 0;
@@ -629,6 +732,7 @@ export const CreateOrderPage = () => {
         localStorage.removeItem(getTableDraftKey(selectedTable.id));
       }
 
+      userHasModifiedCartRef.current = false;
       setCart([]);
       setExistingOrder(created);
       setSuccessMsg('Order placed successfully! Dispatched to kitchen.');
@@ -925,6 +1029,7 @@ export const CreateOrderPage = () => {
   };
 
   const handleClearDraft = () => {
+    userHasModifiedCartRef.current = false;
     if (selectedTable?.id) {
       localStorage.removeItem(getTableDraftKey(selectedTable.id));
     }
@@ -937,6 +1042,7 @@ export const CreateOrderPage = () => {
   };
 
   const handleCancelOrClear = () => {
+    userHasModifiedCartRef.current = false;
     if (!existingOrder) {
       // Clear draft for this table
       if (selectedTable?.id) {
