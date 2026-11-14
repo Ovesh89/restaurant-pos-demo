@@ -64,15 +64,35 @@ export const MobileBottomNav = ({ onOpenMenu }) => {
   }, []);
 
   // For Captain: hide navigation on ALL screens except the Area List (/tables with no selected area)
-  if (isCaptain) {
-    const isAreaList = location.pathname === '/tables' && !captainSelectedArea;
-    if (!isAreaList) {
-      return null;
-    }
-  }
+  const isCaptainAreaList = location.pathname === '/tables' && !captainSelectedArea;
+  const isNavHidden = (isCaptain && !isCaptainAreaList) || isModalOpen;
 
-  // When any modal or popup is open, hide the bottom navigation menu
-  if (isModalOpen) {
+  useEffect(() => {
+    const isVisible = !isNavHidden;
+    if (typeof document !== 'undefined') {
+      if (isVisible) {
+        document.body.setAttribute('data-has-bottom-nav', 'true');
+        document.body.classList.add('has-bottom-nav');
+      } else {
+        document.body.removeAttribute('data-has-bottom-nav');
+        document.body.classList.remove('has-bottom-nav');
+      }
+    }
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('pos-bottom-nav-state', { detail: { isVisible } }));
+    }
+    return () => {
+      if (typeof document !== 'undefined') {
+        document.body.removeAttribute('data-has-bottom-nav');
+        document.body.classList.remove('has-bottom-nav');
+      }
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('pos-bottom-nav-state', { detail: { isVisible: false } }));
+      }
+    };
+  }, [isNavHidden]);
+
+  if (isNavHidden) {
     return null;
   }
 

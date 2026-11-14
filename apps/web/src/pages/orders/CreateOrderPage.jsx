@@ -126,6 +126,49 @@ export const CreateOrderPage = () => {
   const loadedTableIdRef = useRef(null);
   const userHasModifiedCartRef = useRef(false);
 
+  // Detection for presence of mobile bottom navigation bar
+  const [hasBottomNav, setHasBottomNav] = useState(() => {
+    if (typeof document !== 'undefined') {
+      const navEl = document.getElementById('mobile-bottom-nav');
+      return (
+        document.body.classList.contains('has-bottom-nav') ||
+        document.body.getAttribute('data-has-bottom-nav') === 'true' ||
+        Boolean(navEl && navEl.offsetHeight > 0)
+      );
+    }
+    return false;
+  });
+
+  useEffect(() => {
+    const updateNavState = (e) => {
+      if (e?.detail && typeof e.detail.isVisible === 'boolean') {
+        setHasBottomNav(e.detail.isVisible);
+      } else if (typeof document !== 'undefined') {
+        const navEl = document.getElementById('mobile-bottom-nav');
+        const hasNav =
+          document.body.classList.contains('has-bottom-nav') ||
+          document.body.getAttribute('data-has-bottom-nav') === 'true' ||
+          Boolean(navEl && navEl.offsetHeight > 0);
+        setHasBottomNav(hasNav);
+      }
+    };
+
+    window.addEventListener('pos-bottom-nav-state', updateNavState);
+    let observer = null;
+    if (typeof document !== 'undefined') {
+      observer = new MutationObserver(updateNavState);
+      observer.observe(document.body, { attributes: true, attributeFilter: ['data-has-bottom-nav', 'class'] });
+    }
+    window.addEventListener('resize', updateNavState);
+    updateNavState();
+
+    return () => {
+      window.removeEventListener('pos-bottom-nav-state', updateNavState);
+      window.removeEventListener('resize', updateNavState);
+      if (observer) observer.disconnect();
+    };
+  }, []);
+
   // Selected Table & Order Type
   const [selectedTable, setSelectedTable] = useState(() => {
     if (navStateTable && (!preselectedTableId || navStateTable.id === preselectedTableId)) {
@@ -1240,7 +1283,15 @@ export const CreateOrderPage = () => {
   const grandTotal = Math.round(subtotal + taxAmount);
 
   return (
-    <div className={`flex flex-col ${isCaptainMobile ? 'h-[calc(100dvh-4.75rem)] max-h-[calc(100dvh-4.75rem)] overflow-hidden' : 'min-h-[calc(100vh-9.5rem)] lg:h-[calc(100vh-8.5rem)]'}`}>
+    <div
+      className={`flex flex-col ${
+        isCaptainMobile
+          ? hasBottomNav
+            ? 'h-[calc(100dvh-8.25rem)] max-h-[calc(100dvh-8.25rem)] overflow-hidden'
+            : 'h-[calc(100dvh-4.75rem)] max-h-[calc(100dvh-4.75rem)] overflow-hidden'
+          : 'min-h-[calc(100vh-9.5rem)] lg:h-[calc(100vh-8.5rem)]'
+      }`}
+    >
       {isCaptainMobile ? (
         <div className="flex flex-col h-full min-h-0 overflow-hidden space-y-2">
           {/* Top Sticky Bar: Back + Table Title + Off-Menu Button */}
@@ -1365,7 +1416,7 @@ export const CreateOrderPage = () => {
               </div>
 
               {/* List of Dishes - Scroller for Menu */}
-              <div className="flex-1 min-h-0 overflow-y-auto space-y-2 pb-16 pr-0.5">
+              <div className={`flex-1 min-h-0 overflow-y-auto space-y-2 pr-0.5 ${totalCartItems > 0 ? (hasBottomNav ? 'pb-32' : 'pb-24') : 'pb-6'}`}>
                 {loading ? (
                   <div className="bg-white rounded-2xl border border-slate-200 p-8 text-center text-slate-500 font-medium text-xs">
                     {t('common.loading', 'Loading dishes...')}
@@ -1446,9 +1497,19 @@ export const CreateOrderPage = () => {
                 )}
               </div>
 
-              {/* Floating Bottom Bar in Tab 1 to switch to Tab 2 (Bottom-most) */}
+              {/* Floating Bottom Bar in Tab 1 to switch to Tab 2
+                  Pinned above navigation if present, otherwise at bottom-most screen */}
               {totalCartItems > 0 && (
-                <div className="fixed bottom-2 left-2 right-2 sm:bottom-3 sm:left-4 sm:right-4 z-30 bg-blue-600 text-white px-3.5 py-2.5 rounded-2xl shadow-2xl flex items-center justify-between animate-in slide-in-from-bottom duration-200">
+                <div
+                  className={`fixed left-2 right-2 sm:left-4 sm:right-4 z-30 bg-blue-600 text-white px-3.5 py-2.5 rounded-2xl shadow-2xl flex items-center justify-between animate-in slide-in-from-bottom duration-200 transition-all ${
+                    hasBottomNav ? 'bottom-16 sm:bottom-[4.25rem]' : 'bottom-2 sm:bottom-3'
+                  }`}
+                  style={{
+                    bottom: hasBottomNav
+                      ? 'calc(3.5rem + 0.5rem)'
+                      : 'max(0.5rem, calc(env(safe-area-inset-bottom, 0px) + 0.5rem))'
+                  }}
+                >
                   <div>
                     <span className="text-[11px] font-bold block leading-tight text-blue-100">
                       {formatNumber(totalCartItems)} {totalCartItems === 1 ? 'Dish' : 'Dishes'} Added
@@ -1470,9 +1531,9 @@ export const CreateOrderPage = () => {
 
           {/* TAB 2: REVIEW & CONFIRM */}
           {mobileTab === 'cart' && (
-            <div className="flex-1 min-h-0 flex flex-col overflow-hidden space-y-2">
+            <div className="flex-1 min-h-0 flex flex-col overflow-hidden space-y-2 relative">
               {/* SCROLLER IN THE ORDERS LIST SECTION ONLY */}
-              <div className="flex-1 min-h-0 overflow-y-auto bg-white rounded-2xl border border-slate-200 p-2.5 shadow-2xs space-y-1.5 pr-1">
+              <div className={`flex-1 min-h-0 overflow-y-auto bg-white rounded-2xl border border-slate-200 p-2.5 shadow-2xs space-y-1.5 pr-1 ${hasBottomNav ? 'pb-48' : 'pb-40'}`}>
                 {cart.length === 0 ? (
                   <div className="text-center py-10 text-slate-400 text-xs">
                     <UtensilsCrossed className="w-8 h-8 mx-auto mb-2 opacity-30" />
@@ -1547,8 +1608,19 @@ export const CreateOrderPage = () => {
                 )}
               </div>
 
-              {/* FIXED DOCKED SECTION AT BOTTOM-MOST SCREEN: Totals & Action Buttons */}
-              <div className="shrink-0 bg-white rounded-2xl border border-slate-200 p-2.5 sm:p-3 shadow-md space-y-2">
+              {/* FIXED DOCKED SECTION AT BOTTOM: Totals & Action Buttons
+                  Pinned above navigation of mobile screen if navigation is there,
+                  otherwise at bottom-most screen */}
+              <div
+                className={`fixed left-2 right-2 sm:left-4 sm:right-4 z-30 bg-white rounded-2xl border border-slate-200 p-2.5 sm:p-3 shadow-xl space-y-2 transition-all ${
+                  hasBottomNav ? 'bottom-16 sm:bottom-[4.25rem]' : 'bottom-2 sm:bottom-3'
+                }`}
+                style={{
+                  bottom: hasBottomNav
+                    ? 'calc(3.5rem + 0.5rem)'
+                    : 'max(0.5rem, calc(env(safe-area-inset-bottom, 0px) + 0.5rem))'
+                }}
+              >
                 {/* Total Summary (Without GST) */}
                 <div className="flex items-center justify-between font-black text-slate-900 text-sm">
                   <span>Total Amount</span>
