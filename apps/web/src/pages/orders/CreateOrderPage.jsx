@@ -39,6 +39,8 @@ import { orderRepository } from '../../services/repositories/orderRepository';
 import { billRepository } from '../../services/repositories/billRepository';
 import { kotRepository } from '../../services/repositories/kotRepository';
 import { customerRepository } from '../../services/repositories/customerRepository';
+import { notificationRepository } from '../../services/repositories/notificationRepository';
+import { cacheInvalidationService } from '../../services/cache/cacheInvalidationService';
 import { settingsRepository } from '../../services/repositories/settingsRepository';
 import { printService, formatReceiptSequence } from '../../services/printing/printService';
 import { PageHeader } from '../../components/common/PageHeader';
@@ -781,6 +783,10 @@ export const CreateOrderPage = () => {
       setSuccessMsg('Order placed successfully! Dispatched to kitchen.');
       setTimeout(() => setSuccessMsg(''), 5000);
 
+      // Force immediate cache invalidation so table screen updates without stale data
+      cacheInvalidationService.invalidateTables('branch-main');
+      cacheInvalidationService.invalidateOrders('branch-main');
+
       // Redirect to list of tables screen
       navigate('/tables');
     } catch (err) {
@@ -831,6 +837,10 @@ export const CreateOrderPage = () => {
 
       setSuccessMsg('Order updated successfully! Kitchen KOT dispatched.');
       setTimeout(() => setSuccessMsg(''), 5000);
+
+      // Force immediate cache invalidation so table screen updates without stale data
+      cacheInvalidationService.invalidateTables('branch-main');
+      cacheInvalidationService.invalidateOrders('branch-main');
 
       // Redirect to list of tables screen
       navigate('/tables');
@@ -1086,6 +1096,9 @@ export const CreateOrderPage = () => {
 
   const handleCancelOrClear = () => {
     userHasModifiedCartRef.current = false;
+    const isDraftClear = !existingOrder;
+    const currentTableNo = selectedTable?.tableNo || '';
+
     if (!existingOrder) {
       // Clear draft for this table
       if (selectedTable?.id) {
@@ -1118,6 +1131,15 @@ export const CreateOrderPage = () => {
         });
       setCart(originalItems);
     }
+
+    // Notify Kitchen, Admin, and Reception on cancel/clear
+    notificationRepository.createNotification({
+      eventType: 'ORDER_CANCELLED',
+      title: currentTableNo ? `Order Cancelled: Table ${currentTableNo}` : 'Order Cancelled',
+      message: `${isDraftClear ? 'Draft cleared' : 'Order modifications cancelled'} for Table ${currentTableNo || '-'} by ${user?.name || 'Captain'}.`,
+      metadata: { tableNo: currentTableNo, tableId: selectedTable?.id || null }
+    }).catch(() => {});
+
     // Redirect to list of tables screen
     navigate('/tables');
   };

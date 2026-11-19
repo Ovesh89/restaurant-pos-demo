@@ -918,6 +918,15 @@ class OrderService {
       reason: trimmedReason,
     });
 
+    await notificationService.notify({
+      branchId: order.branchId,
+      eventType: 'ORDER_CANCELLED',
+      title: order.tableNumber ? `Order Cancelled: Table ${order.tableNumber}` : 'Order Cancelled',
+      message: `Order #${order.orderNumber} was cancelled by ${actorName || 'Staff'}.${trimmedReason ? ` Reason: ${trimmedReason}` : ''}`,
+      recipientRole: null, // Broadcast to Kitchen, Admin, and Reception
+      metadata: { orderId: canonicalOrderId, orderNumber: order.orderNumber, tableNumber: order.tableNumber },
+    });
+
     return {
       ...updated,
       kots: await kotService.findByOrder(canonicalOrderId),

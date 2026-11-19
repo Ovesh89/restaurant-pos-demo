@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import {
   Plus,
   Coffee,
@@ -50,6 +50,7 @@ export const TablesPage = () => {
   const { user, hasPermission, hasAnyPermission } = useAuth();
   const { t, formatNumber } = useTranslation();
   const navigate = useNavigate();
+  const location = useLocation();
   const canManage = hasPermission(PERMISSIONS.TABLE_MANAGE);
 
   const isCaptain = user?.role === 'captain' || hasPermission('role.captain');
@@ -260,6 +261,21 @@ export const TablesPage = () => {
 
   useEffect(() => {
     loadFloor();
+  }, [location.key]);
+
+  // Periodic polling + window focus refresh to ensure Captain/Cashier always see latest table states
+  useEffect(() => {
+    const handleFocus = () => {
+      loadFloor();
+    };
+    window.addEventListener('focus', handleFocus);
+    const interval = setInterval(() => {
+      loadFloor();
+    }, 5000);
+    return () => {
+      window.removeEventListener('focus', handleFocus);
+      clearInterval(interval);
+    };
   }, []);
 
   const handleOpenAdd = () => {

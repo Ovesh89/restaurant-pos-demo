@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { authenticate } from '../../middleware/auth.js';
 import { asyncHandler } from '../../middleware/errorHandler.js';
-import { successResponse } from '../../utils/response.js';
+import { successResponse, createdResponse } from '../../utils/response.js';
 import { notificationService } from './service.js';
 
 const router = Router();
@@ -42,6 +42,28 @@ router.post(
       updated || { id: req.params.id, _id: req.params.id, isRead: true },
       'Notification marked as read.'
     );
+  })
+);
+
+router.post(
+  '/notifications',
+  authenticate,
+  asyncHandler(async (req, res) => {
+    const branchId =
+      req.body?.branchId ||
+      req.query.branchId ||
+      (Array.isArray(req.user.branchIds) && req.user.branchIds[0]) ||
+      'branch-main';
+    const notif = await notificationService.notify({
+      branchId,
+      eventType: req.body?.eventType || 'CUSTOM_NOTIFICATION',
+      title: req.body?.title || 'Notification',
+      message: req.body?.message || '',
+      recipientRole: req.body?.recipientRole || null,
+      recipientUserId: req.body?.recipientUserId || null,
+      metadata: req.body?.metadata || {},
+    });
+    return createdResponse(res, notif, 'Notification created successfully.');
   })
 );
 

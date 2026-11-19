@@ -12,6 +12,9 @@ const notificationLocalRepository = {
   },
   async markAsRead() {
     return { success: true };
+  },
+  async createNotification() {
+    return { success: true };
   }
 };
 

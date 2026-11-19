@@ -17,6 +17,19 @@ class NotificationApiRepository {
     if (!notificationId) return;
     return await apiClient.post(`/notifications/${notificationId}/read`);
   }
+
+  async createNotification(notificationData) {
+    const payload = {
+      branchId: notificationData.branchId || APP_CONFIG.DEFAULT_BRANCH_ID || 'branch-main',
+      eventType: notificationData.eventType || 'CUSTOM_NOTIFICATION',
+      title: notificationData.title || 'Notification',
+      message: notificationData.message || '',
+      recipientRole: notificationData.recipientRole || null,
+      recipientUserId: notificationData.recipientUserId || null,
+      metadata: notificationData.metadata || {}
+    };
+    return await apiClient.post('/notifications', payload);
+  }
 }
 
 export const notificationApiRepository = new NotificationApiRepository();
